@@ -62,6 +62,27 @@ window.addEventListener('resize',()=>chart.applyOptions({width:document.querySel
 
 let stream;
 document.querySelector('#startCam').onclick=async()=>{try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});document.querySelector('#video').srcObject=stream;document.querySelector('#snap').disabled=false;}catch(e){alert('Permite o acesso à câmera para usar FOTO.');}};
-document.querySelector('#snap').onclick=()=>{const a=document.querySelector('#analysis');a.classList.remove('hidden');a.innerHTML='<h3>Análise da imagem</h3><p>Captura recebida. A análise multimodal será ligada na próxima etapa.</p><div class="tag">Modo FOTO pronto</div>';};
+document.querySelector('#snap').onclick=async()=>{
+  const video=document.querySelector('#video');
+  const canvas=document.createElement('canvas');
+  canvas.width=video.videoWidth||1280;
+  canvas.height=video.videoHeight||720;
+  canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+  const image=canvas.toDataURL('image/jpeg',0.82);
+  const a=document.querySelector('#analysis');
+  a.classList.remove('hidden');
+  a.innerHTML='<h3>Análise da imagem</h3><p>A enviar o gráfico para a IA…</p>';
+  try{
+    const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image})});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Falha na análise');
+    a.innerHTML='<h3>Análise da IA</h3><pre>'+escapeHtml(data.analysis)+'</pre><div class="tag">Análise multimodal ativa</div>';
+  }catch(e){
+    a.innerHTML='<h3>Análise da imagem</h3><p>'+escapeHtml(e.message)+'</p><div class="tag">Configuração necessária no servidor</div>';
+  }
+};
+function escapeHtml(value){
+  return String(value).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+}
 document.querySelectorAll('.mode button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.mode button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));document.querySelector('#'+b.dataset.mode).classList.add('active');});
 document.querySelectorAll('.tf button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tf button').forEach(x=>x.classList.remove('active'));b.classList.add('active');});
