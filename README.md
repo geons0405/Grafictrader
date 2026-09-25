@@ -3,16 +3,16 @@
 Mobile-first trading chart application.
 
 ## Current
-- LIVE BTC/USDT 5m market data from Binance public REST + WebSocket.
+- LIVE market data from Binance public REST + WebSocket.
+- Asset selector: BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT, ADA/USDT and DOGE/USDT.
+- Timeframe selector: 1m, 5m, 15m, 1h and 4h.
 - Interactive candlestick chart with TradingView Lightweight Charts.
-- FOTO camera capture flow.
-- Responsive dark UI.
+- FOTO camera capture flow with server-side AI analysis endpoint.
+- Responsive light UI with fixed FOTO/LIVE navigation.
 
 ## Next
-- Multimodal AI analysis for captured charts.
-- More symbols/timeframes.
-- Backend for secure AI/data integrations.
 - cTrader integration without exposing private credentials.
 - Authentication, history and production monitoring.
+- More market sources and advanced AI analysis.
 
 No order execution is implemented.
