@@ -1,5 +1,6 @@
 import { getBinanceCandles, getBinanceAggTrades, getBinanceOrderBook } from './_lib/sources/binance.js';
 import { analyzeMarketMechanics } from './_lib/mechanics/index.js';
+import { buildMechanicsMemory } from './_lib/mechanics/memory.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ ok:false, error:'Método não permitido.' });
@@ -24,6 +25,7 @@ export default async function handler(req, res) {
     }
 
     const mechanics = analyzeMarketMechanics(candles, { trades, orderBook });
+    const memory = buildMechanicsMemory(candles);
     const hasTrades = trades.length >= 10;
     const hasOrderBook = orderBook?.bids?.length > 0 && orderBook?.asks?.length > 0;
 
@@ -43,7 +45,8 @@ export default async function handler(req, res) {
         bidLevels:orderBook?.bids?.length || 0,
         askLevels:orderBook?.asks?.length || 0
       },
-      ...mechanics
+      ...mechanics,
+      memory
     });
   } catch (error) {
     return res.status(502).json({
