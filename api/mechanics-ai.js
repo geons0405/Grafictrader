@@ -12,6 +12,7 @@ Distingue claramente:
 - IMPLICAÇÃO: o que precisa ser confirmado no próximo fluxo;
 - MEMÓRIA: descreve a evolução recente; usa-a para explicar transições, duração do estado e mudanças de mecanismo.
 - PADRÃO RECORRENTE: se existir uma sequência repetida, trata-a apenas como recorrência histórica; não assumes que o desfecho será igual. Se houver bestSimilarity, explica-o como semelhança quantitativa entre assinaturas OHLCV das janelas, não como probabilidade ou previsão.
+- FAMÍLIA DE PADRÃO: se existir patternFamily, trata-a como agrupamento de janelas mecanicamente semelhantes. A família pode conter sequências de estados diferentes; usa avgSimilarity/bestSimilarity apenas como medida de semelhança estrutural, nunca como probabilidade ou previsão.
 - LIMITAÇÃO: dados que faltam.
 
 Responde em português de Angola, curto e técnico, neste formato:
