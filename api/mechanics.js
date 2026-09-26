@@ -1,4 +1,4 @@
-import { getBinanceCandles } from './_lib/sources/binance.js';
+import { getBinanceCandles, getBinanceAggTrades, getBinanceOrderBook } from './_lib/sources/binance.js';
 import { analyzeMarketMechanics } from './_lib/mechanics/index.js';
 
 export default async function handler(req, res) {
@@ -13,24 +13,35 @@ export default async function handler(req, res) {
   }
 
   try {
-    const candles = await getBinanceCandles(symbol, interval, 120);
+    const [candles, trades, orderBook] = await Promise.all([
+      getBinanceCandles(symbol, interval, 120),
+      getBinanceAggTrades(symbol, 500),
+      getBinanceOrderBook(symbol, 100)
+    ]);
+
     if (!Array.isArray(candles) || candles.length < 2) {
       return res.status(502).json({ ok:false, error:'Dados de candles insuficientes.', candles:[] });
     }
 
-    const mechanics = analyzeMarketMechanics(candles);
-    res.setHeader('Cache-Control','s-maxage=5, stale-while-revalidate=10');
+    const mechanics = analyzeMarketMechanics(candles, { trades, orderBook });
+    const hasTrades = trades.length >= 10;
+    const hasOrderBook = orderBook?.bids?.length > 0 && orderBook?.asks?.length > 0;
+
+    res.setHeader('Cache-Control','s-maxage=3, stale-while-revalidate=7');
 
     return res.status(200).json({
       ok:true,
       symbol,
       interval,
       updatedAt:new Date().toISOString(),
-      source:candles[0]?.source || 'market-data',
+      source: hasTrades || hasOrderBook ? 'Binance microstructure + market data' : 'market data fallback',
       dataQuality:{
         candles:candles.length,
-        trades:false,
-        orderBook:false
+        trades:hasTrades,
+        tradeCount:trades.length,
+        orderBook:hasOrderBook,
+        bidLevels:orderBook?.bids?.length || 0,
+        askLevels:orderBook?.asks?.length || 0
       },
       ...mechanics
     });
@@ -39,7 +50,7 @@ export default async function handler(req, res) {
       ok:false,
       error:error?.message || 'Dados de mercado indisponíveis.',
       source:'unavailable',
-      dataQuality:{ candles:0, trades:false, orderBook:false }
+      dataQuality:{ candles:0, trades:false, tradeCount:0, orderBook:false, bidLevels:0, askLevels:0 }
     });
   }
 }
