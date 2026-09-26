@@ -310,14 +310,20 @@ function renderPhotoResult(image,p){
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 
 let scrollFrame=null;
-window.addEventListener('scroll',()=>{
+function updateStickyCards(){
   if(scrollFrame)return;
   scrollFrame=requestAnimationFrame(()=>{
-    const compact=window.scrollY>36;
-    document.querySelectorAll('.hero-card').forEach(card=>card.classList.toggle('is-compact',compact));
+    const scroll=Math.max(0,window.scrollY);
+    const progress=Math.min(scroll/180,1);
+    document.querySelectorAll('.hero-card').forEach(card=>{
+      card.style.setProperty('--sticky-progress',progress.toFixed(3));
+      card.classList.toggle('is-compact',progress>0.02);
+    });
     scrollFrame=null;
   });
-},{passive:true});
+}
+window.addEventListener('scroll',updateStickyCards,{passive:true});
+window.addEventListener('load',updateStickyCards);
 function setMode(mode){
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.toggle('active',x.dataset.mode===mode));
   document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
