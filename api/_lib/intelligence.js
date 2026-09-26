@@ -19,11 +19,13 @@ export async function getAllIntelligence(symbol = 'BTCUSDT') {
 
   settled.forEach((result, index) => {
     const name = tasks[index][0];
+    const optionalKey = name === 'Marketaux' ? process.env.MARKETAUX_API_KEY : name === 'Finnhub' ? process.env.FINNHUB_API_KEY : 'public';
     if (result.status === 'fulfilled') {
-      activeSources.push(name);
+      if (optionalKey) activeSources.push(name);
+      else failedSources.push({ source: name, code: 'not_configured', error: name === 'Marketaux' ? 'MARKETAUX_API_KEY não configurada' : 'FINNHUB_API_KEY não configurada' });
       events.push(...(Array.isArray(result.value) ? result.value : []));
     } else {
-      failedSources.push({ source: name, error: result.reason?.message || 'Falha desconhecida' });
+      failedSources.push({ source: name, code: 'error', error: result.reason?.message || 'Falha desconhecida' });
     }
   });
 
@@ -37,6 +39,6 @@ export async function getAllIntelligence(symbol = 'BTCUSDT') {
     events: [...unique.values()].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 100),
     activeSources,
     failedSources,
-    sourceCount: SOURCE_NAMES.length
+    sourceCount: 5 // inclui o canal de mercado CCXT/Binance já existente no terminal
   };
 }
