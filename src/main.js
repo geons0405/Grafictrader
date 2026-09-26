@@ -460,8 +460,8 @@ document.querySelector('#backBtn').onclick=()=>setMode('live');
 window.addEventListener('resize',()=>{captureStickyOrigins();updateStickyCards();resizeChartToContainer();});
 
 /* =========================================================
-   LIVE INTELLIGENCE — real-time news/event stream
-   Aggregated by /api/intelligence. New events enter at top.
+   LIVE INTELLIGENCE — terminal de trading
+   Backend: /api/intelligence + /api/ticker
    ========================================================= */
 const intelligencePanel=document.createElement('section');
 intelligencePanel.id='intelligencePanel';
@@ -470,11 +470,27 @@ intelligencePanel.setAttribute('aria-hidden','true');
 intelligencePanel.innerHTML=`
   <div class="intel-shell">
     <header class="intel-topbar">
-      <button class="icon-btn" id="intelClose" aria-label="Fechar"><i data-lucide="arrow-left" aria-hidden="true"></i></button>
-      <div class="title-wrap"><h1>Live Intelligence</h1><span>notícias e eventos em tempo real</span></div>
+      <button class="icon-btn" id="intelClose" aria-label="Fechar"><i data-lucide="arrow-left"></i></button>
+      <div class="intel-brand"><b>LIVE INTELLIGENCE</b><span>MARKET TERMINAL · REAL-TIME FLOW</span></div>
       <span class="intel-live-dot"><i></i> LIVE</span>
     </header>
-    <div class="intel-status" id="intelStatus">A ligar às fontes…</div>
+
+    <div class="intel-ticker-wrap">
+      <div class="intel-ticker-label">MARKET</div>
+      <div class="intel-ticker" id="intelTicker"><span>BTC/USDT —</span><span>ETH/USDT —</span></div>
+    </div>
+
+    <div class="intel-status-row">
+      <span id="intelStatus">A ligar às fontes…</span>
+      <span id="intelUpdated">—</span>
+    </div>
+
+    <div class="intel-pulse" id="intelPulse">
+      <div class="pulse-card"><small>BTC/USDT</small><b id="pulseBtcPrice">—</b><span id="pulseBtcChange">—</span></div>
+      <div class="pulse-card"><small>ETH/USDT</small><b id="pulseEthPrice">—</b><span id="pulseEthChange">—</span></div>
+      <div class="pulse-card"><small>MARKET PULSE</small><b id="pulseState">—</b><span id="pulseRange">24H</span></div>
+    </div>
+
     <div class="intel-tags" id="intelTags">
       <button class="intel-tag active" data-tag="ALL">TODOS</button>
       <button class="intel-tag" data-tag="BTC">#BTC</button>
@@ -482,14 +498,18 @@ intelligencePanel.innerHTML=`
       <button class="intel-tag" data-tag="MACRO">#MACRO</button>
       <button class="intel-tag" data-tag="NEWS">#NEWS</button>
       <button class="intel-tag" data-tag="MARKET">#MARKET</button>
-      <button class="intel-tag" data-tag="REGULATION">#REGULATION</button>
-      <button class="intel-tag" data-tag="SECURITY">#SECURITY</button>
     </div>
-    <div class="intel-feed-head"><b id="intelCount">0 eventos</b><button id="intelRefresh" class="intel-refresh">Atualizar</button></div>
+
+    <div class="intel-feed-head">
+      <div><b id="intelCount">0 eventos</b><span> · fluxo mais recente</span></div>
+      <button id="intelRefresh" class="intel-refresh">↻ Atualizar</button>
+    </div>
+
     <div class="intel-feed" id="intelFeed" aria-live="polite">
-      <div class="intel-empty">A carregar acontecimentos…</div>
+      <div class="intel-empty"><b>A carregar acontecimentos…</b><span>O terminal continua a tentar as fontes individualmente.</span></div>
     </div>
   </div>
+
   <div class="intel-detail" id="intelDetail" aria-hidden="true">
     <div class="intel-detail-card">
       <button class="intel-detail-close" id="intelDetailClose" aria-label="Fechar detalhe">×</button>
@@ -503,6 +523,7 @@ createIcons({icons:{ArrowLeft,Radio,Sparkles,TrendingUp,TrendingDown}});
 let intelligenceEvents=[];
 let intelligenceTag='ALL';
 let intelligenceTimer=null;
+let tickerTimer=null;
 let intelligenceLoading=false;
 
 function formatIntelTime(value){
@@ -510,42 +531,84 @@ function formatIntelTime(value){
   if(Number.isNaN(d.getTime()))return 'agora';
   return d.toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
+function intelSourceIcon(source=''){
+  const s=source.toLowerCase();
+  if(s.includes('binance'))return '◈';
+  if(s.includes('marketaux'))return '◉';
+  if(s.includes('finnhub'))return '◌';
+  if(s.includes('gdelt'))return '◎';
+  return '◆';
+}
+function sentimentLabel(sentiment){
+  return sentiment==='bullish'?'BULLISH':sentiment==='bearish'?'BEARISH':'NEUTRO';
+}
+function sentimentClass(sentiment){return sentiment==='bullish'?'bullish':sentiment==='bearish'?'bearish':'neutral';}
+function eventTags(event){
+  if(Array.isArray(event.tags))return event.tags;
+  return event.tag?[event.tag]:[];
+}
+function formatTerminalPrice(value){
+  const n=Number(value);
+  if(!Number.isFinite(n))return '—';
+  return '$'+n.toLocaleString('en-US',{maximumFractionDigits:n<10?4:2});
+}
+function sparklineSvg(values){
+  if(!Array.isArray(values)||values.length<2)return '';
+  const nums=values.map(Number).filter(Number.isFinite);
+  if(nums.length<2)return '';
+  const min=Math.min(...nums),max=Math.max(...nums),range=max-min||1;
+  const points=nums.map((v,i)=>{
+    const x=(i/(nums.length-1))*100;
+    const y=28-((v-min)/range)*24;
+    return x.toFixed(1)+','+y.toFixed(1);
+  }).join(' ');
+  return '<svg class="intel-sparkline" viewBox="0 0 100 30" preserveAspectRatio="none" aria-label="Sparkline"><polyline points="'+points+'" fill="none" stroke="currentColor" stroke-width="1.7" vector-effect="non-scaling-stroke"/></svg>';
+}
 
-function intelIcon(type){
-  if(type==='news')return '📰';
-  if(type==='market')return '📊';
-  if(type==='press_release')return '🏢';
-  return '⚡';
+function renderIntelTicker(tickers){
+  const ticker=document.querySelector('#intelTicker');
+  if(!ticker)return;
+  ticker.innerHTML=tickers.map(item=>{
+    const cls=item.change24h>=0?'up':'down';
+    return '<span><b>'+escapeHtml(item.symbol.replace('USDT','/USDT'))+'</b> '+formatTerminalPrice(item.price)+' <em class="'+cls+'">'+(item.change24h>=0?'+':'')+Number(item.change24h||0).toFixed(2)+'%</em></span>';
+  }).join('') || '<span>Binance · sem dados</span>';
+  if(tickers.length) ticker.innerHTML+=ticker.innerHTML;
+}
+function updatePulse(tickers){
+  const btc=tickers.find(x=>x.symbol==='BTCUSDT'),eth=tickers.find(x=>x.symbol==='ETHUSDT');
+  if(btc){
+    document.querySelector('#pulseBtcPrice').textContent=formatTerminalPrice(btc.price);
+    const el=document.querySelector('#pulseBtcChange');el.textContent=(btc.change24h>=0?'+':'')+btc.change24h.toFixed(2)+'%';el.className=btc.change24h>=0?'up':'down';
+  }
+  if(eth){
+    document.querySelector('#pulseEthPrice').textContent=formatTerminalPrice(eth.price);
+    const el=document.querySelector('#pulseEthChange');el.textContent=(eth.change24h>=0?'+':'')+eth.change24h.toFixed(2)+'%';el.className=eth.change24h>=0?'up':'down';
+  }
+  const avg=tickers.length?tickers.reduce((sum,x)=>sum+Number(x.change24h||0),0)/tickers.length:0;
+  document.querySelector('#pulseState').textContent=avg>0.15?'RISK ON':avg<-0.15?'RISK OFF':'MIXED';
 }
 
 function renderIntelFeed(){
   const feed=document.querySelector('#intelFeed');
-  const visible=intelligenceTag==='ALL'
-    ? intelligenceEvents
-    : intelligenceEvents.filter(e=>(e.tags||[]).includes(intelligenceTag));
+  const visible=intelligenceTag==='ALL'?intelligenceEvents:intelligenceEvents.filter(e=>eventTags(e).includes(intelligenceTag));
   document.querySelector('#intelCount').textContent=visible.length+' evento'+(visible.length===1?'':'s');
   if(!visible.length){
-    feed.innerHTML='<div class="intel-empty">Nenhum evento encontrado para esta tag.</div>';
+    feed.innerHTML='<div class="intel-empty"><b>Nenhum evento encontrado</b><span>Experimenta outra tag ou atualiza o fluxo.</span></div>';
     return;
   }
-  feed.innerHTML=visible.map((event,index)=>`
-    <button class="intel-event ${event.impact==='high'?'high-impact':''}" data-intel-index="${index}" type="button">
-      <div class="intel-event-top">
-        <span class="intel-event-icon">${intelIcon(event.type)}</span>
-        <span class="intel-event-time">${formatIntelTime(event.timestamp)}</span>
-        <span class="intel-event-source">${escapeHtml(event.source||'Fonte')}</span>
-      </div>
-      <div class="intel-event-title">${escapeHtml(event.title||'Evento de mercado')}</div>
-      <div class="intel-event-summary">${escapeHtml(event.summary||'Sem resumo disponível.')}</div>
-      <div class="intel-event-tags">${(event.tags||[]).map(tag=>`<span>#${escapeHtml(tag)}</span>`).join('')}</div>
-    </button>`).join('');
-
-  feed.querySelectorAll('.intel-event').forEach((button)=>{
+  feed.innerHTML=visible.map((event,index)=>{
+    const tags=eventTags(event);
+    return '<button class="intel-event '+sentimentClass(event.sentiment)+'" data-intel-index="'+index+'" type="button">'+
+      '<div class="intel-event-top"><span class="intel-source-icon">'+intelSourceIcon(event.source)+'</span><span class="intel-event-source">'+escapeHtml(event.source||'Fonte')+'</span><span class="intel-event-time">'+formatIntelTime(event.timestamp)+'</span><span class="intel-sentiment '+sentimentClass(event.sentiment)+'">'+sentimentLabel(event.sentiment)+'</span></div>'+
+      '<div class="intel-event-main"><div><div class="intel-event-title">'+escapeHtml(event.headline||event.title||'Evento de mercado')+'</div>'+
+      (event.summary?'<div class="intel-event-summary">'+escapeHtml(event.summary)+'</div>':'')+
+      '<div class="intel-event-bottom">'+tags.map(tag=>'<span>#'+escapeHtml(tag)+'</span>').join('')+(event.symbol?'<span>'+escapeHtml(event.symbol.replace('USDT','/USDT'))+'</span>':'')+'</div></div>'+
+      sparklineSvg(event.sparkline)+'</div></button>';
+  }).join('');
+  feed.querySelectorAll('.intel-event').forEach(button=>{
     button.onclick=()=>{
-      const visibleEvents=intelligenceTag==='ALL'
-        ? intelligenceEvents
-        : intelligenceEvents.filter(e=>(e.tags||[]).includes(intelligenceTag));
-      openIntelDetail(visibleEvents[Number(button.dataset.intelIndex)]);
+      const current=intelligenceTag==='ALL'?intelligenceEvents:intelligenceEvents.filter(e=>eventTags(e).includes(intelligenceTag));
+      openIntelDetail(current[Number(button.dataset.intelIndex)]);
     };
   });
 }
@@ -553,98 +616,83 @@ function renderIntelFeed(){
 function openIntelDetail(event){
   if(!event)return;
   const detail=document.querySelector('#intelDetail');
-  document.querySelector('#intelDetailContent').innerHTML=`
-    <div class="intel-detail-kicker">${intelIcon(event.type)} ${escapeHtml(event.asset||'MERCADO')} · ${escapeHtml(event.impact==='high'?'ALTO IMPACTO':'EVENTO')}</div>
-    <h2>${escapeHtml(event.title||'Evento')}</h2>
-    <div class="intel-detail-meta">${formatIntelTime(event.timestamp)} · ${escapeHtml(event.source||'Fonte')}${event.domain?' · '+escapeHtml(event.domain):''}</div>
-    <p>${escapeHtml(event.summary||'Sem descrição disponível.')}</p>
-    <div class="intel-detail-tags">${(event.tags||[]).map(tag=>`<button class="intel-tag" data-detail-tag="${escapeHtml(tag)}">#${escapeHtml(tag)}</button>`).join('')}</div>
-    ${event.metrics?'<div class="intel-metrics">'+Object.entries(event.metrics).map(([key,value])=>`<span><small>${escapeHtml(key)}</small><b>${escapeHtml(Number(value).toLocaleString('en-US',{maximumFractionDigits:2}))}</b></span>`).join('')+'</div>':''}
-    ${event.url?'<a class="intel-source-link" href="'+escapeHtml(event.url)+'" target="_blank" rel="noopener noreferrer">Abrir fonte original</a>':''}
-  `;
-  detail.classList.add('open');
-  detail.setAttribute('aria-hidden','false');
-  detail.querySelectorAll('[data-detail-tag]').forEach(btn=>{
-    btn.onclick=()=>{
-      intelligenceTag=btn.dataset.detailTag;
-      document.querySelectorAll('.intel-tag').forEach(x=>x.classList.toggle('active',x.dataset.tag===intelligenceTag));
-      detail.classList.remove('open');
-      detail.setAttribute('aria-hidden','true');
-      renderIntelFeed();
-    };
+  document.querySelector('#intelDetailContent').innerHTML=
+    '<div class="intel-detail-kicker"><span class="intel-source-icon">'+intelSourceIcon(event.source)+'</span> '+escapeHtml(event.source||'Fonte')+' · '+escapeHtml(sentimentLabel(event.sentiment))+'</div>'+
+    '<h2>'+escapeHtml(event.headline||event.title||'Evento')+'</h2>'+
+    '<div class="intel-detail-meta">'+formatIntelTime(event.timestamp)+(event.symbol?' · '+escapeHtml(event.symbol.replace('USDT','/USDT')):'')+'</div>'+
+    '<p>'+escapeHtml(event.summary||'Sem descrição disponível.')+'</p>'+
+    '<div class="intel-detail-tags">'+eventTags(event).map(tag=>'<button class="intel-tag" data-detail-tag="'+escapeHtml(tag)+'">#'+escapeHtml(tag)+'</button>').join('')+'</div>'+
+    (event.metrics?'<div class="intel-metrics">'+Object.entries(event.metrics).filter(([,v])=>Number.isFinite(Number(v))).map(([k,v])=>'<span><small>'+escapeHtml(k)+'</small><b>'+escapeHtml(Number(v).toLocaleString('en-US',{maximumFractionDigits:2}))+'</b></span>').join('')+'</div>':'')+
+    (event.url?'<a class="intel-source-link" href="'+escapeHtml(event.url)+'" target="_blank" rel="noopener noreferrer">Abrir fonte original ↗</a>':'');
+  detail.classList.add('open');detail.setAttribute('aria-hidden','false');
+  detail.querySelectorAll('[data-detail-tag]').forEach(btn=>btn.onclick=()=>{
+    intelligenceTag=btn.dataset.detailTag;
+    document.querySelectorAll('#intelTags .intel-tag').forEach(x=>x.classList.toggle('active',x.dataset.tag===intelligenceTag));
+    closeIntelDetail();renderIntelFeed();
   });
 }
-
 function closeIntelDetail(){
-  const detail=document.querySelector('#intelDetail');
-  detail.classList.remove('open');
-  detail.setAttribute('aria-hidden','true');
+  const detail=document.querySelector('#intelDetail');detail.classList.remove('open');detail.setAttribute('aria-hidden','true');
 }
 
-function openIntelligence(){
-  intelligencePanel.classList.add('open');
-  intelligencePanel.setAttribute('aria-hidden','false');
-  document.body.classList.add('intel-open');
-  loadIntelligence();
-}
-
-function closeIntelligence(){
-  intelligencePanel.classList.remove('open');
-  intelligencePanel.setAttribute('aria-hidden','true');
-  closeIntelDetail();
-  document.body.classList.remove('intel-open');
-  clearTimeout(intelligenceTimer);
+async function loadTicker(){
+  try{
+    const r=await fetch('/api/ticker',{cache:'no-store'}),data=await r.json();
+    if(!r.ok||!data.ok)throw new Error(data.error||'Ticker indisponível');
+    renderIntelTicker(data.data||[]);updatePulse(data.data||[]);
+  }catch(error){
+    document.querySelector('#intelTicker').innerHTML='<span>TICKER OFFLINE · '+escapeHtml(error.message)+'</span>';
+    document.querySelector('#pulseState').textContent='OFFLINE';
+  }finally{
+    clearTimeout(tickerTimer);
+    if(intelligencePanel.classList.contains('open'))tickerTimer=setTimeout(loadTicker,10000);
+  }
 }
 
 async function loadIntelligence(){
   if(intelligenceLoading)return;
   intelligenceLoading=true;
-  document.querySelector('#intelStatus').textContent='A atualizar fontes…';
-  const currentSymbol=symbol||'BTCUSDT';
+  document.querySelector('#intelStatus').textContent='A atualizar fontes individualmente…';
   try{
-    const response=await fetch('/api/intelligence?symbol='+encodeURIComponent(currentSymbol),{cache:'no-store'});
+    const response=await fetch('/api/intelligence?symbol='+encodeURIComponent(symbol||'BTCUSDT'),{cache:'no-store'});
     const data=await response.json();
     if(!response.ok||!data.ok)throw new Error(data.error||'Falha no feed');
-    const incoming=Array.isArray(data.events)?data.events:[];
-    const previousIds=new Set(intelligenceEvents.map(e=>e.id));
-    intelligenceEvents=incoming;
+    intelligenceEvents=Array.isArray(data.events)?data.events:[];
     renderIntelFeed();
-    const connected=Object.entries(data.sources||{}).filter(([,v])=>v==='connected').length;
-    const configured=Object.keys(data.sources||{}).length;
-    document.querySelector('#intelStatus').textContent=`● ${connected}/${configured} fontes ativas · atualizado ${formatIntelTime(data.updatedAt)}`;
-    if(incoming.some(e=>!previousIds.has(e.id))) {
-      document.querySelector('#intelFeed')?.classList.add('has-new');
-      setTimeout(()=>document.querySelector('#intelFeed')?.classList.remove('has-new'),650);
-    }
+    const active=Array.isArray(data.activeSources)?data.activeSources.length:0;
+    const total=Number(data.sourceCount||4);
+    document.querySelector('#intelStatus').textContent='● '+active+'/'+total+' fontes ativas'+(data.failedSources?.length?' · '+data.failedSources.length+' com falha':'');
+    document.querySelector('#intelUpdated').textContent='ATUALIZADO '+formatIntelTime(data.updatedAt);
+    if(Array.isArray(data.failedSources)&&data.failedSources.length){
+      document.querySelector('#intelStatus').title=data.failedSources.map(x=>x.source+': '+x.error).join(' | ');
+    }else document.querySelector('#intelStatus').title='Todas as fontes responderam.';
   }catch(error){
-    document.querySelector('#intelStatus').textContent='Feed temporariamente indisponível · a tentar novamente';
-    if(!intelligenceEvents.length){
-      document.querySelector('#intelFeed').innerHTML='<div class="intel-empty">Não foi possível carregar as fontes agora. O sistema continuará a tentar automaticamente.</div>';
-    }
+    document.querySelector('#intelStatus').textContent='AGREGADOR OFFLINE · '+error.message;
   }finally{
     intelligenceLoading=false;
     clearTimeout(intelligenceTimer);
-    if(intelligencePanel.classList.contains('open'))intelligenceTimer=setTimeout(loadIntelligence,12000);
+    if(intelligencePanel.classList.contains('open'))intelligenceTimer=setTimeout(loadIntelligence,30000);
   }
 }
 
-document.querySelector('#settings').onclick=()=>{
-  openIntelligence();
-};
-
+function openIntelligence(){
+  intelligencePanel.classList.add('open');intelligencePanel.setAttribute('aria-hidden','false');document.body.classList.add('intel-open');
+  loadTicker();loadIntelligence();
+}
+function closeIntelligence(){
+  intelligencePanel.classList.remove('open');intelligencePanel.setAttribute('aria-hidden','true');closeIntelDetail();document.body.classList.remove('intel-open');
+  clearTimeout(intelligenceTimer);clearTimeout(tickerTimer);
+}
+document.querySelector('#settings').onclick=openIntelligence;
 document.querySelector('#intelClose').onclick=closeIntelligence;
 document.querySelector('#intelDetailClose').onclick=closeIntelDetail;
 document.querySelector('#intelDetail').onclick=e=>{if(e.target.id==='intelDetail')closeIntelDetail();};
-document.querySelector('#intelRefresh').onclick=loadIntelligence;
-
-document.querySelectorAll('#intelTags .intel-tag').forEach(button=>{
-  button.onclick=()=>{
-    intelligenceTag=button.dataset.tag;
-    document.querySelectorAll('#intelTags .intel-tag').forEach(x=>x.classList.toggle('active',x===button));
-    renderIntelFeed();
-  };
+document.querySelector('#intelRefresh').onclick=()=>{loadTicker();loadIntelligence();};
+document.querySelectorAll('#intelTags .intel-tag').forEach(button=>button.onclick=()=>{
+  intelligenceTag=button.dataset.tag;
+  document.querySelectorAll('#intelTags .intel-tag').forEach(x=>x.classList.toggle('active',x===button));
+  renderIntelFeed();
 });
-
 const originalBackHandler=document.querySelector('#backBtn').onclick;
 document.querySelector('#backBtn').onclick=()=>{
   if(intelligencePanel.classList.contains('open'))closeIntelligence();
