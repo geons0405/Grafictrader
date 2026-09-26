@@ -55,9 +55,13 @@ app.innerHTML = `
       <article class="live-result" id="liveResult">
         <div class="analysis-head"><b>Leitura do mercado</b><span>AO VIVO</span></div>
         <div class="live-summary" id="liveSummary">A aguardar dados suficientes para gerar a leitura.</div>
-        <div class="scenario-grid">
-          <div><b>CENÁRIO A</b><span id="liveScenarioA">Continuação da estrutura atual após confirmação.</span></div>
-          <div><b>CENÁRIO B</b><span id="liveScenarioB">Reversão se a estrutura perder o suporte relevante.</span></div>
+        <div class="scenario-block">
+          <b>CENÁRIO A</b>
+          <span id="liveScenarioA">Continuação da estrutura atual após confirmação.</span>
+        </div>
+        <div class="scenario-block">
+          <b>CENÁRIO B</b>
+          <span id="liveScenarioB">Reversão se a estrutura perder o suporte relevante.</span>
         </div>
         <div class="live-foot"><span>RSI <b id="liveRsiState">—</b></span><span>ESTRUTURA <b id="liveStructureState">—</b></span><span>LEITURA <b id="liveConfidence">—</b></span></div>
       </article>
@@ -310,28 +314,45 @@ function renderPhotoResult(image,p){
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 
 let scrollFrame=null;
+function documentTop(el){
+  let top=0,node=el;
+  while(node){top+=node.offsetTop||0;node=node.offsetParent;}
+  return top;
+}
+function captureStickyOrigins(){
+  const topbar=document.querySelector('.topbar');
+  const stickyTop=(topbar?.offsetHeight||78);
+  document.querySelectorAll('.hero-card').forEach(card=>{
+    card.dataset.stickyOrigin=String(documentTop(card));
+    card.style.setProperty('--sticky-top',stickyTop+'px');
+  });
+}
 function updateStickyCards(){
   if(scrollFrame)return;
   scrollFrame=requestAnimationFrame(()=>{
     const scroll=Math.max(0,window.scrollY);
-    const progress=Math.min(scroll/180,1);
+    const topbar=document.querySelector('.topbar');
+    const stickyTop=topbar?.offsetHeight||78;
     document.querySelectorAll('.hero-card').forEach(card=>{
+      const origin=Number(card.dataset.stickyOrigin||documentTop(card));
+      const start=Math.max(0,origin-stickyTop);
+      const progress=Math.min(Math.max((scroll-start)/180,0),1);
       card.style.setProperty('--sticky-progress',progress.toFixed(3));
-      card.classList.toggle('is-compact',progress>0.02);
+      card.classList.toggle('is-compact',progress>=.02);
     });
     scrollFrame=null;
   });
 }
 window.addEventListener('scroll',updateStickyCards,{passive:true});
-window.addEventListener('load',updateStickyCards);
+window.addEventListener('load',()=>{captureStickyOrigins();updateStickyCards();});
 function setMode(mode){
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.toggle('active',x.dataset.mode===mode));
   document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
   document.querySelector('#'+mode).classList.add('active');
   document.querySelector('#pageTitle').textContent=mode==='live'?'Live':'Foto';
   document.querySelector('#pageSub').textContent=mode==='live'?'Mercado em tempo real':'Captura e análise por IA';
-  if(mode==='live') setTimeout(()=>chart.applyOptions({width:chartEl.clientWidth}),30);
+  setTimeout(()=>{captureStickyOrigins();updateStickyCards();if(mode==='live')chart.applyOptions({width:chartEl.clientWidth});},30);
 }
 document.querySelectorAll('.nav-btn').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 document.querySelector('#backBtn').onclick=()=>setMode('live');
-window.addEventListener('resize',()=>chart.applyOptions({width:chartEl.clientWidth}));
+window.addEventListener('resize',()=>{captureStickyOrigins();updateStickyCards();chart.applyOptions({width:chartEl.clientWidth});});
