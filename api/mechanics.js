@@ -1,6 +1,7 @@
 import { getBinanceCandles, getBinanceAggTrades, getBinanceOrderBook } from './_lib/sources/binance.js';
 import { analyzeMarketMechanics } from './_lib/mechanics/index.js';
 import { buildMechanicsMemory } from './_lib/mechanics/memory.js';
+import { loadPatternLibrary, rememberPatternFamily } from './_lib/mechanics/pattern-library.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ ok:false, error:'Método não permitido.' });
@@ -26,6 +27,8 @@ export default async function handler(req, res) {
 
     const mechanics = analyzeMarketMechanics(candles, { trades, orderBook });
     const memory = buildMechanicsMemory(candles);
+    const library = await loadPatternLibrary(symbol, interval);
+    const savedPattern = memory.patternFamily ? await rememberPatternFamily(symbol, interval, memory.patternFamily) : { saved:false, available:library.available };
     const hasTrades = trades.length >= 10;
     const hasOrderBook = orderBook?.bids?.length > 0 && orderBook?.asks?.length > 0;
 
@@ -46,7 +49,12 @@ export default async function handler(req, res) {
         askLevels:orderBook?.asks?.length || 0
       },
       ...mechanics,
-      memory
+      memory,
+      patternLibrary:{
+        ...library,
+        saved:savedPattern.saved || false,
+        patternCount:savedPattern.patternCount ?? library.patterns.length
+      }
     });
   } catch (error) {
     return res.status(502).json({
