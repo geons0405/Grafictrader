@@ -791,7 +791,8 @@ function renderMechanics(data){
     if(!memory?.available) mem.textContent='MEMÓRIA · histórico insuficiente';
     else {
       const transition=memory.transition ? memory.transition.from.replaceAll('_',' ')+' → '+memory.transition.to.replaceAll('_',' ') : 'sem transição de estado';
-      mem.textContent='MEMÓRIA · '+transition+' · '+memory.durationBars+' barras · mudança '+memory.changeScore+'%';
+      const pattern=memory.pattern?.sequence?.length ? ' · padrão '+memory.pattern.sequence.map(x=>x.replaceAll('_',' ')).join(' → ') : '';
+      mem.textContent='MEMÓRIA · '+transition+' · '+memory.durationBars+' barras · mudança '+memory.changeScore+'%'+pattern;
     }
   }
 async function loadMechanicsAI(data){
