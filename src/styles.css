@@ -627,3 +627,20 @@ body.live-handoff{
 .live-stage .live-card #chart{
   flex:0 0 auto;
 }
+
+
+/* LIVE stage: never clip the fixed result card.
+   The chart remains the only element whose height changes. */
+.live-stage{
+  height:auto !important;
+  min-height:0;
+  overflow:visible !important;
+}
+
+.live-stage .live-result{
+  flex:0 0 340px !important;
+  height:340px !important;
+  min-height:340px !important;
+  max-height:340px !important;
+  flex-shrink:0 !important;
+}
