@@ -716,3 +716,18 @@ body.intel-open{overflow:hidden}
   .intelligence-panel{padding:18px;background:rgba(0,0,0,.72);backdrop-filter:blur(12px)}
   .intel-shell{height:calc(100% - 36px);border:1px solid #25313d;border-radius:6px;box-shadow:0 30px 90px rgba(0,0,0,.7)}
 }
+
+.intel-market-board{flex:0 0 auto;margin:0 10px 6px;border:1px solid #1b2732;background:#090f15;border-radius:5px;overflow:hidden}
+.intel-board-head{display:flex;align-items:center;justify-content:space-between;padding:8px 9px;border-bottom:1px solid #17222d}
+.intel-board-head b{color:#eef3f7;font-size:10px;letter-spacing:.3px}.intel-board-head span{color:#596878;font-size:7px;letter-spacing:.7px}
+.intel-board-price{display:flex;align-items:baseline;gap:6px}.intel-board-price b{font-size:12px;font-variant-numeric:tabular-nums}
+.intel-board-price span{font-size:8px;font-weight:900}
+.intel-chart-wrap{height:190px;background:#080d13}
+#intelMarketChart{width:100%;height:100%}
+.intel-metrics-grid{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid #17222d}
+.intel-metrics-grid>div{padding:7px 8px;border-right:1px solid #17222d;border-bottom:1px solid #17222d;min-width:0}
+.intel-metrics-grid>div:nth-child(3n){border-right:0}
+.intel-metrics-grid>div:nth-child(n+4){border-bottom:0}
+.intel-metrics-grid small{display:block;color:#566575;font-size:6px;letter-spacing:.55px;margin-bottom:3px}
+.intel-metrics-grid b{display:block;color:#dce4eb;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.intel-metrics-grid b.up{color:#39d98a!important}.intel-metrics-grid b.down{color:#ff6470!important}
