@@ -524,6 +524,23 @@ intelligencePanel.innerHTML=`
         <div><small>24H LOW</small><b id="intelLow">—</b></div>
         <div><small>VOLUME 24H</small><b id="intelVolume">—</b></div>
       </div>
+      <section class="mechanics-board" aria-live="polite">
+        <div class="mechanics-head">
+          <div><b>MARKET MECHANICS</b><span id="mechanicsState">A ANALISAR</span></div>
+          <small id="mechanicsQuality">OHLCV · —</small>
+        </div>
+        <div class="mechanics-grid">
+          <div><small>PRICE EFFICIENCY</small><b id="mechEfficiency">—</b></div>
+          <div><small>MOVEMENT ENERGY</small><b id="mechEnergy">—</b></div>
+          <div><small>ABSORPTION</small><b id="mechAbsorption">—</b></div>
+          <div><small>DISPLACEMENT COST</small><b id="mechDisplacement">—</b></div>
+          <div><small>LIQUIDITY RESISTANCE</small><b id="mechLiquidity">—</b></div>
+          <div><small>ORDERLINESS</small><b id="mechOrderliness">—</b></div>
+          <div><small>REGIME STABILITY</small><b id="mechRegime">—</b></div>
+          <div><small>STRUCTURAL PRESSURE</small><b id="mechPressure">—</b></div>
+        </div>
+        <div class="mechanics-note" id="mechanicsNote">A recolher evidência mecânica do mercado…</div>
+      </section>
     </section>
 
     <div class="intel-tags" id="intelTags">
@@ -559,7 +576,7 @@ let intelligenceEvents=[];
 let intelligenceTag='ALL';
 let intelligenceTimer=null;
 let tickerTimer=null;
-let marketTimer=null;
+let marketTimer=null;\nlet mechanicsTimer=null;\nlet mechanicsLoading=false;
 let intelligenceLoading=false;
 let intelMarketChart=null;
 let intelCandleSeries=null;
@@ -734,6 +751,46 @@ function closeIntelDetail(){
   const detail=document.querySelector('#intelDetail');detail.classList.remove('open');detail.setAttribute('aria-hidden','true');
 }
 
+function renderMechanics(data){
+  const m=data?.metrics||{};
+  const set=(id,v)=>{const el=document.querySelector('#'+id);if(el)el.textContent=v==null?'—':v+'%';};
+  set('mechEfficiency',m.priceEfficiency);set('mechEnergy',m.movementEnergy);
+  set('mechAbsorption',m.absorption);set('mechDisplacement',m.displacementCost);
+  set('mechLiquidity',m.liquidityResistance);set('mechOrderliness',m.marketOrderliness);
+  set('mechRegime',m.regimeStability);set('mechPressure',m.structuralPressure);
+  const state=document.querySelector('#mechanicsState');
+  if(state)state.textContent=String(data?.state||'LOW_INFORMATION').replaceAll('_',' ');
+  const quality=document.querySelector('#mechanicsQuality');
+  if(quality)quality.textContent='OHLCV · '+Number(data?.dataQuality?.candles||0)+' candles';
+  const note=document.querySelector('#mechanicsNote');
+  const ev=data?.evidence||{};
+  if(note){
+    if(data?.state==='DIRECTIONAL_EXPANSION') note.textContent='Movimento eficiente e persistente, com expansão de energia direcional.';
+    else if(data?.state==='ABSORPTION') note.textContent='Há evidência de atividade elevada com deslocamento relativamente contido. É um proxy OHLCV, não fluxo direto.';
+    else if(data?.state==='LIQUIDITY_CONFLICT') note.textContent='Existem zonas recorrentes de reação no histórico recente; liquidez real ainda não está disponível.';
+    else if(data?.state==='REGIME_TRANSITION') note.textContent='O comportamento estatístico recente diverge da janela anterior. O regime está em transição.';
+    else if(data?.state==='RANGE_ROTATION') note.textContent='O movimento apresenta baixa organização direcional e maior rotação entre estados.';
+    else note.textContent='A evidência disponível ainda não é suficiente para classificar um mecanismo dominante.';
+  }
+}
+async function loadMechanics(){
+  if(mechanicsLoading)return;
+  mechanicsLoading=true;
+  try{
+    const currentSymbol=symbol||'BTCUSDT',currentInterval=interval||'5m';
+    const r=await fetch('/api/mechanics?symbol='+encodeURIComponent(currentSymbol)+'&interval='+encodeURIComponent(currentInterval),{cache:'no-store'});
+    const data=await r.json();
+    if(!r.ok||!data.ok)throw new Error(data.error||'Mecânica indisponível');
+    renderMechanics(data);
+  }catch(error){
+    const state=document.querySelector('#mechanicsState'); if(state)state.textContent='OFFLINE';
+    const note=document.querySelector('#mechanicsNote'); if(note)note.textContent='Motor mecânico indisponível neste momento.';
+  }finally{
+    mechanicsLoading=false;
+    clearTimeout(mechanicsTimer);
+    if(intelligencePanel.classList.contains('open')) mechanicsTimer=setTimeout(loadMechanics,10000);
+  }
+}
 async function loadTicker(){
   try{
     const r=await fetch('/api/ticker',{cache:'no-store'}),data=await r.json();
@@ -776,17 +833,17 @@ async function loadIntelligence(){
 
 function openIntelligence(){
   intelligencePanel.classList.add('open');intelligencePanel.setAttribute('aria-hidden','false');document.body.classList.add('intel-open');
-  loadTicker();loadIntelligence();
+  loadTicker();loadIntelligence();loadMechanics();
 }
 function closeIntelligence(){
   intelligencePanel.classList.remove('open');intelligencePanel.setAttribute('aria-hidden','true');closeIntelDetail();document.body.classList.remove('intel-open');
-  clearTimeout(intelligenceTimer);clearTimeout(tickerTimer);
+  clearTimeout(intelligenceTimer);clearTimeout(tickerTimer);clearTimeout(mechanicsTimer);
 }
 document.querySelector('#settings').onclick=openIntelligence;
 document.querySelector('#intelClose').onclick=closeIntelligence;
 document.querySelector('#intelDetailClose').onclick=closeIntelDetail;
 document.querySelector('#intelDetail').onclick=e=>{if(e.target.id==='intelDetail')closeIntelDetail();};
-document.querySelector('#intelRefresh').onclick=()=>{loadTicker();loadIntelligence();};
+document.querySelector('#intelRefresh').onclick=()=>{loadTicker();loadIntelligence();loadMechanics();};
 document.querySelectorAll('#intelTags .intel-tag').forEach(button=>button.onclick=()=>{
   intelligenceTag=button.dataset.tag;
   document.querySelectorAll('#intelTags .intel-tag').forEach(x=>x.classList.toggle('active',x===button));
