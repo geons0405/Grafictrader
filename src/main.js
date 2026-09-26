@@ -309,6 +309,15 @@ function renderPhotoResult(image,p){
 
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 
+let scrollFrame=null;
+window.addEventListener('scroll',()=>{
+  if(scrollFrame)return;
+  scrollFrame=requestAnimationFrame(()=>{
+    const compact=window.scrollY>36;
+    document.querySelectorAll('.hero-card').forEach(card=>card.classList.toggle('is-compact',compact));
+    scrollFrame=null;
+  });
+},{passive:true});
 function setMode(mode){
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.toggle('active',x.dataset.mode===mode));
   document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
