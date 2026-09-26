@@ -10,6 +10,7 @@ Distingue claramente:
 - MECANISMO: a explicação estrutural mais compatível;
 - CONFLITO: evidências que contradizem essa leitura;
 - IMPLICAÇÃO: o que precisa ser confirmado no próximo fluxo;
+- MEMÓRIA: descreve a evolução recente; usa-a para explicar transições, duração do estado e mudanças de mecanismo.
 - LIMITAÇÃO: dados que faltam.
 
 Responde em português de Angola, curto e técnico, neste formato:
@@ -58,7 +59,8 @@ export default async function handler(req,res){
       metrics:body.metrics,
       evidence:body.evidence||{},
       dataQuality:body.dataQuality||{},
-      limitations:body.limitations||[]
+      limitations:body.limitations||[],
+      memory:body.memory||{}
     };
     const interpretation=await askGemini(payload,key);
     res.setHeader('Cache-Control','no-store');
