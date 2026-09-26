@@ -1,5 +1,5 @@
 import { createChart, CandlestickSeries } from 'lightweight-charts';
-import { createIcons, ArrowLeft, Settings, Radio, Sparkles, Plus, Camera } from 'lucide';
+import { createIcons, ArrowLeft, Settings, Radio, Sparkles, Plus, Camera, TrendingUp, TrendingDown } from 'lucide';
 import './styles.css';
 
 const app = document.querySelector('#app');
@@ -43,7 +43,7 @@ app.innerHTML = `
       </div>
 
       <div class="reaction-row">
-        <span class="metric trend-metric"><span class="metric-dot"></span><b id="trend">A analisar…</b></span>
+        <span class="metric trend-metric"><i id="trendIcon" data-lucide="trending-up" aria-hidden="true"></i><b id="trend">A analisar…</b></span>
         <span class="metric">RSI <b id="rsi">—</b></span>
         <span class="metric">ESTRUTURA <b id="structure">—</b></span>
       </div>
@@ -161,6 +161,9 @@ function updateMetrics(price,data){
   const trendEl=document.querySelector('#trend');
   const structureEl=document.querySelector('#structure');
   trendEl.textContent=up?'Alta':'Baixa';
+  const trendIcon=document.querySelector('#trendIcon');
+  trendIcon.setAttribute('data-lucide',up?'trending-up':'trending-down');
+  createIcons({icons:{TrendingUp,TrendingDown},attrs:{'aria-hidden':'true'}});
   trendEl.classList.toggle('positive',up);
   trendEl.classList.toggle('negative',!up);
   structureEl.textContent=up?'Higher highs':'Lower highs';
@@ -230,7 +233,7 @@ async function selectMarket(){
   }
 }
 
-createIcons({icons:{ArrowLeft,Settings,Radio,Sparkles,Plus,Camera}});
+createIcons({icons:{ArrowLeft,Settings,Radio,Sparkles,Plus,Camera,TrendingUp,TrendingDown}});
 
 document.querySelector('#settings').onclick=()=>{
   const btn=document.querySelector('#settings');
