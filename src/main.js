@@ -366,11 +366,9 @@ function updateStickyCards(){
       card.style.setProperty('--sticky-progress',value);
       card.classList.toggle('is-compact',progress>=.02);
 
-      // Reserva o espaço libertado pelo encolhimento do hero para que
-      // os resultados seguintes não entrem por baixo do gráfico sticky.
-      if(card.classList.contains('live-card')){
-        document.querySelector('#live')?.style.setProperty('--live-shrink-gap',Math.round(240*progress)+'px');
-      }
+      // O card de resultado continua no fluxo normal. Só o conteúdo
+      // interno do hero (o chart) é que encolhe; não criamos deslocamento
+      // artificial que faça os dois cards disputarem a mesma posição.
     });
     if(document.querySelector('#live')?.classList.contains('active')) resizeChartToContainer();
     scrollFrame=null;
