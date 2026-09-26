@@ -47,27 +47,29 @@ app.innerHTML = `
           <div class="result-title"><div class="insight-icon"><i data-lucide="sparkles" aria-hidden="true"></i></div><b>Leitura do mercado</b></div>
           <span>AO VIVO</span>
         </div>
-        <div class="result-metrics">
-          <span class="result-metric trend-metric"><i id="trendIcon" data-lucide="trending-up" aria-hidden="true"></i><small>TENDÊNCIA</small><b id="trend">A analisar…</b></span>
-          <span class="result-metric"><small>RSI</small><b id="rsi">—</b></span>
-          <span class="result-metric"><small>ESTRUTURA</small><b id="structure">—</b></span>
-        </div>
-        <div class="live-ai">
-          <div class="live-ai-label">Grafictrader AI · LIVE</div>
-          <p id="liveInsight">Escolhe um ativo e timeframe. O gráfico recebe novas cotações automaticamente enquanto a ligação estiver ativa.</p>
-        </div>
-        <div class="live-summary" id="liveSummary">A aguardar dados suficientes para gerar a leitura.</div>
-        <div class="scenario-grid">
-          <div class="scenario-block">
-            <b>CENÁRIO A</b>
-            <span id="liveScenarioA">Continuação da estrutura atual após confirmação.</span>
+        <div class="live-result-scroll" id="liveResultScroll">
+          <div class="result-metrics">
+            <span class="result-metric trend-metric"><i id="trendIcon" data-lucide="trending-up" aria-hidden="true"></i><small>TENDÊNCIA</small><b id="trend">A analisar…</b></span>
+            <span class="result-metric"><small>RSI</small><b id="rsi">—</b></span>
+            <span class="result-metric"><small>ESTRUTURA</small><b id="structure">—</b></span>
           </div>
-          <div class="scenario-block">
-            <b>CENÁRIO B</b>
-            <span id="liveScenarioB">Reversão se a estrutura perder o suporte relevante.</span>
+          <div class="live-ai">
+            <div class="live-ai-label">Grafictrader AI · LIVE</div>
+            <p id="liveInsight">Escolhe um ativo e timeframe. O gráfico recebe novas cotações automaticamente enquanto a ligação estiver ativa.</p>
           </div>
+          <div class="live-summary" id="liveSummary">A aguardar dados suficientes para gerar a leitura.</div>
+          <div class="scenario-grid">
+            <div class="scenario-block">
+              <b>CENÁRIO A</b>
+              <span id="liveScenarioA">Continuação da estrutura atual após confirmação.</span>
+            </div>
+            <div class="scenario-block">
+              <b>CENÁRIO B</b>
+              <span id="liveScenarioB">Reversão se a estrutura perder o suporte relevante.</span>
+            </div>
+          </div>
+          <div class="live-foot"><span>CONFIANÇA DA LEITURA <b id="liveConfidence">—</b></span></div>
         </div>
-        <div class="live-foot"><span>CONFIANÇA DA LEITURA <b id="liveConfidence">—</b></span></div>
       </article>
       <p class="note">Dados públicos da Binance · sem execução de ordens.</p>
     </section>
@@ -358,23 +360,51 @@ function updateStickyCards(){
     const scroll=Math.max(0,window.scrollY);
     const topbar=document.querySelector('.topbar');
     const stickyTop=topbar?.offsetHeight||78;
+    const live=document.querySelector('#live');
+    const hero=live?.querySelector('.live-card');
+    const result=live?.querySelector('.live-result');
+
     document.querySelectorAll('.hero-card').forEach(card=>{
       const origin=Number(card.dataset.stickyOrigin||documentTop(card));
-      const start=Math.max(0,origin-stickyTop);
-      const progress=Math.min(Math.max((scroll-start)/180,0),1);
-      const value=progress.toFixed(3);
-      card.style.setProperty('--sticky-progress',value);
+      const startPoint=Math.max(0,origin-stickyTop);
+      const progress=Math.min(Math.max((scroll-startPoint)/180,0),1);
+      card.style.setProperty('--sticky-progress',progress.toFixed(3));
       card.classList.toggle('is-compact',progress>=.02);
-
-      // O card de resultado continua no fluxo normal. Só o conteúdo
-      // interno do hero (o chart) é que encolhe; não criamos deslocamento
-      // artificial que faça os dois cards disputarem a mesma posição.
     });
-    if(document.querySelector('#live')?.classList.contains('active')) resizeChartToContainer();
+
+    if(hero && result && live?.classList.contains('active')){
+      const GAP=16;
+      const MIN_CHART=250;
+      const chart=hero.querySelector('#chart');
+      const assetBar=hero.querySelector('.asset-bar');
+      const tf=hero.querySelector('.tf');
+      const currentChart=Math.max(MIN_CHART,Math.round(chart?.getBoundingClientRect().height||MIN_CHART));
+      const heroHeader=Math.round((assetBar?.getBoundingClientRect().height||0));
+      const tfHeight=Math.round((tf?.getBoundingClientRect().height||0));
+      const heroHeight=Math.round(hero.getBoundingClientRect().height);
+      const resultTop=Math.round(hero.getBoundingClientRect().top+heroHeader+currentChart+tfHeight+GAP);
+
+      // Fase 1: o resultado acompanha o fundo REAL do hero + gap fixo.
+      // Fase 2: quando o chart chega ao mínimo, congelamos esta posição.
+      const locked=currentChart<=MIN_CHART+1;
+      live.style.setProperty('--live-result-top',resultTop+'px');
+      live.classList.toggle('result-phase-2',locked);
+      result.classList.toggle('is-result-sticky',true);
+
+      const resultScroll=result.querySelector('#liveResultScroll');
+      if(resultScroll){
+        const available=Math.max(180,window.innerHeight-resultTop-116);
+        resultScroll.style.setProperty('--result-scroll-height',available+'px');
+        resultScroll.classList.toggle('is-inner-scroll',locked);
+      }
+
+      // Recalcula o chart pela API depois de a altura real do sticky hero mudar.
+      resizeChartToContainer();
+    }
+
     scrollFrame=null;
   });
 }
-
 const chartResizeObserver=new ResizeObserver(entries=>{
   const entry=entries[0];
   if(!entry)return;
