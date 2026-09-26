@@ -490,6 +490,21 @@ intelligencePanel.innerHTML=`
       <div class="pulse-card"><small>ETH/USDT</small><b id="pulseEthPrice">—</b><span id="pulseEthChange">—</span></div>
       <div class="pulse-card"><small>MARKET PULSE</small><b id="pulseState">—</b><span id="pulseRange">24H</span></div>
     </div>
+    <section class="intel-market-board">
+      <div class="intel-board-head">
+        <div><b id="intelAssetLabel">BTC/USDT</b><span> · MARKET STRUCTURE</span></div>
+        <div class="intel-board-price"><b id="intelMarketPrice">—</b><span id="intelMarketChange">—</span></div>
+      </div>
+      <div class="intel-chart-wrap"><div id="intelMarketChart"></div></div>
+      <div class="intel-metrics-grid">
+        <div><small>TENDÊNCIA</small><b id="intelTrend">—</b></div>
+        <div><small>RSI 14</small><b id="intelRsi">—</b></div>
+        <div><small>ESTRUTURA</small><b id="intelStructure">—</b></div>
+        <div><small>24H HIGH</small><b id="intelHigh">—</b></div>
+        <div><small>24H LOW</small><b id="intelLow">—</b></div>
+        <div><small>VOLUME 24H</small><b id="intelVolume">—</b></div>
+      </div>
+    </section>
 
     <div class="intel-tags" id="intelTags">
       <button class="intel-tag active" data-tag="ALL">TODOS</button>
@@ -524,7 +539,10 @@ let intelligenceEvents=[];
 let intelligenceTag='ALL';
 let intelligenceTimer=null;
 let tickerTimer=null;
+let marketTimer=null;
 let intelligenceLoading=false;
+let intelMarketChart=null;
+let intelCandleSeries=null;
 
 function formatIntelTime(value){
   const d=new Date(value);
@@ -563,6 +581,189 @@ function sparklineSvg(values){
     return x.toFixed(1)+','+y.toFixed(1);
   }).join(' ');
   return '<svg class="intel-sparkline" viewBox="0 0 100 30" preserveAspectRatio="none" aria-label="Sparkline"><polyline points="'+points+'" fill="none" stroke="currentColor" stroke-width="1.7" vector-effect="non-scaling-stroke"/></svg>';
+}
+
+function initIntelMarketChart(){
+  const el=document.querySelector('#intelMarketChart');
+  if(!el||intelMarketChart)return;
+  intelMarketChart=createChart(el,{
+    layout:{background:{color:'#080d13'},textColor:'#657382',attributionLogo:true},
+    grid:{vertLines:{color:'#111b24'},horzLines:{color:'#111b24'}},
+    rightPriceScale:{borderColor:'#1d2833',textColor:'#778594'},
+    timeScale:{borderColor:'#1d2833',timeVisible:true,secondsVisible:false},
+    crosshair:{mode:1}
+  });
+  intelCandleSeries=intelMarketChart.addSeries(CandlestickSeries,{upColor:'#24d17b',downColor:'#ff5f6d',borderUpColor:'#24d17b',borderDownColor:'#ff5f6d',wickUpColor:'#24d17b',wickDownColor:'#ff5f6d'});
+  new ResizeObserver(()=>{if(el.clientWidth&&el.clientHeight)intelMarketChart.resize(el.clientWidth,el.clientHeight);}).observe(el);
+}
+function calcIntelRsi(candles){
+  const closes=candles.map(x=>x.close).filter(Number.isFinite);
+  if(closes.length<15)return null;
+  let gain=0,loss=0;
+  for(let i=closes.length-14;i<closes.length;i++){const d=closes[i]-closes[i-1];gain+=Math.max(d,0);loss+=Math.max(-d,0);}
+  return loss===0?100:100-(100/(1+gain/loss));
+}
+async function loadIntelMarket(){
+  try{
+    const currentSymbol=symbol||'BTCUSDT', currentInterval=interval||'5m';
+    const r=await fetch('/api/market?symbol='+encodeURIComponent(currentSymbol)+'&interval='+encodeURIComponent(currentInterval),{cache:'no-store'});
+    const data=await r.json();
+    if(!r.ok||!data.ok)throw new Error(data.error||'Mercado indisponível');
+    initIntelMarketChart();
+    intelCandleSeries.setData(data.candles);
+    intelMarketChart.timeScale().fitContent();
+    const t=data.ticker, candles=data.candles, last=candles.at(-1), previous=candles.at(-20)||candles[0];
+    const trend=last&&previous&&last.close>=previous.close?'ALTA':'BAIXA';
+    const rsi=calcIntelRsi(candles);
+    document.querySelector('#intelAssetLabel').textContent=currentSymbol.replace('USDT','/USDT');
+    document.querySelector('#intelMarketPrice').textContent=formatTerminalPrice(t.price);
+    const change=document.querySelector('#intelMarketChange');change.textContent=(t.change24h>=0?'+':'')+t.change24h.toFixed(2)+'%';change.className=t.change24h>=0?'up':'down';
+    document.querySelector('#intelTrend').textContent=trend;
+    document.querySelector('#intelTrend').className=trend==='ALTA'?'up':'down';
+    document.querySelector('#intelRsi').textContent=rsi==null?'—':rsi.toFixed(1);
+    document.querySelector('#intelStructure').textContent=trend==='ALTA'?'HIGHER HIGHS':'LOWER HIGHS';
+    document.querySelector('#intelHigh').textContent=formatTerminalPrice(t.high24h);
+    document.querySelector('#intelLow').textContent=formatTerminalPrice(t.low24h);
+    document.querySelector('#intelVolume').textContent='
+  const ticker=document.querySelector('#intelTicker');
+  if(!ticker)return;
+  ticker.innerHTML=tickers.map(item=>{
+    const cls=item.change24h>=0?'up':'down';
+    return '<span><b>'+escapeHtml(item.symbol.replace('USDT','/USDT'))+'</b> '+formatTerminalPrice(item.price)+' <em class="'+cls+'">'+(item.change24h>=0?'+':'')+Number(item.change24h||0).toFixed(2)+'%</em></span>';
+  }).join('') || '<span>Binance · sem dados</span>';
+  if(tickers.length) ticker.innerHTML+=ticker.innerHTML;
+}
+function updatePulse(tickers){
+  const btc=tickers.find(x=>x.symbol==='BTCUSDT'),eth=tickers.find(x=>x.symbol==='ETHUSDT');
+  if(btc){
+    document.querySelector('#pulseBtcPrice').textContent=formatTerminalPrice(btc.price);
+    const el=document.querySelector('#pulseBtcChange');el.textContent=(btc.change24h>=0?'+':'')+btc.change24h.toFixed(2)+'%';el.className=btc.change24h>=0?'up':'down';
+  }
+  if(eth){
+    document.querySelector('#pulseEthPrice').textContent=formatTerminalPrice(eth.price);
+    const el=document.querySelector('#pulseEthChange');el.textContent=(eth.change24h>=0?'+':'')+eth.change24h.toFixed(2)+'%';el.className=eth.change24h>=0?'up':'down';
+  }
+  const avg=tickers.length?tickers.reduce((sum,x)=>sum+Number(x.change24h||0),0)/tickers.length:0;
+  document.querySelector('#pulseState').textContent=avg>0.15?'RISK ON':avg<-0.15?'RISK OFF':'MIXED';
+}
+
+function renderIntelFeed(){
+  const feed=document.querySelector('#intelFeed');
+  const visible=intelligenceTag==='ALL'?intelligenceEvents:intelligenceEvents.filter(e=>eventTags(e).includes(intelligenceTag));
+  document.querySelector('#intelCount').textContent=visible.length+' evento'+(visible.length===1?'':'s');
+  if(!visible.length){
+    feed.innerHTML='<div class="intel-empty"><b>Nenhum evento encontrado</b><span>Experimenta outra tag ou atualiza o fluxo.</span></div>';
+    return;
+  }
+  feed.innerHTML=visible.map((event,index)=>{
+    const tags=eventTags(event);
+    return '<button class="intel-event '+sentimentClass(event.sentiment)+'" data-intel-index="'+index+'" type="button">'+
+      '<div class="intel-event-top"><span class="intel-source-icon">'+intelSourceIcon(event.source)+'</span><span class="intel-event-source">'+escapeHtml(event.source||'Fonte')+'</span><span class="intel-event-time">'+formatIntelTime(event.timestamp)+'</span><span class="intel-sentiment '+sentimentClass(event.sentiment)+'">'+sentimentLabel(event.sentiment)+'</span></div>'+
+      '<div class="intel-event-main"><div><div class="intel-event-title">'+escapeHtml(event.headline||event.title||'Evento de mercado')+'</div>'+
+      (event.summary?'<div class="intel-event-summary">'+escapeHtml(event.summary)+'</div>':'')+
+      '<div class="intel-event-bottom">'+tags.map(tag=>'<span>#'+escapeHtml(tag)+'</span>').join('')+(event.symbol?'<span>'+escapeHtml(event.symbol.replace('USDT','/USDT'))+'</span>':'')+'</div></div>'+
+      sparklineSvg(event.sparkline)+'</div></button>';
+  }).join('');
+  feed.querySelectorAll('.intel-event').forEach(button=>{
+    button.onclick=()=>{
+      const current=intelligenceTag==='ALL'?intelligenceEvents:intelligenceEvents.filter(e=>eventTags(e).includes(intelligenceTag));
+      openIntelDetail(current[Number(button.dataset.intelIndex)]);
+    };
+  });
+}
+
+function openIntelDetail(event){
+  if(!event)return;
+  const detail=document.querySelector('#intelDetail');
+  document.querySelector('#intelDetailContent').innerHTML=
+    '<div class="intel-detail-kicker"><span class="intel-source-icon">'+intelSourceIcon(event.source)+'</span> '+escapeHtml(event.source||'Fonte')+' · '+escapeHtml(sentimentLabel(event.sentiment))+'</div>'+
+    '<h2>'+escapeHtml(event.headline||event.title||'Evento')+'</h2>'+
+    '<div class="intel-detail-meta">'+formatIntelTime(event.timestamp)+(event.symbol?' · '+escapeHtml(event.symbol.replace('USDT','/USDT')):'')+'</div>'+
+    '<p>'+escapeHtml(event.summary||'Sem descrição disponível.')+'</p>'+
+    '<div class="intel-detail-tags">'+eventTags(event).map(tag=>'<button class="intel-tag" data-detail-tag="'+escapeHtml(tag)+'">#'+escapeHtml(tag)+'</button>').join('')+'</div>'+
+    (event.metrics?'<div class="intel-metrics">'+Object.entries(event.metrics).filter(([,v])=>Number.isFinite(Number(v))).map(([k,v])=>'<span><small>'+escapeHtml(k)+'</small><b>'+escapeHtml(Number(v).toLocaleString('en-US',{maximumFractionDigits:2}))+'</b></span>').join('')+'</div>':'')+
+    (event.url?'<a class="intel-source-link" href="'+escapeHtml(event.url)+'" target="_blank" rel="noopener noreferrer">Abrir fonte original ↗</a>':'');
+  detail.classList.add('open');detail.setAttribute('aria-hidden','false');
+  detail.querySelectorAll('[data-detail-tag]').forEach(btn=>btn.onclick=()=>{
+    intelligenceTag=btn.dataset.detailTag;
+    document.querySelectorAll('#intelTags .intel-tag').forEach(x=>x.classList.toggle('active',x.dataset.tag===intelligenceTag));
+    closeIntelDetail();renderIntelFeed();
+  });
+}
+function closeIntelDetail(){
+  const detail=document.querySelector('#intelDetail');detail.classList.remove('open');detail.setAttribute('aria-hidden','true');
+}
+
+async function loadTicker(){
+  try{
+    const r=await fetch('/api/ticker',{cache:'no-store'}),data=await r.json();
+    if(!r.ok||!data.ok)throw new Error(data.error||'Ticker indisponível');
+    renderIntelTicker(data.data||[]);updatePulse(data.data||[]);
+  }catch(error){
+    document.querySelector('#intelTicker').innerHTML='<span>TICKER OFFLINE · '+escapeHtml(error.message)+'</span>';
+    document.querySelector('#pulseState').textContent='OFFLINE';
+  }finally{
+    clearTimeout(tickerTimer);
+    if(intelligencePanel.classList.contains('open'))tickerTimer=setTimeout(loadTicker,10000);
+  }
+}
+
+async function loadIntelligence(){
+  if(intelligenceLoading)return;
+  intelligenceLoading=true;
+  document.querySelector('#intelStatus').textContent='A atualizar fontes individualmente…';
+  try{
+    const response=await fetch('/api/intelligence?symbol='+encodeURIComponent(symbol||'BTCUSDT'),{cache:'no-store'});
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||'Falha no feed');
+    intelligenceEvents=Array.isArray(data.events)?data.events:[];
+    renderIntelFeed();
+    const active=Array.isArray(data.activeSources)?data.activeSources.length:0;
+    const total=Number(data.sourceCount||4);
+    document.querySelector('#intelStatus').textContent='● '+active+'/'+total+' fontes ativas'+(data.failedSources?.length?' · '+data.failedSources.length+' com falha':'');
+    document.querySelector('#intelUpdated').textContent='ATUALIZADO '+formatIntelTime(data.updatedAt);
+    if(Array.isArray(data.failedSources)&&data.failedSources.length){
+      document.querySelector('#intelStatus').title=data.failedSources.map(x=>x.source+': '+x.error).join(' | ');
+    }else document.querySelector('#intelStatus').title='Todas as fontes responderam.';
+  }catch(error){
+    document.querySelector('#intelStatus').textContent='AGREGADOR OFFLINE · '+error.message;
+  }finally{
+    intelligenceLoading=false;
+    clearTimeout(intelligenceTimer);
+    if(intelligencePanel.classList.contains('open'))intelligenceTimer=setTimeout(loadIntelligence,30000);
+  }
+}
+
+function openIntelligence(){
+  intelligencePanel.classList.add('open');intelligencePanel.setAttribute('aria-hidden','false');document.body.classList.add('intel-open');
+  loadTicker();loadIntelligence();loadIntelMarket();
+}
+function closeIntelligence(){
+  intelligencePanel.classList.remove('open');intelligencePanel.setAttribute('aria-hidden','true');closeIntelDetail();document.body.classList.remove('intel-open');
+  clearTimeout(intelligenceTimer);clearTimeout(tickerTimer);clearTimeout(marketTimer);
+}
+document.querySelector('#settings').onclick=openIntelligence;
+document.querySelector('#intelClose').onclick=closeIntelligence;
+document.querySelector('#intelDetailClose').onclick=closeIntelDetail;
+document.querySelector('#intelDetail').onclick=e=>{if(e.target.id==='intelDetail')closeIntelDetail();};
+document.querySelector('#intelRefresh').onclick=()=>{loadTicker();loadIntelligence();loadIntelMarket();};
+document.querySelectorAll('#intelTags .intel-tag').forEach(button=>button.onclick=()=>{
+  intelligenceTag=button.dataset.tag;
+  document.querySelectorAll('#intelTags .intel-tag').forEach(x=>x.classList.toggle('active',x===button));
+  renderIntelFeed();
+});
+const originalBackHandler=document.querySelector('#backBtn').onclick;
+document.querySelector('#backBtn').onclick=()=>{
+  if(intelligencePanel.classList.contains('open'))closeIntelligence();
+  else if(originalBackHandler)originalBackHandler();
+};
++Number(t.volume24h).toLocaleString('en-US',{notation:'compact',maximumFractionDigits:2});
+  }catch(error){
+    const state=document.querySelector('#intelStructure');if(state)state.textContent='SEM DADOS';
+  }finally{
+    clearTimeout(marketTimer);
+    if(intelligencePanel.classList.contains('open'))marketTimer=setTimeout(loadIntelMarket,10000);
+  }
 }
 
 function renderIntelTicker(tickers){
