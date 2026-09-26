@@ -331,3 +331,29 @@ main{overflow:visible;position:relative;isolation:isolate}
   .live-ai p,.live-summary{font-size:15px}
   .scenario-block span{font-size:14px}
 }
+
+
+/* Sticky LIVE chart: shrink the real chart element, never clip the card. */
+.live-card{
+  overflow:visible;
+  max-height:none;
+}
+.live-card #chart{
+  overflow:visible;
+  min-height:100px;
+  height:var(--chart-height)!important;
+  transition:height .08s linear;
+}
+.live-card .asset-bar{
+  flex:0 0 auto;
+  position:relative;
+  z-index:2;
+}
+.live-card .asset-select-wrap,
+.live-card .asset-price{
+  flex-shrink:0;
+}
+.live-card .asset-select-wrap select,
+.live-card .asset-price strong{
+  white-space:nowrap;
+}
