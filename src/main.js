@@ -458,3 +458,195 @@ function setMode(mode){
 document.querySelectorAll('.nav-btn').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 document.querySelector('#backBtn').onclick=()=>setMode('live');
 window.addEventListener('resize',()=>{captureStickyOrigins();updateStickyCards();resizeChartToContainer();});
+
+/* =========================================================
+   LIVE INTELLIGENCE — real-time news/event stream
+   Aggregated by /api/intelligence. New events enter at top.
+   ========================================================= */
+const intelligencePanel=document.createElement('section');
+intelligencePanel.id='intelligencePanel';
+intelligencePanel.className='intelligence-panel';
+intelligencePanel.setAttribute('aria-hidden','true');
+intelligencePanel.innerHTML=`
+  <div class="intel-shell">
+    <header class="intel-topbar">
+      <button class="icon-btn" id="intelClose" aria-label="Fechar"><i data-lucide="arrow-left" aria-hidden="true"></i></button>
+      <div class="title-wrap"><h1>Live Intelligence</h1><span>notícias e eventos em tempo real</span></div>
+      <span class="intel-live-dot"><i></i> LIVE</span>
+    </header>
+    <div class="intel-status" id="intelStatus">A ligar às fontes…</div>
+    <div class="intel-tags" id="intelTags">
+      <button class="intel-tag active" data-tag="ALL">TODOS</button>
+      <button class="intel-tag" data-tag="BTC">#BTC</button>
+      <button class="intel-tag" data-tag="CRYPTO">#CRYPTO</button>
+      <button class="intel-tag" data-tag="MACRO">#MACRO</button>
+      <button class="intel-tag" data-tag="NEWS">#NEWS</button>
+      <button class="intel-tag" data-tag="MARKET">#MARKET</button>
+      <button class="intel-tag" data-tag="REGULATION">#REGULATION</button>
+      <button class="intel-tag" data-tag="SECURITY">#SECURITY</button>
+    </div>
+    <div class="intel-feed-head"><b id="intelCount">0 eventos</b><button id="intelRefresh" class="intel-refresh">Atualizar</button></div>
+    <div class="intel-feed" id="intelFeed" aria-live="polite">
+      <div class="intel-empty">A carregar acontecimentos…</div>
+    </div>
+  </div>
+  <div class="intel-detail" id="intelDetail" aria-hidden="true">
+    <div class="intel-detail-card">
+      <button class="intel-detail-close" id="intelDetailClose" aria-label="Fechar detalhe">×</button>
+      <div id="intelDetailContent"></div>
+    </div>
+  </div>
+`;
+document.querySelector('.shell').appendChild(intelligencePanel);
+createIcons({icons:{ArrowLeft,Radio,Sparkles,TrendingUp,TrendingDown}});
+
+let intelligenceEvents=[];
+let intelligenceTag='ALL';
+let intelligenceTimer=null;
+let intelligenceLoading=false;
+
+function formatIntelTime(value){
+  const d=new Date(value);
+  if(Number.isNaN(d.getTime()))return 'agora';
+  return d.toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function intelIcon(type){
+  if(type==='news')return '📰';
+  if(type==='market')return '📊';
+  if(type==='press_release')return '🏢';
+  return '⚡';
+}
+
+function renderIntelFeed(){
+  const feed=document.querySelector('#intelFeed');
+  const visible=intelligenceTag==='ALL'
+    ? intelligenceEvents
+    : intelligenceEvents.filter(e=>(e.tags||[]).includes(intelligenceTag));
+  document.querySelector('#intelCount').textContent=visible.length+' evento'+(visible.length===1?'':'s');
+  if(!visible.length){
+    feed.innerHTML='<div class="intel-empty">Nenhum evento encontrado para esta tag.</div>';
+    return;
+  }
+  feed.innerHTML=visible.map((event,index)=>`
+    <button class="intel-event ${event.impact==='high'?'high-impact':''}" data-intel-index="${index}" type="button">
+      <div class="intel-event-top">
+        <span class="intel-event-icon">${intelIcon(event.type)}</span>
+        <span class="intel-event-time">${formatIntelTime(event.timestamp)}</span>
+        <span class="intel-event-source">${escapeHtml(event.source||'Fonte')}</span>
+      </div>
+      <div class="intel-event-title">${escapeHtml(event.title||'Evento de mercado')}</div>
+      <div class="intel-event-summary">${escapeHtml(event.summary||'Sem resumo disponível.')}</div>
+      <div class="intel-event-tags">${(event.tags||[]).map(tag=>`<span>#${escapeHtml(tag)}</span>`).join('')}</div>
+    </button>`).join('');
+
+  feed.querySelectorAll('.intel-event').forEach((button)=>{
+    button.onclick=()=>{
+      const visibleEvents=intelligenceTag==='ALL'
+        ? intelligenceEvents
+        : intelligenceEvents.filter(e=>(e.tags||[]).includes(intelligenceTag));
+      openIntelDetail(visibleEvents[Number(button.dataset.intelIndex)]);
+    };
+  });
+}
+
+function openIntelDetail(event){
+  if(!event)return;
+  const detail=document.querySelector('#intelDetail');
+  document.querySelector('#intelDetailContent').innerHTML=`
+    <div class="intel-detail-kicker">${intelIcon(event.type)} ${escapeHtml(event.asset||'MERCADO')} · ${escapeHtml(event.impact==='high'?'ALTO IMPACTO':'EVENTO')}</div>
+    <h2>${escapeHtml(event.title||'Evento')}</h2>
+    <div class="intel-detail-meta">${formatIntelTime(event.timestamp)} · ${escapeHtml(event.source||'Fonte')}${event.domain?' · '+escapeHtml(event.domain):''}</div>
+    <p>${escapeHtml(event.summary||'Sem descrição disponível.')}</p>
+    <div class="intel-detail-tags">${(event.tags||[]).map(tag=>`<button class="intel-tag" data-detail-tag="${escapeHtml(tag)}">#${escapeHtml(tag)}</button>`).join('')}</div>
+    ${event.metrics?'<div class="intel-metrics">'+Object.entries(event.metrics).map(([key,value])=>`<span><small>${escapeHtml(key)}</small><b>${escapeHtml(Number(value).toLocaleString('en-US',{maximumFractionDigits:2}))}</b></span>`).join('')+'</div>':''}
+    ${event.url?'<a class="intel-source-link" href="'+escapeHtml(event.url)+'" target="_blank" rel="noopener noreferrer">Abrir fonte original</a>':''}
+  `;
+  detail.classList.add('open');
+  detail.setAttribute('aria-hidden','false');
+  detail.querySelectorAll('[data-detail-tag]').forEach(btn=>{
+    btn.onclick=()=>{
+      intelligenceTag=btn.dataset.detailTag;
+      document.querySelectorAll('.intel-tag').forEach(x=>x.classList.toggle('active',x.dataset.tag===intelligenceTag));
+      detail.classList.remove('open');
+      detail.setAttribute('aria-hidden','true');
+      renderIntelFeed();
+    };
+  });
+}
+
+function closeIntelDetail(){
+  const detail=document.querySelector('#intelDetail');
+  detail.classList.remove('open');
+  detail.setAttribute('aria-hidden','true');
+}
+
+function openIntelligence(){
+  intelligencePanel.classList.add('open');
+  intelligencePanel.setAttribute('aria-hidden','false');
+  document.body.classList.add('intel-open');
+  loadIntelligence();
+}
+
+function closeIntelligence(){
+  intelligencePanel.classList.remove('open');
+  intelligencePanel.setAttribute('aria-hidden','true');
+  closeIntelDetail();
+  document.body.classList.remove('intel-open');
+  clearTimeout(intelligenceTimer);
+}
+
+async function loadIntelligence(){
+  if(intelligenceLoading)return;
+  intelligenceLoading=true;
+  document.querySelector('#intelStatus').textContent='A atualizar fontes…';
+  const currentSymbol=symbol||'BTCUSDT';
+  try{
+    const response=await fetch('/api/intelligence?symbol='+encodeURIComponent(currentSymbol),{cache:'no-store'});
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||'Falha no feed');
+    const incoming=Array.isArray(data.events)?data.events:[];
+    const previousIds=new Set(intelligenceEvents.map(e=>e.id));
+    intelligenceEvents=incoming;
+    renderIntelFeed();
+    const connected=Object.entries(data.sources||{}).filter(([,v])=>v==='connected').length;
+    const configured=Object.keys(data.sources||{}).length;
+    document.querySelector('#intelStatus').textContent=`● ${connected}/${configured} fontes ativas · atualizado ${formatIntelTime(data.updatedAt)}`;
+    if(incoming.some(e=>!previousIds.has(e.id))) {
+      document.querySelector('#intelFeed')?.classList.add('has-new');
+      setTimeout(()=>document.querySelector('#intelFeed')?.classList.remove('has-new'),650);
+    }
+  }catch(error){
+    document.querySelector('#intelStatus').textContent='Feed temporariamente indisponível · a tentar novamente';
+    if(!intelligenceEvents.length){
+      document.querySelector('#intelFeed').innerHTML='<div class="intel-empty">Não foi possível carregar as fontes agora. O sistema continuará a tentar automaticamente.</div>';
+    }
+  }finally{
+    intelligenceLoading=false;
+    clearTimeout(intelligenceTimer);
+    if(intelligencePanel.classList.contains('open'))intelligenceTimer=setTimeout(loadIntelligence,12000);
+  }
+}
+
+document.querySelector('#settings').onclick=()=>{
+  openIntelligence();
+};
+
+document.querySelector('#intelClose').onclick=closeIntelligence;
+document.querySelector('#intelDetailClose').onclick=closeIntelDetail;
+document.querySelector('#intelDetail').onclick=e=>{if(e.target.id==='intelDetail')closeIntelDetail();};
+document.querySelector('#intelRefresh').onclick=loadIntelligence;
+
+document.querySelectorAll('#intelTags .intel-tag').forEach(button=>{
+  button.onclick=()=>{
+    intelligenceTag=button.dataset.tag;
+    document.querySelectorAll('#intelTags .intel-tag').forEach(x=>x.classList.toggle('active',x===button));
+    renderIntelFeed();
+  };
+});
+
+const originalBackHandler=document.querySelector('#backBtn').onclick;
+document.querySelector('#backBtn').onclick=()=>{
+  if(intelligencePanel.classList.contains('open'))closeIntelligence();
+  else if(originalBackHandler)originalBackHandler();
+};
