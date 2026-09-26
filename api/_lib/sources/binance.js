@@ -146,3 +146,42 @@ export async function getBinanceCandles(symbol = 'BTCUSDT', interval = '5m', lim
     return getTwelveDataCandles(symbol, interval, limit);
   }
 }
+
+export async function getBinanceAggTrades(symbol = 'BTCUSDT', limit = 500) {
+  try {
+    const data = await binanceJson('/aggTrades?' + new URLSearchParams({
+      symbol,
+      limit: String(Math.min(Number(limit) || 500, 1000))
+    }));
+    return data.map(row => ({
+      id: row.a,
+      price: Number(row.p),
+      quantity: Number(row.q),
+      time: Number(row.T),
+      side: row.m ? 'sell' : 'buy'
+    })).filter(row => Number.isFinite(row.price) && Number.isFinite(row.quantity) && Number.isFinite(row.time));
+  } catch (error) {
+    console.warn(`[Binance] aggTrades indisponíveis: ${error?.message || error}`);
+    return [];
+  }
+}
+
+export async function getBinanceOrderBook(symbol = 'BTCUSDT', limit = 100) {
+  try {
+    const data = await binanceJson('/depth?' + new URLSearchParams({
+      symbol,
+      limit: String(Math.min(Number(limit) || 100, 1000))
+    }));
+    return {
+      bids: (data.bids || []).map(row => ({ price: Number(row[0]), quantity: Number(row[1]) }))
+        .filter(row => Number.isFinite(row.price) && Number.isFinite(row.quantity)),
+      asks: (data.asks || []).map(row => ({ price: Number(row[0]), quantity: Number(row[1]) }))
+        .filter(row => Number.isFinite(row.price) && Number.isFinite(row.quantity)),
+      lastUpdateId: data.lastUpdateId || null,
+      source: 'Binance order book'
+    };
+  } catch (error) {
+    console.warn(`[Binance] order book indisponível: ${error?.message || error}`);
+    return { bids: [], asks: [], source: 'unavailable' };
+  }
+}
