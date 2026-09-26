@@ -167,28 +167,28 @@ export default async function handler(req, res) {
     }
   }
 
-  if (process.env.TWELVE_DATA_API_KEY && !asset.endsWith('USDT')) {
+  if (process.env.TWELVE_DATA_API_KEY) {
     try {
       const tdSymbol = asset.replace('USDT', '/USD');
-      const url = 'https://api.twelvedata.com/press_releases?' + new URLSearchParams({
+      const priceUrl = 'https://api.twelvedata.com/price?' + new URLSearchParams({
         symbol: tdSymbol,
-        type: '1',
         apikey: process.env.TWELVE_DATA_API_KEY
       });
-      const data = await fetchJson(url);
-      for (const item of (data?.press_releases || []).slice(0, 10)) {
+      const quote = await fetchJson(priceUrl);
+      if (quote?.price) {
         events.push({
-          id: `twelve-${item.id}`,
-          type: 'press_release',
+          id: `twelve-price-${asset}-${quote.price}`,
+          type: 'market',
           source: 'Twelve Data',
           asset: assetLabel,
-          timestamp: item.datetime || new Date().toISOString(),
-          title: item.title || 'Comunicado',
-          summary: String(item.body || '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').slice(0, 220),
+          timestamp: new Date().toISOString(),
+          title: `${assetLabel}/USD · cotação Twelve Data`,
+          summary: `Preço recebido do provedor Twelve Data: ${quote.price} USD.`,
           url: '',
           domain: 'Twelve Data',
-          tags: [assetLabel, 'PRESS', 'FUNDAMENTAL'],
-          impact: 'normal'
+          tags: [assetLabel, 'MARKET', 'PRICE'],
+          impact: 'normal',
+          metrics: { price: Number(quote.price) }
         });
       }
     } catch {
