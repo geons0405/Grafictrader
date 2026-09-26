@@ -18,6 +18,16 @@ const LABELS = {
   DOGEUSDT: 'DOGE'
 };
 
+const MARKETAUX_SYMBOLS = {
+  BTCUSDT: 'BTC',
+  ETHUSDT: 'ETH',
+  BNBUSDT: 'BNB',
+  SOLUSDT: 'SOL',
+  XRPUSDT: 'XRP',
+  ADAUSDT: 'ADA',
+  DOGEUSDT: 'DOGE'
+};
+
 function json(res, status, body) {
   res.status(status);
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -33,7 +43,10 @@ async function fetchJson(url, options = {}, timeout = 9000) {
     const text = await response.text();
     let data = null;
     try { data = JSON.parse(text); } catch {}
-    if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
+    if (!response.ok) {
+      const message = data?.error?.message || data?.error || data?.message || `HTTP ${response.status}`;
+      throw new Error(message);
+    }
     return data;
   } finally {
     clearTimeout(timer);
@@ -50,13 +63,23 @@ function classify(title = '') {
   if (/fed|federal reserve|interest rate|inflation|cpi|ppi|jobs|employment|ecb|bank of england|central bank|gdp/.test(t)) tags.push('MACRO');
   if (/bitcoin|btc/.test(t)) tags.push('BTC');
   if (/ethereum|eth/.test(t)) tags.push('ETH');
+  if (/binance|bnb/.test(t)) tags.push('BNB');
   if (/solana|sol/.test(t)) tags.push('SOL');
+  if (/ripple|xrp/.test(t)) tags.push('XRP');
+  if (/cardano|ada/.test(t)) tags.push('ADA');
+  if (/dogecoin|doge/.test(t)) tags.push('DOGE');
   if (/crypto|blockchain|token|defi/.test(t)) tags.push('CRYPTO');
   if (/etf|fund|institutional/.test(t)) tags.push('FUND');
   if (/regulat|sec|law|government/.test(t)) tags.push('REGULATION');
   if (/hack|exploit|attack|security/.test(t)) tags.push('SECURITY');
   if (!tags.includes('NEWS')) tags.push('NEWS');
-  return [...new Set(tags)].slice(0, 5);
+  return [...new Set(tags)].slice(0, 6);
+}
+
+function impactFor(title = '') {
+  return /fed|rate|inflation|sec|hack|exploit|etf|bitcoin|ethereum|binance|regulat|ban|approval|lawsuit/.test(title.toLowerCase())
+    ? 'high'
+    : 'normal';
 }
 
 function normalizeGdelt(data, asset) {
@@ -72,7 +95,7 @@ function normalizeGdelt(data, asset) {
     url: a.url || '',
     domain: a.domain || '',
     tags: classify(a.title || ''),
-    impact: /fed|rate|inflation|sec|hack|etf|bitcoin|ethereum/.test((a.title || '').toLowerCase()) ? 'high' : 'normal'
+    impact: impactFor(a.title || '')
   }));
 }
 
@@ -88,9 +111,39 @@ function normalizeFinnhub(data, asset) {
     summary: a.summary || a.headline || '',
     url: a.url || '',
     domain: a.source || '',
-    tags: [...classify(a.headline || ''), 'FINNHUB'].slice(0, 5),
-    impact: /fed|rate|inflation|sec|hack|etf|bitcoin|ethereum/.test((a.headline || '').toLowerCase()) ? 'high' : 'normal'
+    tags: [...classify(a.headline || ''), 'FINNHUB'].slice(0, 6),
+    impact: impactFor(a.headline || '')
   }));
+}
+
+function normalizeMarketaux(data, asset) {
+  const rows = Array.isArray(data?.data) ? data.data : [];
+  return rows.map((a, index) => {
+    const title = a.title || 'Notícia financeira';
+    const entities = Array.isArray(a.entities) ? a.entities : [];
+    const sentiment = entities
+      .map(entity => Number(entity.sentiment_score))
+      .filter(Number.isFinite);
+    const sentimentAvg = sentiment.length
+      ? sentiment.reduce((sum, value) => sum + value, 0) / sentiment.length
+      : null;
+
+    return {
+      id: `marketaux-${a.uuid || index}`,
+      type: 'news',
+      source: 'Marketaux',
+      asset,
+      timestamp: a.published_at || new Date().toISOString(),
+      title,
+      summary: a.description || a.snippet || title,
+      url: a.url || '',
+      domain: a.source || a.source_domain || '',
+      imageUrl: a.image_url || '',
+      tags: [...classify(title), 'MARKETAUX'].slice(0, 6),
+      impact: impactFor(title),
+      metrics: sentimentAvg === null ? undefined : { sentiment: Number(sentimentAvg.toFixed(3)) }
+    };
+  });
 }
 
 export default async function handler(req, res) {
@@ -102,18 +155,23 @@ export default async function handler(req, res) {
 
   const events = [];
   const sources = {
-    gdelt: 'connected',
-    binance: 'connected',
-    ccxt: 'connected',
-    finnhub: process.env.FINNHUB_API_KEY ? 'connected' : 'not_configured',
-    twelveData: process.env.TWELVE_DATA_API_KEY ? 'connected' : 'not_configured'
+    gdelt: 'checking',
+    marketaux: process.env.MARKETAUX_API_KEY ? 'checking' : 'not_configured',
+    binance: 'checking',
+    ccxt: 'checking',
+    finnhub: process.env.FINNHUB_API_KEY ? 'checking' : 'not_configured',
+    twelveData: process.env.TWELVE_DATA_API_KEY ? 'checking' : 'not_configured'
   };
+  const sourceErrors = {};
 
   try {
     const ccxtModule = await import('ccxt');
     const Binance = ccxtModule.default?.binance || ccxtModule.binance;
     const exchange = new Binance({ enableRateLimit: true });
     const ticker = await exchange.fetchTicker(symbolToCcxt(asset));
+
+    sources.ccxt = 'connected';
+    sources.binance = 'connected';
 
     events.push({
       id: `market-${asset}-${ticker.timestamp || Date.now()}`,
@@ -136,6 +194,8 @@ export default async function handler(req, res) {
   } catch (error) {
     sources.ccxt = 'error';
     sources.binance = 'error';
+    sourceErrors.ccxt = error?.message || 'Falha no CCXT';
+    sourceErrors.binance = sourceErrors.ccxt;
   }
 
   try {
@@ -143,15 +203,39 @@ export default async function handler(req, res) {
     const url = 'https://api.gdeltproject.org/api/v2/doc/doc?' + new URLSearchParams({
       query,
       mode: 'artlist',
-      maxrecords: '25',
-      timespan: '1h',
+      maxrecords: '50',
+      timespan: '6h',
       sort: 'datedesc',
       format: 'json'
     });
     const gdelt = await fetchJson(url);
+    sources.gdelt = 'connected';
     events.push(...normalizeGdelt(gdelt, assetLabel));
-  } catch {
+  } catch (error) {
     sources.gdelt = 'error';
+    sourceErrors.gdelt = error?.message || 'Falha no GDELT';
+  }
+
+  if (process.env.MARKETAUX_API_KEY) {
+    try {
+      const marketauxSymbol = MARKETAUX_SYMBOLS[asset];
+      const url = 'https://api.marketaux.com/v1/news/all?' + new URLSearchParams({
+        api_token: process.env.MARKETAUX_API_KEY,
+        symbols: marketauxSymbol,
+        entity_types: 'cryptocurrency',
+        language: 'en',
+        filter_entities: 'true',
+        limit: '20',
+        sort: 'published_at',
+        published_after: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 16)
+      });
+      const data = await fetchJson(url);
+      sources.marketaux = 'connected';
+      events.push(...normalizeMarketaux(data, assetLabel));
+    } catch (error) {
+      sources.marketaux = 'error';
+      sourceErrors.marketaux = error?.message || 'Falha no Marketaux';
+    }
   }
 
   if (process.env.FINNHUB_API_KEY) {
@@ -161,9 +245,11 @@ export default async function handler(req, res) {
         token: process.env.FINNHUB_API_KEY
       });
       const data = await fetchJson(url);
+      sources.finnhub = 'connected';
       events.push(...normalizeFinnhub(data, assetLabel));
-    } catch {
+    } catch (error) {
       sources.finnhub = 'error';
+      sourceErrors.finnhub = error?.message || 'Falha no Finnhub';
     }
   }
 
@@ -176,6 +262,7 @@ export default async function handler(req, res) {
       });
       const quote = await fetchJson(priceUrl);
       if (quote?.price) {
+        sources.twelveData = 'connected';
         events.push({
           id: `twelve-price-${asset}-${quote.price}`,
           type: 'market',
@@ -190,27 +277,32 @@ export default async function handler(req, res) {
           impact: 'normal',
           metrics: { price: Number(quote.price) }
         });
+      } else {
+        throw new Error(quote?.message || 'Twelve Data não devolveu uma cotação.');
       }
-    } catch {
+    } catch (error) {
       sources.twelveData = 'error';
+      sourceErrors.twelveData = error?.message || 'Falha no Twelve Data';
     }
   }
 
   const unique = new Map();
   for (const event of events) {
-    const key = event.url || event.id || event.title;
+    const normalizedTitle = String(event.title || '').trim().toLowerCase();
+    const key = event.url || event.id || normalizedTitle;
     if (!unique.has(key)) unique.set(key, event);
   }
 
   const sorted = [...unique.values()]
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 60);
+    .slice(0, 80);
 
   return json(res, 200, {
     ok: true,
     asset: assetLabel,
     updatedAt: new Date().toISOString(),
     sources,
+    sourceErrors,
     events: sorted
   });
 }
