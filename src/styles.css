@@ -459,3 +459,118 @@ main{overflow:visible;position:relative;isolation:isolate}
 #live.result-phase-2 .live-result{
   box-shadow:0 18px 42px rgba(0,0,0,.34);
 }
+
+
+/* =========================================================
+   LIVE v2 — browser-native layout
+   The stage owns the viewport. The chart has real height.
+   The result stays in flex flow; JS never positions it.
+   ========================================================= */
+html.live-handoff,
+body.live-handoff{
+  overflow:hidden;
+}
+
+#live.active{
+  min-height:calc(100svh - var(--sticky-top,78px));
+}
+
+.live-stage{
+  position:-webkit-sticky;
+  position:sticky;
+  top:var(--sticky-top,78px);
+  height:calc(100svh - var(--sticky-top,78px) - 94px);
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  overflow:hidden;
+  isolation:isolate;
+  z-index:20;
+}
+
+.live-stage .live-card{
+  position:relative;
+  top:auto;
+  flex:0 0 auto;
+  width:100%;
+  height:auto;
+  min-height:0;
+  margin:0;
+  overflow:visible;
+  z-index:2;
+}
+
+.live-stage .live-card #chart{
+  height:340px;
+  min-height:250px;
+  max-height:none;
+  flex:0 0 auto;
+  overflow:visible;
+  transition:none;
+}
+
+.live-stage .live-result{
+  position:relative !important;
+  top:auto !important;
+  flex:1 1 auto;
+  min-height:0;
+  width:100%;
+  margin:0 !important;
+  overflow:hidden;
+  z-index:1;
+}
+
+.live-stage .live-result-scroll{
+  min-height:0;
+  overflow:hidden;
+  max-height:none;
+}
+
+.live-stage.result-phase-2 .live-result-scroll{
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+
+.live-stage.result-phase-2 .live-result-scroll::-webkit-scrollbar{
+  width:0;
+  height:0;
+}
+
+.live-stage.result-phase-2 .live-card #chart{
+  height:250px !important;
+  min-height:250px;
+}
+
+.live-stage.result-phase-2 .live-result{
+  box-shadow:0 18px 42px rgba(0,0,0,.34);
+}
+
+/* The result is separated by the real flex gap, never by JS coordinates. */
+.live-stage > .live-card + .live-result{
+  margin-top:0 !important;
+}
+
+/* Keep the pair/price row visible while the real chart shrinks. */
+.live-stage .asset-bar{
+  flex:0 0 auto;
+}
+.live-stage .asset-select-wrap,
+.live-stage .asset-price{
+  flex-shrink:0;
+}
+
+/* No transform/scale/translate is used for the LIVE shrink. */
+.live-stage .live-card{
+  transform:none;
+  will-change:auto;
+}
+
+@media(max-height:700px){
+  .live-stage{
+    height:calc(100svh - var(--sticky-top,78px) - 82px);
+  }
+}
