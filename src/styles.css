@@ -574,3 +574,56 @@ body.live-handoff{
     height:calc(100svh - var(--sticky-top,78px) - 82px);
   }
 }
+/* =========================================================
+   LIVE result card — fixed height, independent from chart
+   The chart may shrink; the result card never flexes with it.
+   Only .live-result-scroll is allowed to scroll.
+   ========================================================= */
+.live-stage .live-result{
+  flex:0 0 340px !important;
+  height:340px !important;
+  min-height:340px !important;
+  max-height:340px !important;
+  width:100%;
+  margin:0 !important;
+  padding:20px 17px 16px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+.live-stage .live-result .analysis-head{
+  flex:0 0 auto;
+  min-height:34px;
+}
+
+.live-stage .live-result .live-result-scroll{
+  flex:1 1 auto;
+  min-height:0;
+  height:auto;
+  max-height:none;
+  overflow:hidden;
+  scrollbar-width:none;
+}
+
+.live-stage .live-result .live-result-scroll::-webkit-scrollbar{
+  width:0;
+  height:0;
+}
+
+/* When the chart reaches its minimum, scrolling happens INSIDE the card. */
+.live-stage.result-phase-2 .live-result .live-result-scroll{
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+
+/* Explicitly prevent flex sizing from coupling the result to the chart. */
+.live-stage .live-card{
+  flex:0 0 auto;
+}
+
+.live-stage .live-card #chart{
+  flex:0 0 auto;
+}
