@@ -409,6 +409,36 @@ function updateStickyCards(){
   });
 }
 
+let touchStartY=null;
+
+window.addEventListener('wheel',event=>{
+  if(!livePhaseTwo)return;
+  if(event.deltaY<0){
+    setLivePhase(false);
+    requestAnimationFrame(updateLiveLayout);
+  }
+},{passive:true});
+
+window.addEventListener('touchstart',event=>{
+  if(!livePhaseTwo || !event.touches[0])return;
+  touchStartY=event.touches[0].clientY;
+},{passive:true});
+
+window.addEventListener('touchmove',event=>{
+  if(!livePhaseTwo || touchStartY===null || !event.touches[0])return;
+  const currentY=event.touches[0].clientY;
+  const deltaY=currentY-touchStartY;
+  const resultScroll=document.querySelector('#liveResultScroll');
+  // Swipe para baixo no topo do conteúdo = regressar à fase 1.
+  if(deltaY>12 && (!resultScroll || resultScroll.scrollTop<=0)){
+    setLivePhase(false);
+    touchStartY=null;
+    requestAnimationFrame(updateLiveLayout);
+  }
+},{passive:true});
+
+window.addEventListener('touchend',()=>{touchStartY=null;},{passive:true});
+
 const chartResizeObserver=new ResizeObserver(entries=>{
   if(!entries[0])return;
   resizeChartToContainer();
@@ -420,6 +450,7 @@ function setMode(mode){
   document.querySelectorAll('.nav-btn').forEach(x=>x.classList.toggle('active',x.dataset.mode===mode));
   document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
   document.querySelector('#'+mode).classList.add('active');
+  if(mode!=='live')setLivePhase(false);
   document.querySelector('#pageTitle').textContent=mode==='live'?'Live':'Foto';
   document.querySelector('#pageSub').textContent=mode==='live'?'Mercado em tempo real':'Captura e análise por IA';
   setTimeout(()=>{captureStickyOrigins();updateStickyCards();if(mode==='live')resizeChartToContainer();},30);
