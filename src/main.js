@@ -362,8 +362,15 @@ function updateStickyCards(){
       const origin=Number(card.dataset.stickyOrigin||documentTop(card));
       const start=Math.max(0,origin-stickyTop);
       const progress=Math.min(Math.max((scroll-start)/180,0),1);
-      card.style.setProperty('--sticky-progress',progress.toFixed(3));
+      const value=progress.toFixed(3);
+      card.style.setProperty('--sticky-progress',value);
       card.classList.toggle('is-compact',progress>=.02);
+
+      // Reserva o espaço libertado pelo encolhimento do hero para que
+      // os resultados seguintes não entrem por baixo do gráfico sticky.
+      if(card.classList.contains('live-card')){
+        document.querySelector('#live')?.style.setProperty('--live-shrink-gap',Math.round(240*progress)+'px');
+      }
     });
     if(document.querySelector('#live')?.classList.contains('active')) resizeChartToContainer();
     scrollFrame=null;
