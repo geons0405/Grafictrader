@@ -42,28 +42,32 @@ app.innerHTML = `
         </div>
       </div>
 
-      <div class="reaction-row">
-        <span class="metric trend-metric"><i id="trendIcon" data-lucide="trending-up" aria-hidden="true"></i><b id="trend">A analisar…</b></span>
-        <span class="metric">RSI <b id="rsi">—</b></span>
-        <span class="metric">ESTRUTURA <b id="structure">—</b></span>
-      </div>
-
-      <article class="insight">
-        <div class="insight-icon"><i data-lucide="sparkles" aria-hidden="true"></i></div>
-        <div><b>Grafictrader AI · LIVE</b><p id="liveInsight">Escolhe um ativo e timeframe. O gráfico recebe novas cotações automaticamente enquanto a ligação estiver ativa.</p></div>
-      </article>
       <article class="live-result" id="liveResult">
-        <div class="analysis-head"><b>Leitura do mercado</b><span>AO VIVO</span></div>
+        <div class="analysis-head">
+          <div class="result-title"><div class="insight-icon"><i data-lucide="sparkles" aria-hidden="true"></i></div><b>Leitura do mercado</b></div>
+          <span>AO VIVO</span>
+        </div>
+        <div class="result-metrics">
+          <span class="result-metric trend-metric"><i id="trendIcon" data-lucide="trending-up" aria-hidden="true"></i><small>TENDÊNCIA</small><b id="trend">A analisar…</b></span>
+          <span class="result-metric"><small>RSI</small><b id="rsi">—</b></span>
+          <span class="result-metric"><small>ESTRUTURA</small><b id="structure">—</b></span>
+        </div>
+        <div class="live-ai">
+          <div class="live-ai-label">Grafictrader AI · LIVE</div>
+          <p id="liveInsight">Escolhe um ativo e timeframe. O gráfico recebe novas cotações automaticamente enquanto a ligação estiver ativa.</p>
+        </div>
         <div class="live-summary" id="liveSummary">A aguardar dados suficientes para gerar a leitura.</div>
-        <div class="scenario-block">
-          <b>CENÁRIO A</b>
-          <span id="liveScenarioA">Continuação da estrutura atual após confirmação.</span>
+        <div class="scenario-grid">
+          <div class="scenario-block">
+            <b>CENÁRIO A</b>
+            <span id="liveScenarioA">Continuação da estrutura atual após confirmação.</span>
+          </div>
+          <div class="scenario-block">
+            <b>CENÁRIO B</b>
+            <span id="liveScenarioB">Reversão se a estrutura perder o suporte relevante.</span>
+          </div>
         </div>
-        <div class="scenario-block">
-          <b>CENÁRIO B</b>
-          <span id="liveScenarioB">Reversão se a estrutura perder o suporte relevante.</span>
-        </div>
-        <div class="live-foot"><span>RSI <b id="liveRsiState">—</b></span><span>ESTRUTURA <b id="liveStructureState">—</b></span><span>LEITURA <b id="liveConfidence">—</b></span></div>
+        <div class="live-foot"><span>CONFIANÇA DA LEITURA <b id="liveConfidence">—</b></span></div>
       </article>
       <p class="note">Dados públicos da Binance · sem execução de ordens.</p>
     </section>
@@ -200,9 +204,8 @@ function updateMetrics(price,data){
   document.querySelector('#liveSummary').textContent=up?'Preço com impulso recente de alta. A leitura fica mais frágil se o RSI estiver esticado ou se a estrutura perder o último suporte.':'Preço com pressão recente de baixa. A leitura fica mais frágil se o preço recuperar a última resistência e formar máximos ascendentes.';
   document.querySelector('#liveScenarioA').textContent=up?'Continuação da alta se o preço mantiver a estrutura e superar a resistência local.':'Continuação da baixa se o preço mantiver máximos/mínimos descendentes e perder o suporte local.';
   document.querySelector('#liveScenarioB').textContent=up?'Correção/reversão se perder o suporte local ou a estrutura mudar para máximos descendentes.':'Recuperação se recuperar a resistência local e a estrutura passar para máximos ascendentes.';
-  document.querySelector('#liveRsiState').textContent=rsiState+' · '+rsi.toFixed(1);
-  document.querySelector('#liveStructureState').textContent=structureState;
   document.querySelector('#liveConfidence').textContent=confidence;
+  document.querySelector('#liveResult').classList.add('has-data');
 }
 
 function closeSocket(){
@@ -327,6 +330,11 @@ function captureStickyOrigins(){
     card.style.setProperty('--sticky-top',stickyTop+'px');
   });
 }
+function resizeChartToContainer(){
+  if(!chartEl?.clientWidth || !chartEl?.clientHeight)return;
+  chart.resize(chartEl.clientWidth,chartEl.clientHeight);
+}
+
 function updateStickyCards(){
   if(scrollFrame)return;
   scrollFrame=requestAnimationFrame(()=>{
@@ -340,9 +348,13 @@ function updateStickyCards(){
       card.style.setProperty('--sticky-progress',progress.toFixed(3));
       card.classList.toggle('is-compact',progress>=.02);
     });
+    if(document.querySelector('#live')?.classList.contains('active')) resizeChartToContainer();
     scrollFrame=null;
   });
 }
+
+const chartResizeObserver=new ResizeObserver(()=>resizeChartToContainer());
+chartResizeObserver.observe(chartEl);
 window.addEventListener('scroll',updateStickyCards,{passive:true});
 window.addEventListener('load',()=>{captureStickyOrigins();updateStickyCards();});
 function setMode(mode){
@@ -351,8 +363,8 @@ function setMode(mode){
   document.querySelector('#'+mode).classList.add('active');
   document.querySelector('#pageTitle').textContent=mode==='live'?'Live':'Foto';
   document.querySelector('#pageSub').textContent=mode==='live'?'Mercado em tempo real':'Captura e análise por IA';
-  setTimeout(()=>{captureStickyOrigins();updateStickyCards();if(mode==='live')chart.applyOptions({width:chartEl.clientWidth});},30);
+  setTimeout(()=>{captureStickyOrigins();updateStickyCards();if(mode==='live')resizeChartToContainer();},30);
 }
 document.querySelectorAll('.nav-btn').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 document.querySelector('#backBtn').onclick=()=>setMode('live');
-window.addEventListener('resize',()=>{captureStickyOrigins();updateStickyCards();chart.applyOptions({width:chartEl.clientWidth});});
+window.addEventListener('resize',()=>{captureStickyOrigins();updateStickyCards();resizeChartToContainer();});
