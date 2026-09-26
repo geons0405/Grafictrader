@@ -4,6 +4,20 @@ const WINDOW = 20;
 const MAX_WINDOWS = 6;
 const PATTERN_LENGTH = 3;
 
+// These metrics are normalized to 0–100 by the mechanics engine.
+// Historical windows intentionally use OHLCV only; live microstructure
+// is not available for every historical window.
+const SIGNATURE_KEYS = [
+  'priceEfficiency',
+  'movementEnergy',
+  'absorption',
+  'displacementCost',
+  'liquidityResistance',
+  'marketOrderliness',
+  'regimeStability',
+  'structuralPressure'
+];
+
 function safeSlice(candles, end) {
   return candles.slice(Math.max(0, end - WINDOW), end);
 }
@@ -35,27 +49,73 @@ function distance(a, b) {
   return count ? sum / count : 0;
 }
 
+function signatureDistance(currentItems, historicalItems) {
+  let sum = 0;
+  let count = 0;
+
+  for (let i = 0; i < PATTERN_LENGTH; i++) {
+    const current = currentItems[i]?.metrics || {};
+    const historical = historicalItems[i]?.metrics || {};
+
+    for (const key of SIGNATURE_KEYS) {
+      if (Number.isFinite(current[key]) && Number.isFinite(historical[key])) {
+        sum += Math.abs(current[key] - historical[key]) / 100;
+        count++;
+      }
+    }
+  }
+
+  return count ? sum / count : null;
+}
+
+function signatureSimilarity(currentItems, historicalItems) {
+  const distanceValue = signatureDistance(currentItems, historicalItems);
+  return distanceValue == null ? null : Math.max(0, Math.min(100, Math.round((1 - distanceValue) * 100)));
+}
+
 function stateSequence(items) {
   return items.map(item => item.state).filter(Boolean);
 }
 
-function findRecurringPattern(sequence) {
-  if (sequence.length < PATTERN_LENGTH) return null;
-  const current = sequence.slice(-PATTERN_LENGTH);
+function findRecurringPattern(items) {
+  if (items.length < PATTERN_LENGTH * 2) return null;
+
+  const currentItems = items.slice(-PATTERN_LENGTH);
+  const current = stateSequence(currentItems);
+  if (current.length !== PATTERN_LENGTH) return null;
+
   const matches = [];
-  for (let i = 0; i <= sequence.length - PATTERN_LENGTH * 2; i++) {
-    const candidate = sequence.slice(i, i + PATTERN_LENGTH);
-    if (candidate.every((state, j) => state === current[j])) {
+
+  for (let i = 0; i <= items.length - PATTERN_LENGTH * 2; i++) {
+    const candidateItems = items.slice(i, i + PATTERN_LENGTH);
+    const candidate = stateSequence(candidateItems);
+
+    if (candidate.length === PATTERN_LENGTH && candidate.every((state, j) => state === current[j])) {
       matches.push({
         startStep: i + 1,
         endStep: i + PATTERN_LENGTH,
-        sequence: candidate
+        sequence: candidate,
+        similarity: signatureSimilarity(currentItems, candidateItems),
+        signature: candidateItems.map(item => item.metrics)
       });
     }
   }
-  return matches.length
-    ? { sequence: current, occurrences: matches.length, matches }
+
+  if (!matches.length) return null;
+
+  const scored = matches.filter(match => Number.isFinite(match.similarity));
+  const bestSimilarity = scored.length
+    ? Math.max(...scored.map(match => match.similarity))
     : null;
+
+  return {
+    sequence: current,
+    occurrences: matches.length,
+    matches,
+    bestSimilarity,
+    currentSignature: currentItems.map(item => item.metrics),
+    basis: 'OHLCV_PATTERN'
+  };
 }
 
 function buildTransitions(sequence) {
@@ -89,6 +149,7 @@ export function buildMechanicsMemory(candles) {
     const slice = safeSlice(candles, end);
     const result = analyzeMarketMechanics(slice);
     const last = slice[slice.length - 1];
+
     timeline.push({
       index: timeline.length,
       endTime: last?.time ?? null,
@@ -110,6 +171,7 @@ export function buildMechanicsMemory(candles) {
   const recent = timeline.slice(-MAX_WINDOWS);
   const current = recent.at(-1);
   let durationBars = WINDOW;
+
   for (let i = recent.length - 2; i >= 0; i--) {
     if (recent[i].state !== current.state) break;
     durationBars += WINDOW;
@@ -122,7 +184,7 @@ export function buildMechanicsMemory(candles) {
 
   const changeScore = previous ? Math.round(distance(current.metrics, previous.metrics) * 100) : 0;
   const sequence = stateSequence(recent);
-  const pattern = findRecurringPattern(sequence);
+  const pattern = findRecurringPattern(recent);
   const transitions = buildTransitions(sequence);
 
   return {
@@ -138,7 +200,8 @@ export function buildMechanicsMemory(candles) {
     timeline: recent.map((item, i) => ({
       step: i + 1,
       endTime: item.endTime,
-      state: item.state
+      state: item.state,
+      signature: item.metrics
     }))
   };
 }
