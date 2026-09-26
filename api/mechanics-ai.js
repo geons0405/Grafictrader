@@ -11,6 +11,7 @@ Distingue claramente:
 - CONFLITO: evidências que contradizem essa leitura;
 - IMPLICAÇÃO: o que precisa ser confirmado no próximo fluxo;
 - MEMÓRIA: descreve a evolução recente; usa-a para explicar transições, duração do estado e mudanças de mecanismo.
+- PADRÃO RECORRENTE: se existir uma sequência repetida, trata-a apenas como recorrência histórica; não assumes que o desfecho será igual.
 - LIMITAÇÃO: dados que faltam.
 
 Responde em português de Angola, curto e técnico, neste formato:
