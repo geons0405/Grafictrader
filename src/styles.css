@@ -746,3 +746,5 @@ body.intel-open{overflow:hidden}
 
 .mechanics-ai{margin:8px 9px 0;padding:9px 10px;border:1px solid #1b2732;border-radius:4px;background:#0c131b;color:#b8c5d1;font-size:9px;line-height:1.55;white-space:pre-wrap}
 .mechanics-ai::first-line{color:#eef3f7;font-weight:800}
+
+.mechanics-memory{margin:7px 9px 0;padding:7px 9px;border-left:2px solid #334155;background:#0a1017;color:#7f8d9c;font-size:8px;line-height:1.4;letter-spacing:.06em;text-transform:uppercase}
