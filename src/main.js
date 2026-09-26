@@ -544,6 +544,7 @@ intelligencePanel.innerHTML=`
           <div><small>EXECUTION SIGNATURE</small><b id="mechExecution">—</b></div>
         </div>
         <div class="mechanics-note" id="mechanicsNote">A recolher evidência mecânica do mercado…</div>
+        <div class="mechanics-ai" id="mechanicsAi">IA mecânica a aguardar dados…</div>
       </section>
     </section>
 
@@ -783,6 +784,24 @@ function renderMechanics(data){
     else note.textContent='A evidência disponível ainda não é suficiente para classificar um mecanismo dominante.';
   }
 }
+async function loadMechanicsAI(data){
+  if(mechanicsAiLoading||!data?.ok)return;
+  mechanicsAiLoading=true;
+  const el=document.querySelector('#mechanicsAi');
+  if(el)el.textContent='A IA está a interpretar o mecanismo…';
+  try{
+    const r=await fetch('/api/mechanics-ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const result=await r.json();
+    if(!r.ok||!result.ok)throw new Error(result.error||'Interpretação indisponível');
+    if(el)el.textContent=result.interpretation||'Sem interpretação disponível.';
+  }catch(error){
+    if(el)el.textContent='Interpretação IA indisponível neste momento.';
+  }finally{
+    mechanicsAiLoading=false;
+    clearTimeout(mechanicsAiTimer);
+    if(intelligencePanel.classList.contains('open')) mechanicsAiTimer=setTimeout(()=>loadMechanicsAI(data),30000);
+  }
+}
 async function loadMechanics(){
   if(mechanicsLoading)return;
   mechanicsLoading=true;
@@ -792,6 +811,7 @@ async function loadMechanics(){
     const data=await r.json();
     if(!r.ok||!data.ok)throw new Error(data.error||'Mecânica indisponível');
     renderMechanics(data);
+    loadMechanicsAI(data);
   }catch(error){
     const state=document.querySelector('#mechanicsState'); if(state)state.textContent='OFFLINE';
     const note=document.querySelector('#mechanicsNote'); if(note)note.textContent='Motor mecânico indisponível neste momento.';
