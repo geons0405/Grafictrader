@@ -129,42 +129,56 @@ let pollTimer=null;
 const fmtPrice = value => '$'+Number(value).toLocaleString('en-US',{maximumFractionDigits:Number(value)<10?4:2});
 const intervalNames = { '1m':'1 minuto','5m':'5 minutos','15m':'15 minutos','1h':'1 hora','4h':'4 horas' };
 
+let marketSource='';
+
+async function fetchMarketApi(){
+  const response=await fetch(`/api/market?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}`,{cache:'no-store'});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||!data.ok) throw new Error(data.error||'Mercado indisponível');
+  return data;
+}
+
 async function loadMarket(){
   clearTimeout(pollTimer);
   marketData=[];
   series.setData([]);
-  const [data,ticker]=await Promise.all([
-    fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=180`,{cache:'no-store'}).then(r=>{
-      if(!r.ok) throw new Error('Falha ao obter dados');
-      return r.json();
-    }),
-    fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`,{cache:'no-store'}).then(r=>{
-      if(!r.ok) throw new Error('Falha ao obter ticker');
-      return r.json();
-    })
-  ]);
-  dayChange=Number(ticker.priceChangePercent);
-  marketData=data;
-  series.setData(data.map(k=>({time:k[0]/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4]})));
-    updateMetrics(+data.at(-1)[4],data);
-  document.querySelector('#streamState').textContent='Dados carregados';
+  const data=await fetchMarketApi();
+  const candles=Array.isArray(data.candles)?data.candles:[];
+  if(!candles.length) throw new Error('Nenhum candle disponível para este ativo.');
+  marketSource=data.source||'Market data';
+  dayChange=Number(data.ticker?.change24h);
+  marketData=candles.map(k=>[k.time*1000,String(k.open),String(k.high),String(k.low),String(k.close)]);
+  series.setData(candles.map(k=>({time:k.time,open:+k.open,high:+k.high,low:+k.low,close:+k.close})));
+  updateMetrics(+candles.at(-1).close,marketData);
+  document.querySelector('#exchange').textContent=marketSource;
+  document.querySelector('#streamState').textContent=marketSource==='Binance'?'Dados carregados · Binance Vision':'Dados carregados · fallback '+marketSource;
   schedulePoll();
+  return data;
 }
 
 function schedulePoll(){
+  clearTimeout(pollTimer);
   pollTimer=setTimeout(async()=>{
     try{
-      const data=await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=2`,{cache:'no-store'}).then(r=>r.json());
-      const k=data.at(-1);
+      const data=await fetchMarketApi();
+      const candles=Array.isArray(data.candles)?data.candles:[];
+      const k=candles.at(-1);
       if(k){
-        const candle={time:k[0]/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4]};
+        marketSource=data.source||marketSource;
+        dayChange=Number(data.ticker?.change24h);
+        const candle={time:k.time,open:+k.open,high:+k.high,low:+k.low,close:+k.close};
         series.update(candle);
-        const idx=marketData.findIndex(x=>+x[0]===+k[0]);
-        if(idx>=0) marketData[idx]=k; else marketData.push(k);
-        updateMetrics(+k[4],marketData);
+        const idx=marketData.findIndex(x=>+x[0]===+k.time*1000);
+        const row=[k.time*1000,String(k.open),String(k.high),String(k.low),String(k.close)];
+        if(idx>=0) marketData[idx]=row; else marketData.push(row);
+        updateMetrics(+k.close,marketData);
+        document.querySelector('#exchange').textContent=marketSource;
+        document.querySelector('#streamState').textContent=marketSource==='Binance'?'Dados atualizados · Binance Vision':'Dados atualizados · fallback '+marketSource;
       }
-    }catch{}
-    schedulePoll();
+    }catch(error){
+      document.querySelector('#streamState').textContent='Dados temporariamente indisponíveis · a tentar novamente';
+    }
+    if(document.querySelector('#live.active')) schedulePoll();
   },5000);
 }
 
@@ -253,9 +267,9 @@ async function selectMarket(){
   document.querySelector('#intervalLabel').textContent=intervalNames[interval];
   document.querySelector('#assetSelect').value=symbol;
   closeSocket();
-  try{await loadMarket();connectSocket();}catch(e){
+  try{const data=await loadMarket(); if((data.source||'').toLowerCase().includes('binance')) connectSocket(); else { closeSocket(); document.querySelector('#connection').textContent='FALLBACK'; document.querySelector('#connection').classList.add('connected'); }}catch(e){
     document.querySelector('#connection').textContent='SEM DADOS';
-    document.querySelector('#streamState').textContent='Verifica a ligação à internet';
+    document.querySelector('#streamState').textContent='Fontes de mercado indisponíveis · a tentar novamente';
     schedulePoll();
   }
 }
