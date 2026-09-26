@@ -538,6 +538,10 @@ intelligencePanel.innerHTML=`
           <div><small>ORDERLINESS</small><b id="mechOrderliness">—</b></div>
           <div><small>REGIME STABILITY</small><b id="mechRegime">—</b></div>
           <div><small>STRUCTURAL PRESSURE</small><b id="mechPressure">—</b></div>
+          <div><small>TRADE FLOW</small><b id="mechTradeFlow">—</b></div>
+          <div><small>ORDER BOOK</small><b id="mechBook">—</b></div>
+          <div><small>SPREAD</small><b id="mechSpread">—</b></div>
+          <div><small>EXECUTION SIGNATURE</small><b id="mechExecution">—</b></div>
         </div>
         <div class="mechanics-note" id="mechanicsNote">A recolher evidência mecânica do mercado…</div>
       </section>
@@ -758,10 +762,14 @@ function renderMechanics(data){
   set('mechAbsorption',m.absorption);set('mechDisplacement',m.displacementCost);
   set('mechLiquidity',m.liquidityResistance);set('mechOrderliness',m.marketOrderliness);
   set('mechRegime',m.regimeStability);set('mechPressure',m.structuralPressure);
+  const signed=(id,v)=>{const el=document.querySelector('#'+id);if(el)el.textContent=v==null?'—':(v>0?'+':'')+v+'%';};
+  signed('mechTradeFlow',m.tradeFlow);signed('mechBook',m.orderBookImbalance);
+  const spread=document.querySelector('#mechSpread');if(spread)spread.textContent=m.spreadBps==null?'—':m.spreadBps+' bps';
+  set('mechExecution',m.executionSignature);
   const state=document.querySelector('#mechanicsState');
   if(state)state.textContent=String(data?.state||'LOW_INFORMATION').replaceAll('_',' ');
   const quality=document.querySelector('#mechanicsQuality');
-  if(quality)quality.textContent='OHLCV · '+Number(data?.dataQuality?.candles||0)+' candles';
+  if(quality)quality.textContent=(data?.dataQuality?.trades?'TRADES':'OHLCV')+' · '+Number(data?.dataQuality?.candles||0)+' candles'+(data?.dataQuality?.orderBook?' · BOOK':'');
   const note=document.querySelector('#mechanicsNote');
   const ev=data?.evidence||{};
   if(note){
@@ -770,6 +778,8 @@ function renderMechanics(data){
     else if(data?.state==='LIQUIDITY_CONFLICT') note.textContent='Existem zonas recorrentes de reação no histórico recente; liquidez real ainda não está disponível.';
     else if(data?.state==='REGIME_TRANSITION') note.textContent='O comportamento estatístico recente diverge da janela anterior. O regime está em transição.';
     else if(data?.state==='RANGE_ROTATION') note.textContent='O movimento apresenta baixa organização direcional e maior rotação entre estados.';
+    else if(data?.state==='MICRO_ABSORPTION') note.textContent='Fluxo agressor e deslocamento de preço sugerem absorção. A leitura usa os trades observados neste instante.';
+    else if(data?.state==='ORDER_BOOK_IMBALANCE') note.textContent='A profundidade imediata do livro está desequilibrada. Isto descreve liquidez disponível agora, não uma intenção garantida.';
     else note.textContent='A evidência disponível ainda não é suficiente para classificar um mecanismo dominante.';
   }
 }
