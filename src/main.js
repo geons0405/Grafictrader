@@ -19,30 +19,31 @@ app.innerHTML = `
         <span class="live-dot" id="connection">A LIGAR</span>
       </div>
 
-      <div class="hero-card live-card">
-        <div class="asset-bar">
-          <div class="asset-select-wrap">
-            <span class="mini-label">ATIVO</span>
-            <select id="assetSelect" aria-label="Escolher ativo">
-              <option value="BTCUSDT">BTC/USDT</option>
-              <option value="ETHUSDT">ETH/USDT</option>
-              <option value="BNBUSDT">BNB/USDT</option>
-              <option value="SOLUSDT">SOL/USDT</option>
-              <option value="XRPUSDT">XRP/USDT</option>
-              <option value="ADAUSDT">ADA/USDT</option>
-              <option value="DOGEUSDT">DOGE/USDT</option>
-            </select>
+      <div class="live-stage" id="liveStage">
+        <div class="hero-card live-card">
+          <div class="asset-bar">
+            <div class="asset-select-wrap">
+              <span class="mini-label">ATIVO</span>
+              <select id="assetSelect" aria-label="Escolher ativo">
+                <option value="BTCUSDT">BTC/USDT</option>
+                <option value="ETHUSDT">ETH/USDT</option>
+                <option value="BNBUSDT">BNB/USDT</option>
+                <option value="SOLUSDT">SOL/USDT</option>
+                <option value="XRPUSDT">XRP/USDT</option>
+                <option value="ADAUSDT">ADA/USDT</option>
+                <option value="DOGEUSDT">DOGE/USDT</option>
+              </select>
+            </div>
+            <div class="asset-price"><strong id="price">—</strong><span id="change">—</span></div>
           </div>
-          <div class="asset-price"><strong id="price">—</strong><span id="change">—</span></div>
+          <div class="market-meta"><span id="exchange">Binance</span><span>•</span><span id="intervalLabel">5 minutos</span><span>•</span><span id="streamState">A aguardar dados</span></div>
+          <div id="chart"></div>
+          <div class="tf">
+            <button data-interval="1m">1m</button><button class="active" data-interval="5m">5m</button><button data-interval="15m">15m</button><button data-interval="1h">1h</button><button data-interval="4h">4h</button>
+          </div>
         </div>
-        <div class="market-meta"><span id="exchange">Binance</span><span>•</span><span id="intervalLabel">5 minutos</span><span>•</span><span id="streamState">A aguardar dados</span></div>
-        <div id="chart"></div>
-        <div class="tf">
-          <button data-interval="1m">1m</button><button class="active" data-interval="5m">5m</button><button data-interval="15m">15m</button><button data-interval="1h">1h</button><button data-interval="4h">4h</button>
-        </div>
-      </div>
 
-      <article class="live-result" id="liveResult">
+        <article class="live-result" id="liveResult">
         <div class="analysis-head">
           <div class="result-title"><div class="insight-icon"><i data-lucide="sparkles" aria-hidden="true"></i></div><b>Leitura do mercado</b></div>
           <span>AO VIVO</span>
@@ -70,7 +71,8 @@ app.innerHTML = `
           </div>
           <div class="live-foot"><span>CONFIANÇA DA LEITURA <b id="liveConfidence">—</b></span></div>
         </div>
-      </article>
+        </article>
+      </div>
       <p class="note">Dados públicos da Binance · sem execução de ordens.</p>
     </section>
 
@@ -319,113 +321,96 @@ function renderPhotoResult(image,p){
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 
 let scrollFrame=null;
+const liveStage=document.querySelector('#liveStage');
+const liveCard=document.querySelector('.live-card');
+const SHRINK_RANGE=200;
+const MAX_CHART=340;
+const MIN_CHART=250;
+let livePhaseTwo=false;
+let stageStickyOrigin=0;
+
 function documentTop(el){
   let top=0,node=el;
   while(node){top+=node.offsetTop||0;node=node.offsetParent;}
   return top;
 }
+
 function captureStickyOrigins(){
   const topbar=document.querySelector('.topbar');
-  const stickyTop=(topbar?.offsetHeight||78);
+  const stickyTop=topbar?.offsetHeight||78;
   document.querySelectorAll('.hero-card').forEach(card=>{
     card.dataset.stickyOrigin=String(documentTop(card));
     card.style.setProperty('--sticky-top',stickyTop+'px');
   });
+  if(liveStage){
+    stageStickyOrigin=documentTop(liveStage);
+    liveStage.style.setProperty('--sticky-top',stickyTop+'px');
+  }
 }
+
 function resizeChartToContainer(){
   if(!chartEl?.clientWidth || !chartEl?.clientHeight)return;
   const width=Math.round(chartEl.clientWidth);
-  const height=Math.max(100,Math.round(chartEl.clientHeight));
-
-  // Redimensiona o chart pela API da Lightweight Charts, incluindo
-  // repaint forçado para reancorar todos os elementos internos (TV logo,
-  // escalas, canvas e overlays) durante o sticky shrink.
+  const height=Math.max(MIN_CHART,Math.round(chartEl.clientHeight));
   chart.resize(width,height,true);
   series.priceScale().applyOptions({autoScale:true});
-
-  // O CSS do #chart usa uma transição curta; este segundo passe garante
-  // que o tamanho final já aplicado pelo browser também chega ao chart.
-  requestAnimationFrame(()=>{
-    if(!chartEl?.clientWidth || !chartEl?.clientHeight)return;
-    const nextWidth=Math.round(chartEl.clientWidth);
-    const nextHeight=Math.max(100,Math.round(chartEl.clientHeight));
-    chart.resize(nextWidth,nextHeight,true);
-    series.priceScale().applyOptions({autoScale:true});
-  });
 }
 
-let lockedResultTop=null;
-let lastChartHeight=0;
+function setLivePhase(phaseTwo){
+  if(!liveStage)return;
+  livePhaseTwo=phaseTwo;
+  liveStage.classList.toggle('result-phase-2',phaseTwo);
+  const resultScroll=document.querySelector('#liveResultScroll');
+  resultScroll?.classList.toggle('is-inner-scroll',phaseTwo);
+  if(phaseTwo){
+    // A fase 2 fica presa dentro do viewport; o scroll passa para o conteúdo.
+    document.documentElement.classList.add('live-handoff');
+    document.body.classList.add('live-handoff');
+  }else{
+    document.documentElement.classList.remove('live-handoff');
+    document.body.classList.remove('live-handoff');
+    if(resultScroll)resultScroll.scrollTop=0;
+  }
+}
+
+function updateLiveLayout(){
+  if(!liveStage || !liveCard || !document.querySelector('#live.active'))return;
+  const topbar=document.querySelector('.topbar');
+  const stickyTop=topbar?.offsetHeight||78;
+  const start=Math.max(0,stageStickyOrigin-stickyTop);
+  const progress=Math.min(Math.max((window.scrollY-start)/SHRINK_RANGE,0),1);
+  const chartHeight=Math.round(MAX_CHART-(MAX_CHART-MIN_CHART)*progress);
+
+  // Só o gráfico muda de altura. O resultado nunca recebe top/translateY
+  // calculado por JS; o flexbox reposiciona-o automaticamente.
+  liveStage.style.setProperty('--sticky-progress',progress.toFixed(3));
+  chartEl.style.height=chartHeight+'px';
+
+  const phaseTwo=progress>=1;
+  if(phaseTwo!==livePhaseTwo)setLivePhase(phaseTwo);
+  resizeChartToContainer();
+}
 
 function updateStickyCards(){
   if(scrollFrame)return;
   scrollFrame=requestAnimationFrame(()=>{
-    const scroll=Math.max(0,window.scrollY);
-    const topbar=document.querySelector('.topbar');
-    const stickyTop=topbar?.offsetHeight||78;
-    const live=document.querySelector('#live');
-    const hero=live?.querySelector('.live-card');
-    const result=live?.querySelector('.live-result');
-
     document.querySelectorAll('.hero-card').forEach(card=>{
+      if(card===liveCard)return;
+      const topbar=document.querySelector('.topbar');
+      const stickyTop=topbar?.offsetHeight||78;
       const origin=Number(card.dataset.stickyOrigin||documentTop(card));
-      const startPoint=Math.max(0,origin-stickyTop);
-      const progress=Math.min(Math.max((scroll-startPoint)/180,0),1);
+      const start=Math.max(0,origin-stickyTop);
+      const progress=Math.min(Math.max((window.scrollY-start)/180,0),1);
       card.style.setProperty('--sticky-progress',progress.toFixed(3));
       card.classList.toggle('is-compact',progress>=.02);
     });
-
-    if(hero && result && live?.classList.contains('active')){
-      const GAP=16;
-      const MIN_CHART=250;
-      const chart=hero.querySelector('#chart');
-      const chartHeight=Math.round(chart?.getBoundingClientRect().height||0);
-      const currentChart=Math.max(MIN_CHART,chartHeight);
-      const heroRect=hero.getBoundingClientRect();
-
-      // Usa o fundo REAL do card como referência. Isto inclui asset-bar,
-      // market-meta, chart e timeframe, evitando qualquer cálculo manual
-      // que possa deixar um elemento interno de fora e criar sobreposição.
-      const phaseTwo=currentChart<=MIN_CHART+1;
-
-      if(phaseTwo){
-        if(lockedResultTop===null) lockedResultTop=Math.round(heroRect.bottom+GAP);
-      }else{
-        lockedResultTop=null;
-      }
-
-      const resultTop=lockedResultTop??Math.round(heroRect.bottom+GAP);
-      live.style.setProperty('--live-result-top',resultTop+'px');
-      live.classList.toggle('result-phase-2',phaseTwo);
-      result.classList.add('is-result-sticky');
-
-      const resultScroll=result.querySelector('#liveResultScroll');
-      if(resultScroll){
-        const available=Math.max(180,window.innerHeight-resultTop-116);
-        resultScroll.style.setProperty('--result-scroll-height',available+'px');
-        resultScroll.classList.toggle('is-inner-scroll',phaseTwo);
-      }
-
-      // A API da Lightweight Charts recebe a altura real do elemento.
-      // Só repetimos o resize quando a altura efetivamente mudou.
-      if(chartHeight!==lastChartHeight){
-        lastChartHeight=chartHeight;
-        resizeChartToContainer();
-      }
-    }else{
-      lockedResultTop=null;
-      lastChartHeight=0;
-      live?.classList.remove('result-phase-2');
-      result?.classList.remove('is-result-sticky');
-      result?.querySelector('#liveResultScroll')?.classList.remove('is-inner-scroll');
-    }
-
+    updateLiveLayout();
     scrollFrame=null;
   });
 }
+
 const chartResizeObserver=new ResizeObserver(entries=>{
-  const entry=entries[0];
-  if(!entry)return;
+  if(!entries[0])return;
   resizeChartToContainer();
 });
 chartResizeObserver.observe(chartEl);
