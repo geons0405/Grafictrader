@@ -31,7 +31,7 @@ main{overflow:visible;position:relative;isolation:isolate}
 }
 .live-card,.photo-card{max-height:none;overflow:hidden}
 .live-card{
-  --chart-height:calc(340px - (88px * var(--sticky-progress,0)));
+  --chart-height:calc(340px - (90px * var(--sticky-progress,0)));
   height:auto;
 }
 .live-card #chart{
