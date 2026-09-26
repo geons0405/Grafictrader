@@ -1,13 +1,14 @@
 import { createChart, CandlestickSeries } from 'lightweight-charts';
+import { createIcons, ArrowLeft, Settings, Radio, Sparkles, Plus, Camera } from 'lucide';
 import './styles.css';
 
 const app = document.querySelector('#app');
 app.innerHTML = `
 <div class="shell">
   <header class="topbar">
-    <button class="icon-btn" id="backBtn" aria-label="Voltar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+    <button class="icon-btn" id="backBtn" aria-label="Voltar"><i data-lucide="arrow-left" aria-hidden="true"></i></button>
     <div class="title-wrap"><h1 id="pageTitle">Live</h1><span id="pageSub">Mercado em tempo real</span></div>
-    <button class="icon-btn" id="settings" aria-label="Definições"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.8 1.8-.06-.06A1.7 1.7 0 0 0 16.06 19a1.7 1.7 0 0 0-1.06 1.56V21h-2.55v-.44A1.7 1.7 0 0 0 11.39 19a1.7 1.7 0 0 0-1.88.34l-.06.06-1.8-1.8.06-.06A1.7 1.7 0 0 0 8.05 15a1.7 1.7 0 0 0-1.56-1.06H6v-2.55h.49A1.7 1.7 0 0 0 8.05 10a1.7 1.7 0 0 0-.34-1.88l-.06-.06 1.8-1.8.06.06A1.7 1.7 0 0 0 11.39 6a1.7 1.7 0 0 0 1.06-1.56V4H15v.44A1.7 1.7 0 0 0 16.06 6a1.7 1.7 0 0 0 1.88-.34L18 5.6l1.8 1.8-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.56 1.06H21v2.55h-.49A1.7 1.7 0 0 0 19.4 15Z"/></svg></button>
+    <button class="icon-btn" id="settings" aria-label="Definições"><i data-lucide="settings" aria-hidden="true"></i></button>
   </header>
 
   <main>
@@ -48,7 +49,7 @@ app.innerHTML = `
       </div>
 
       <article class="insight">
-        <div class="insight-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6L12 3Z"/><path d="m19 15 .7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15Z"/></svg></div>
+        <div class="insight-icon"><i data-lucide="sparkles" aria-hidden="true"></i></div>
         <div><b>Grafictrader AI</b><p id="liveInsight">Escolhe um ativo e timeframe. O gráfico recebe novas cotações automaticamente enquanto a ligação estiver ativa.</p></div>
       </article>
       <p class="note">Dados públicos da Binance · sem execução de ordens.</p>
@@ -68,7 +69,7 @@ app.innerHTML = `
         </div>
         <div class="photo-controls">
           <button class="secondary-btn" id="startCam">Abrir câmera</button>
-          <button class="primary-btn" id="snap" disabled><span>●</span> Capturar</button>
+          <button class="primary-btn" id="snap" disabled><i data-lucide="camera" aria-hidden="true"></i> Capturar</button>
         </div>
       </div>
       <div id="analysis" class="analysis hidden"></div>
@@ -77,18 +78,18 @@ app.innerHTML = `
   </main>
 
   <nav class="bottom-nav" aria-label="Modo">
-    <button class="nav-btn" data-mode="foto"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><small>FOTO</small></button>
-    <button class="nav-btn active" data-mode="live"><span class="nav-icon live-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/></svg></span><small>LIVE</small></button>
+    <button class="nav-btn" data-mode="foto"><span class="nav-icon"><i data-lucide="plus" aria-hidden="true"></i></span><small>FOTO</small></button>
+    <button class="nav-btn active" data-mode="live"><span class="nav-icon live-icon"><i data-lucide="radio" aria-hidden="true"></i></span><small>LIVE</small></button>
   </nav>
 </div>`;
 
 const chartEl = document.querySelector('#chart');
 const chart = createChart(chartEl, {
-  layout:{background:{color:'#f7f8fa'},textColor:'#657080'},
-  grid:{vertLines:{color:'#e6e9ee'},horzLines:{color:'#e6e9ee'}},
-  rightPriceScale:{borderColor:'#dfe3e8'},
-  timeScale:{borderColor:'#dfe3e8',timeVisible:true},
-  crosshair:{mode:1},
+  layout:{background:{color:'#0b1118'},textColor:'#7f8c9b'},
+  grid:{vertLines:{color:'#18222d'},horzLines:{color:'#18222d'}},
+  rightPriceScale:{borderColor:'#25313e',textColor:'#8f9baa'},
+  timeScale:{borderColor:'#25313e',timeVisible:true},
+  crosshair:{mode:1,vertLine:{color:'#405061',width:1,labelBackgroundColor:'#1c2733'},horzLine:{color:'#405061',width:1,labelBackgroundColor:'#1c2733'}},
   width:chartEl.clientWidth,height:340
 });
 const series = chart.addSeries(CandlestickSeries,{
@@ -229,6 +230,15 @@ async function selectMarket(){
   }
 }
 
+createIcons({icons:{ArrowLeft,Settings,Radio,Sparkles,Plus,Camera}});
+
+document.querySelector('#settings').onclick=()=>{
+  const btn=document.querySelector('#settings');
+  const active=btn.classList.toggle('active');
+  btn.setAttribute('aria-pressed',String(active));
+  document.querySelector('#liveInsight').textContent=active?'Definições rápidas: os dados são apenas leitura e nenhuma ordem é executada.':'Escolhe um ativo e timeframe. O gráfico recebe novas cotações automaticamente enquanto a ligação estiver ativa.';
+};
+
 document.querySelector('#assetSelect').onchange=e=>{symbol=e.target.value;selectMarket();};
 document.querySelectorAll('.tf button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tf button').forEach(x=>x.classList.remove('active'));
@@ -246,7 +256,8 @@ document.querySelector('#startCam').onclick=async()=>{
     document.querySelector('#video').srcObject=stream;
     document.querySelector('#snap').disabled=false;
     document.querySelector('#cameraStatus').textContent='CÂMERA ATIVA';
-  }catch(e){alert('Permite o acesso à câmera para usar FOTO.');}
+    document.querySelector('.camera').classList.add('active');
+  }catch(e){document.querySelector('.camera-status').textContent='CÂMERA BLOQUEADA';alert('Permite o acesso à câmera para usar FOTO.');}
 };
 
 document.querySelector('#snap').onclick=async()=>{
