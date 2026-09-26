@@ -50,7 +50,16 @@ app.innerHTML = `
 
       <article class="insight">
         <div class="insight-icon"><i data-lucide="sparkles" aria-hidden="true"></i></div>
-        <div><b>Grafictrader AI</b><p id="liveInsight">Escolhe um ativo e timeframe. O gráfico recebe novas cotações automaticamente enquanto a ligação estiver ativa.</p></div>
+        <div><b>Grafictrader AI · LIVE</b><p id="liveInsight">Escolhe um ativo e timeframe. O gráfico recebe novas cotações automaticamente enquanto a ligação estiver ativa.</p></div>
+      </article>
+      <article class="live-result" id="liveResult">
+        <div class="analysis-head"><b>Leitura do mercado</b><span>AO VIVO</span></div>
+        <div class="live-summary" id="liveSummary">A aguardar dados suficientes para gerar a leitura.</div>
+        <div class="scenario-grid">
+          <div><b>CENÁRIO A</b><span id="liveScenarioA">Continuação da estrutura atual após confirmação.</span></div>
+          <div><b>CENÁRIO B</b><span id="liveScenarioB">Reversão se a estrutura perder o suporte relevante.</span></div>
+        </div>
+        <div class="live-foot"><span>RSI <b id="liveRsiState">—</b></span><span>ESTRUTURA <b id="liveStructureState">—</b></span><span>LEITURA <b id="liveConfidence">—</b></span></div>
       </article>
       <p class="note">Dados públicos da Binance · sem execução de ordens.</p>
     </section>
@@ -180,9 +189,16 @@ function updateMetrics(price,data){
   rsiEl.classList.toggle('negative',rsi<50);
   rsiEl.classList.toggle('oversold',rsi<30);
   rsiEl.classList.toggle('overbought',rsi>70);
-  document.querySelector('#liveInsight').textContent=up
-    ? 'Estrutura recente positiva. A leitura depende das próximas velas e do contexto do timeframe.'
-    : 'Estrutura recente negativa. Aguarda confirmação antes de interpretar uma reversão.';
+  const rsiState=rsi>=70?'Sobrecompra':rsi<=30?'Sobrevenda':rsi>=50?'Zona positiva':'Zona negativa';
+  const structureState=up?'Higher highs':'Lower highs';
+  const confidence=closes.length>=30?'Média':'Baixa';
+  document.querySelector('#liveInsight').textContent=up?'A estrutura recente favorece alta; confirma com as próximas velas e respeita o contexto do timeframe.':'A estrutura recente favorece baixa; confirma com as próximas velas antes de interpretar uma reversão.';
+  document.querySelector('#liveSummary').textContent=up?'Preço com impulso recente de alta. A leitura fica mais frágil se o RSI estiver esticado ou se a estrutura perder o último suporte.':'Preço com pressão recente de baixa. A leitura fica mais frágil se o preço recuperar a última resistência e formar máximos ascendentes.';
+  document.querySelector('#liveScenarioA').textContent=up?'Continuação da alta se o preço mantiver a estrutura e superar a resistência local.':'Continuação da baixa se o preço mantiver máximos/mínimos descendentes e perder o suporte local.';
+  document.querySelector('#liveScenarioB').textContent=up?'Correção/reversão se perder o suporte local ou a estrutura mudar para máximos descendentes.':'Recuperação se recuperar a resistência local e a estrutura passar para máximos ascendentes.';
+  document.querySelector('#liveRsiState').textContent=rsiState+' · '+rsi.toFixed(1);
+  document.querySelector('#liveStructureState').textContent=structureState;
+  document.querySelector('#liveConfidence').textContent=confidence;
 }
 
 function closeSocket(){
@@ -264,26 +280,33 @@ document.querySelector('#startCam').onclick=async()=>{
 };
 
 document.querySelector('#snap').onclick=async()=>{
-  const video=document.querySelector('#video');
-  const canvas=document.createElement('canvas');
+  const video=document.querySelector('#video'),canvas=document.createElement('canvas');
   canvas.width=video.videoWidth||1280;canvas.height=video.videoHeight||720;
   canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
-  const image=canvas.toDataURL('image/jpeg',0.82);
-  const a=document.querySelector('#analysis');
-  a.classList.remove('hidden');
-  a.innerHTML='<div class="analysis-head"><b>Grafictrader AI</b><span>PROCESSANDO</span></div><p class="analysis-empty">A analisar tendência, estrutura, níveis, indicadores e cenários visíveis no gráfico…</p>';
+  const image=canvas.toDataURL('image/jpeg',0.82),a=document.querySelector('#analysis'),photoCard=document.querySelector('.photo-card');
+  a.classList.remove('hidden');photoCard.classList.add('captured');
+  a.innerHTML='<div class="analysis-head"><b>Grafictrader AI</b><span>PROCESSANDO</span></div><div class="analysis-loading"><div class="loading-dot"></div><b>A ler o gráfico…</b><span>Tendência · estrutura · níveis · indicadores · cenários</span></div>';
   try{
-    const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image})});
-    const data=await r.json();
-    if(!r.ok) throw new Error(data.error||'Falha na análise');
-    const raw=String(data.analysis||'');
-    const sections=[
-      ['Resumo',raw],
-      ['Leitura',raw]
-    ];
-    a.innerHTML='<div class="analysis-head"><b>Grafictrader AI</b><span>ANÁLISE CONCLUÍDA</span></div><div class="analysis-result">'+sections.map(([title,text])=>'<div class="analysis-section"><b>'+title+'</b><span>'+escapeHtml(text)+'</span></div>').join('')+'</div><div class="tag">Análise multimodal ativa</div>';
-  }catch(e){a.innerHTML='<div class="analysis-head"><b>Grafictrader AI</b><span>ERRO</span></div><p class="analysis-empty">'+escapeHtml(e.message)+'</p><div class="tag">Verifica a configuração do servidor</div>';}
+    const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image})}),data=await r.json();
+    if(!r.ok)throw new Error(data.error||'Falha na análise');
+    a.innerHTML=renderPhotoResult(image,parseAnalysis(String(data.analysis||'')));
+    document.querySelector('#retryPhoto').onclick=()=>{a.classList.add('hidden');photoCard.classList.remove('captured');document.querySelector('#cameraStatus').textContent='CÂMERA ATIVA';};
+  }catch(e){
+    a.innerHTML='<div class="analysis-head"><b>Grafictrader AI</b><span>ERRO</span></div><p class="analysis-empty">'+escapeHtml(e.message)+'</p><button class="secondary-btn retry-btn" id="retryPhoto">Tentar novamente</button><div class="tag">Verifica a configuração do servidor</div>';
+    document.querySelector('#retryPhoto').onclick=()=>{a.classList.add('hidden');photoCard.classList.remove('captured');};
+  }
 };
+function parseAnalysis(raw){
+  const labels=['RESUMO','TENDÊNCIA','ESTRUTURA','NÍVEIS','INDICADORES','CENÁRIO A','CENÁRIO B','RISCO','CONFIANÇA VISUAL'],result={raw},lines=raw.split(/\r?\n/);let current=null;
+  labels.forEach(x=>result[x]='Não identificado na imagem.');
+  lines.forEach(line=>{const match=line.match(/^\s*([^:]+):\s*(.*)$/);if(!match)return;const label=match[1].trim().toUpperCase();if(labels.includes(label)){current=label;result[label]=match[2].trim()||'Não identificado na imagem.';}else if(current){result[current]+=' '+line.trim();}});
+  return result;
+}
+function renderPhotoResult(image,p){
+  const cards=[['TENDÊNCIA',p['TENDÊNCIA']],['ESTRUTURA',p['ESTRUTURA']],['NÍVEIS',p['NÍVEIS']],['INDICADORES',p['INDICADORES']],['CENÁRIO A',p['CENÁRIO A']],['CENÁRIO B',p['CENÁRIO B']],['RISCO',p['RISCO']],['CONFIANÇA VISUAL',p['CONFIANÇA VISUAL']]];
+  return '<div class="analysis-head"><b>Grafictrader AI</b><span>ANÁLISE CONCLUÍDA</span></div><div class="captured-preview"><img src="'+image+'" alt="Gráfico capturado"><div><b>Imagem analisada</b><span>Leitura multimodal da captura</span></div></div><div class="analysis-summary"><small>RESUMO</small><strong>'+escapeHtml(p.RESUMO)+'</strong></div><div class="analysis-result">'+cards.map(([title,value])=>'<div class="analysis-section"><b>'+title+'</b><span>'+escapeHtml(value)+'</span></div>').join('')+'</div><button class="secondary-btn retry-btn" id="retryPhoto">Nova análise</button><div class="tag">Análise multimodal ativa · sem garantia de resultado</div>';
+}
+
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 
 function setMode(mode){
