@@ -102,7 +102,7 @@ app.innerHTML = `
 
 const chartEl = document.querySelector('#chart');
 const chart = createChart(chartEl, {
-  layout:{background:{color:'#0b1118'},textColor:'#7f8c9b'},
+  layout:{background:{color:'#0b1118'},textColor:'#7f8c9b',attributionLogo:true},
   grid:{vertLines:{color:'#18222d'},horzLines:{color:'#18222d'}},
   rightPriceScale:{borderColor:'#25313e',textColor:'#8f9baa'},
   timeScale:{borderColor:'#25313e',timeVisible:true},
@@ -332,14 +332,24 @@ function captureStickyOrigins(){
 }
 function resizeChartToContainer(){
   if(!chartEl?.clientWidth || !chartEl?.clientHeight)return;
-  const width=chartEl.clientWidth;
+  const width=Math.round(chartEl.clientWidth);
   const height=Math.max(100,Math.round(chartEl.clientHeight));
 
-  // O canvas do Lightweight Charts tem de receber a nova altura real.
-  // Isto força também o price scale direito a recalcular o autoScale
-  // para que as velas ocupem o novo espaço em vez de ficarem comprimidas.
-  chart.resize(width,height);
+  // Redimensiona o chart pela API da Lightweight Charts, incluindo
+  // repaint forçado para reancorar todos os elementos internos (TV logo,
+  // escalas, canvas e overlays) durante o sticky shrink.
+  chart.resize(width,height,true);
   series.priceScale().applyOptions({autoScale:true});
+
+  // O CSS do #chart usa uma transição curta; este segundo passe garante
+  // que o tamanho final já aplicado pelo browser também chega ao chart.
+  requestAnimationFrame(()=>{
+    if(!chartEl?.clientWidth || !chartEl?.clientHeight)return;
+    const nextWidth=Math.round(chartEl.clientWidth);
+    const nextHeight=Math.max(100,Math.round(chartEl.clientHeight));
+    chart.resize(nextWidth,nextHeight,true);
+    series.priceScale().applyOptions({autoScale:true});
+  });
 }
 
 function updateStickyCards(){
@@ -360,7 +370,11 @@ function updateStickyCards(){
   });
 }
 
-const chartResizeObserver=new ResizeObserver(()=>resizeChartToContainer());
+const chartResizeObserver=new ResizeObserver(entries=>{
+  const entry=entries[0];
+  if(!entry)return;
+  resizeChartToContainer();
+});
 chartResizeObserver.observe(chartEl);
 window.addEventListener('scroll',updateStickyCards,{passive:true});
 window.addEventListener('load',()=>{captureStickyOrigins();updateStickyCards();});
