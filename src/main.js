@@ -5,15 +5,15 @@ const app = document.querySelector('#app');
 app.innerHTML = `
 <div class="shell">
   <header class="topbar">
-    <button class="icon-btn" id="backBtn" aria-label="Voltar">‹</button>
+    <button class="icon-btn" id="backBtn" aria-label="Voltar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
     <div class="title-wrap"><h1 id="pageTitle">Live</h1><span id="pageSub">Mercado em tempo real</span></div>
-    <button class="icon-btn" id="settings" aria-label="Definições">⌾</button>
+    <button class="icon-btn" id="settings" aria-label="Definições"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.8 1.8-.06-.06A1.7 1.7 0 0 0 16.06 19a1.7 1.7 0 0 0-1.06 1.56V21h-2.55v-.44A1.7 1.7 0 0 0 11.39 19a1.7 1.7 0 0 0-1.88.34l-.06.06-1.8-1.8.06-.06A1.7 1.7 0 0 0 8.05 15a1.7 1.7 0 0 0-1.56-1.06H6v-2.55h.49A1.7 1.7 0 0 0 8.05 10a1.7 1.7 0 0 0-.34-1.88l-.06-.06 1.8-1.8.06.06A1.7 1.7 0 0 0 11.39 6a1.7 1.7 0 0 0 1.06-1.56V4H15v.44A1.7 1.7 0 0 0 16.06 6a1.7 1.7 0 0 0 1.88-.34L18 5.6l1.8 1.8-.06.06A1.7 1.7 0 0 0 19.4 10a1.7 1.7 0 0 0 1.56 1.06H21v2.55h-.49A1.7 1.7 0 0 0 19.4 15Z"/></svg></button>
   </header>
 
   <main>
     <section id="live" class="screen active">
       <div class="feed-head">
-        <div class="avatar">G</div>
+        <div class="avatar" aria-label="Grafictrader">G</div>
         <div><b>Grafictrader AI</b><span>dados de mercado em tempo real</span></div>
         <span class="live-dot" id="connection">A LIGAR</span>
       </div>
@@ -42,13 +42,13 @@ app.innerHTML = `
       </div>
 
       <div class="reaction-row">
-        <span>◉ <b id="trend">A analisar…</b></span>
-        <span>RSI <b id="rsi">—</b></span>
-        <span>ESTRUTURA <b id="structure">—</b></span>
+        <span class="metric trend-metric"><span class="metric-dot"></span><b id="trend">A analisar…</b></span>
+        <span class="metric">RSI <b id="rsi">—</b></span>
+        <span class="metric">ESTRUTURA <b id="structure">—</b></span>
       </div>
 
       <article class="insight">
-        <div class="insight-icon">✦</div>
+        <div class="insight-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6L12 3Z"/><path d="m19 15 .7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15Z"/></svg></div>
         <div><b>Grafictrader AI</b><p id="liveInsight">Escolhe um ativo e timeframe. O gráfico recebe novas cotações automaticamente enquanto a ligação estiver ativa.</p></div>
       </article>
       <p class="note">Dados públicos da Binance · sem execução de ordens.</p>
@@ -77,8 +77,8 @@ app.innerHTML = `
   </main>
 
   <nav class="bottom-nav" aria-label="Modo">
-    <button class="nav-btn" data-mode="foto"><span class="nav-icon">＋</span><small>FOTO</small></button>
-    <button class="nav-btn active" data-mode="live"><span class="nav-icon live-icon">◉</span><small>LIVE</small></button>
+    <button class="nav-btn" data-mode="foto"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span><small>FOTO</small></button>
+    <button class="nav-btn active" data-mode="live"><span class="nav-icon live-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/></svg></span><small>LIVE</small></button>
   </nav>
 </div>`;
 
@@ -92,8 +92,8 @@ const chart = createChart(chartEl, {
   width:chartEl.clientWidth,height:340
 });
 const series = chart.addSeries(CandlestickSeries,{
-  upColor:'#20252d',downColor:'#aeb6c1',borderVisible:false,
-  wickUpColor:'#20252d',wickDownColor:'#aeb6c1'
+  upColor:'#16a34a',downColor:'#ef4444',borderUpColor:'#16a34a',borderDownColor:'#ef4444',
+  wickUpColor:'#16a34a',wickDownColor:'#ef4444'
 });
 
 let symbol='BTCUSDT';
@@ -108,14 +108,15 @@ const intervalNames = { '1m':'1 minuto','5m':'5 minutos','15m':'15 minutos','1h'
 
 async function loadMarket(){
   clearTimeout(pollTimer);
+  marketData=[];
+  series.setData([]);
   const data=await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=180`,{cache:'no-store'}).then(r=>{
     if(!r.ok) throw new Error('Falha ao obter dados');
     return r.json();
   });
   marketData=data;
   series.setData(data.map(k=>({time:k[0]/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4]})));
-  series.setMarkers([]);
-  updateMetrics(+data.at(-1)[4],data);
+    updateMetrics(+data.at(-1)[4],data);
   document.querySelector('#streamState').textContent='Dados carregados';
   schedulePoll();
 }
@@ -142,17 +143,31 @@ function updateMetrics(price,data){
   const closes=data.map(x=>+x[4]).slice(-60);
   const first=closes[0] ?? price;
   const change=first?((price-first)/first)*100:0;
-  document.querySelector('#change').textContent=(change>=0?'+':'')+change.toFixed(2)+'%';
+  const changeEl=document.querySelector('#change');
+  changeEl.textContent=(change>=0?'+':'')+change.toFixed(2)+'%';
+  changeEl.classList.toggle('positive',change>=0);
+  changeEl.classList.toggle('negative',change<0);
   const delta=closes.length>20?closes.at(-1)-closes.at(-20):0;
   const up=delta>=0;
-  document.querySelector('#trend').textContent=up?'Alta':'Baixa';
-  document.querySelector('#structure').textContent=up?'Higher highs':'Lower highs';
+  const trendEl=document.querySelector('#trend');
+  const structureEl=document.querySelector('#structure');
+  trendEl.textContent=up?'Alta':'Baixa';
+  trendEl.classList.toggle('positive',up);
+  trendEl.classList.toggle('negative',!up);
+  structureEl.textContent=up?'Higher highs':'Lower highs';
+  structureEl.classList.toggle('positive',up);
+  structureEl.classList.toggle('negative',!up);
   const gains=[],losses=[];
   for(let i=1;i<closes.length;i++){const d=closes[i]-closes[i-1];gains.push(Math.max(d,0));losses.push(Math.max(-d,0));}
   const ag=gains.slice(-14).reduce((a,b)=>a+b,0)/Math.max(gains.slice(-14).length,1);
   const al=losses.slice(-14).reduce((a,b)=>a+b,0)/Math.max(losses.slice(-14).length,1);
   const rsi=al===0?100:100-(100/(1+ag/al));
-  document.querySelector('#rsi').textContent=rsi.toFixed(1);
+  const rsiEl=document.querySelector('#rsi');
+  rsiEl.textContent=rsi.toFixed(1);
+  rsiEl.classList.toggle('positive',rsi>=50 && rsi<70);
+  rsiEl.classList.toggle('negative',rsi<50);
+  rsiEl.classList.toggle('oversold',rsi<30);
+  rsiEl.classList.toggle('overbought',rsi>70);
   document.querySelector('#liveInsight').textContent=up
     ? 'Estrutura recente positiva. A leitura depende das próximas velas e do contexto do timeframe.'
     : 'Estrutura recente negativa. Aguarda confirmação antes de interpretar uma reversão.';
