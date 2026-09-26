@@ -357,3 +357,38 @@ main{overflow:visible;position:relative;isolation:isolate}
 .live-card .asset-price strong{
   white-space:nowrap;
 }
+
+
+/* Final LIVE cleanup: keep the analysis sections separated from the sticky chart. */
+.live-result{
+  margin-top:28px;
+  overflow:visible;
+}
+.live-result .live-ai{
+  padding-top:4px;
+  padding-bottom:16px;
+  margin-top:2px;
+}
+.live-result .live-ai-label{
+  margin-bottom:8px;
+  line-height:1.2;
+}
+.live-result .live-ai p{
+  margin:0;
+}
+.live-result .live-summary{
+  margin-top:16px;
+  padding-top:16px;
+  border-top:1px solid rgba(255,255,255,.10);
+}
+
+/* Keep the Lightweight Charts attribution anchored to the chart itself. */
+.live-card #chart #tv-attr-logo{
+  position:absolute !important;
+  left:10px !important;
+  bottom:10px !important;
+  z-index:3 !important;
+  width:35px !important;
+  height:19px !important;
+  margin:0 !important;
+}
