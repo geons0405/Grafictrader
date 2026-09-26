@@ -271,13 +271,18 @@ document.querySelector('#snap').onclick=async()=>{
   const image=canvas.toDataURL('image/jpeg',0.82);
   const a=document.querySelector('#analysis');
   a.classList.remove('hidden');
-  a.innerHTML='<h3>Análise da imagem</h3><p>A enviar o gráfico para a IA…</p>';
+  a.innerHTML='<div class="analysis-head"><b>Grafictrader AI</b><span>PROCESSANDO</span></div><p class="analysis-empty">A analisar tendência, estrutura, níveis, indicadores e cenários visíveis no gráfico…</p>';
   try{
     const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image})});
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Falha na análise');
-    a.innerHTML='<div class="analysis-head"><b>Grafictrader AI</b><span>ANÁLISE</span></div><pre>'+escapeHtml(data.analysis)+'</pre><div class="tag">Análise multimodal ativa</div>';
-  }catch(e){a.innerHTML='<h3>Análise da imagem</h3><p>'+escapeHtml(e.message)+'</p><div class="tag">Configuração do servidor necessária</div>';}
+    const raw=String(data.analysis||'');
+    const sections=[
+      ['Resumo',raw],
+      ['Leitura',raw]
+    ];
+    a.innerHTML='<div class="analysis-head"><b>Grafictrader AI</b><span>ANÁLISE CONCLUÍDA</span></div><div class="analysis-result">'+sections.map(([title,text])=>'<div class="analysis-section"><b>'+title+'</b><span>'+escapeHtml(text)+'</span></div>').join('')+'</div><div class="tag">Análise multimodal ativa</div>';
+  }catch(e){a.innerHTML='<div class="analysis-head"><b>Grafictrader AI</b><span>ERRO</span></div><p class="analysis-empty">'+escapeHtml(e.message)+'</p><div class="tag">Verifica a configuração do servidor</div>';}
 };
 function escapeHtml(value){return String(value).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 
