@@ -354,6 +354,9 @@ function resizeChartToContainer(){
   });
 }
 
+let lockedResultTop=null;
+let lastChartHeight=0;
+
 function updateStickyCards(){
   if(scrollFrame)return;
   scrollFrame=requestAnimationFrame(()=>{
@@ -376,30 +379,45 @@ function updateStickyCards(){
       const GAP=16;
       const MIN_CHART=250;
       const chart=hero.querySelector('#chart');
-      const assetBar=hero.querySelector('.asset-bar');
-      const tf=hero.querySelector('.tf');
-      const currentChart=Math.max(MIN_CHART,Math.round(chart?.getBoundingClientRect().height||MIN_CHART));
-      const heroHeader=Math.round((assetBar?.getBoundingClientRect().height||0));
-      const tfHeight=Math.round((tf?.getBoundingClientRect().height||0));
-      const heroHeight=Math.round(hero.getBoundingClientRect().height);
-      const resultTop=Math.round(hero.getBoundingClientRect().top+heroHeader+currentChart+tfHeight+GAP);
+      const chartHeight=Math.round(chart?.getBoundingClientRect().height||0);
+      const currentChart=Math.max(MIN_CHART,chartHeight);
+      const heroRect=hero.getBoundingClientRect();
 
-      // Fase 1: o resultado acompanha o fundo REAL do hero + gap fixo.
-      // Fase 2: quando o chart chega ao mínimo, congelamos esta posição.
-      const locked=currentChart<=MIN_CHART+1;
+      // Usa o fundo REAL do card como referência. Isto inclui asset-bar,
+      // market-meta, chart e timeframe, evitando qualquer cálculo manual
+      // que possa deixar um elemento interno de fora e criar sobreposição.
+      const phaseTwo=currentChart<=MIN_CHART+1;
+
+      if(phaseTwo){
+        if(lockedResultTop===null) lockedResultTop=Math.round(heroRect.bottom+GAP);
+      }else{
+        lockedResultTop=null;
+      }
+
+      const resultTop=lockedResultTop??Math.round(heroRect.bottom+GAP);
       live.style.setProperty('--live-result-top',resultTop+'px');
-      live.classList.toggle('result-phase-2',locked);
-      result.classList.toggle('is-result-sticky',true);
+      live.classList.toggle('result-phase-2',phaseTwo);
+      result.classList.add('is-result-sticky');
 
       const resultScroll=result.querySelector('#liveResultScroll');
       if(resultScroll){
         const available=Math.max(180,window.innerHeight-resultTop-116);
         resultScroll.style.setProperty('--result-scroll-height',available+'px');
-        resultScroll.classList.toggle('is-inner-scroll',locked);
+        resultScroll.classList.toggle('is-inner-scroll',phaseTwo);
       }
 
-      // Recalcula o chart pela API depois de a altura real do sticky hero mudar.
-      resizeChartToContainer();
+      // A API da Lightweight Charts recebe a altura real do elemento.
+      // Só repetimos o resize quando a altura efetivamente mudou.
+      if(chartHeight!==lastChartHeight){
+        lastChartHeight=chartHeight;
+        resizeChartToContainer();
+      }
+    }else{
+      lockedResultTop=null;
+      lastChartHeight=0;
+      live?.classList.remove('result-phase-2');
+      result?.classList.remove('is-result-sticky');
+      result?.querySelector('#liveResultScroll')?.classList.remove('is-inner-scroll');
     }
 
     scrollFrame=null;
