@@ -99,6 +99,7 @@ const series = chart.addSeries(CandlestickSeries,{
 let symbol='BTCUSDT';
 let interval='5m';
 let marketData=[];
+let dayChange=null;
 let ws=null;
 let reconnectTimer=null;
 let pollTimer=null;
@@ -110,10 +111,17 @@ async function loadMarket(){
   clearTimeout(pollTimer);
   marketData=[];
   series.setData([]);
-  const data=await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=180`,{cache:'no-store'}).then(r=>{
-    if(!r.ok) throw new Error('Falha ao obter dados');
-    return r.json();
-  });
+  const [data,ticker]=await Promise.all([
+    fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=180`,{cache:'no-store'}).then(r=>{
+      if(!r.ok) throw new Error('Falha ao obter dados');
+      return r.json();
+    }),
+    fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbol}`,{cache:'no-store'}).then(r=>{
+      if(!r.ok) throw new Error('Falha ao obter ticker');
+      return r.json();
+    })
+  ]);
+  dayChange=Number(ticker.priceChangePercent);
   marketData=data;
   series.setData(data.map(k=>({time:k[0]/1000,open:+k[1],high:+k[2],low:+k[3],close:+k[4]})));
     updateMetrics(+data.at(-1)[4],data);
@@ -142,7 +150,7 @@ function updateMetrics(price,data){
   document.querySelector('#price').textContent=fmtPrice(price);
   const closes=data.map(x=>+x[4]).slice(-60);
   const first=closes[0] ?? price;
-  const change=first?((price-first)/first)*100:0;
+  const change=Number.isFinite(dayChange)?dayChange:(first?((price-first)/first)*100:0);
   const changeEl=document.querySelector('#change');
   changeEl.textContent=(change>=0?'+':'')+change.toFixed(2)+'%';
   changeEl.classList.toggle('positive',change>=0);
