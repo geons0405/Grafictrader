@@ -73,7 +73,7 @@ app.innerHTML = `
         </div>
         </article>
       </div>
-      <p class="note">Dados públicos da Binance · sem execução de ordens.</p>
+      <p class="note">Dados públicos de mercado · Binance Vision com fallback automático · sem execução de ordens.</p>
     </section>
 
     <section id="foto" class="screen">
@@ -267,7 +267,13 @@ async function selectMarket(){
   document.querySelector('#intervalLabel').textContent=intervalNames[interval];
   document.querySelector('#assetSelect').value=symbol;
   closeSocket();
-  try{const data=await loadMarket(); if((data.source||'').toLowerCase().includes('binance')) connectSocket(); else { closeSocket(); document.querySelector('#connection').textContent='FALLBACK'; document.querySelector('#connection').classList.add('connected'); }}catch(e){
+  try{const data=await loadMarket();
+    // O gráfico usa o endpoint server-side resiliente; evita depender do WebSocket
+    // regional da Binance. A atualização por polling continua mesmo em fallback.
+    closeSocket();
+    document.querySelector('#connection').textContent=(data.source||'').toLowerCase().includes('binance')?'LIVE':'FALLBACK';
+    document.querySelector('#connection').classList.add('connected');
+  }catch(e){
     document.querySelector('#connection').textContent='SEM DADOS';
     document.querySelector('#streamState').textContent='Fontes de mercado indisponíveis · a tentar novamente';
     schedulePoll();
