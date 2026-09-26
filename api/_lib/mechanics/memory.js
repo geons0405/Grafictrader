@@ -2,6 +2,7 @@ import { analyzeMarketMechanics } from './index.js';
 
 const WINDOW = 20;
 const MAX_WINDOWS = 6;
+const PATTERN_LENGTH = 3;
 
 function safeSlice(candles, end) {
   return candles.slice(Math.max(0, end - WINDOW), end);
@@ -34,6 +35,39 @@ function distance(a, b) {
   return count ? sum / count : 0;
 }
 
+function stateSequence(items) {
+  return items.map(item => item.state).filter(Boolean);
+}
+
+function findRecurringPattern(sequence) {
+  if (sequence.length < PATTERN_LENGTH) return null;
+  const current = sequence.slice(-PATTERN_LENGTH);
+  const matches = [];
+  for (let i = 0; i <= sequence.length - PATTERN_LENGTH * 2; i++) {
+    const candidate = sequence.slice(i, i + PATTERN_LENGTH);
+    if (candidate.every((state, j) => state === current[j])) {
+      matches.push({
+        startStep: i + 1,
+        endStep: i + PATTERN_LENGTH,
+        sequence: candidate
+      });
+    }
+  }
+  return matches.length
+    ? { sequence: current, occurrences: matches.length, matches }
+    : null;
+}
+
+function buildTransitions(sequence) {
+  const transitions = [];
+  for (let i = 1; i < sequence.length; i++) {
+    if (sequence[i] !== sequence[i - 1]) {
+      transitions.push({ from: sequence[i - 1], to: sequence[i], step: i + 1 });
+    }
+  }
+  return transitions;
+}
+
 export function buildMechanicsMemory(candles) {
   if (!Array.isArray(candles) || candles.length < WINDOW) {
     return {
@@ -44,7 +78,9 @@ export function buildMechanicsMemory(candles) {
       previousState: null,
       transition: null,
       durationBars: 0,
-      changeScore: null
+      changeScore: null,
+      pattern: null,
+      transitions: []
     };
   }
 
@@ -85,6 +121,9 @@ export function buildMechanicsMemory(candles) {
     : null;
 
   const changeScore = previous ? Math.round(distance(current.metrics, previous.metrics) * 100) : 0;
+  const sequence = stateSequence(recent);
+  const pattern = findRecurringPattern(sequence);
+  const transitions = buildTransitions(sequence);
 
   return {
     available: true,
@@ -94,6 +133,8 @@ export function buildMechanicsMemory(candles) {
     transition,
     durationBars,
     changeScore,
+    pattern,
+    transitions,
     timeline: recent.map((item, i) => ({
       step: i + 1,
       endTime: item.endTime,
