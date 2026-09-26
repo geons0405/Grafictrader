@@ -3,11 +3,76 @@
 .live-result{margin:0 0 10px;padding:15px;background:linear-gradient(145deg,#1d2834,#17212c);border:1px solid var(--line-strong);border-radius:19px;box-shadow:0 12px 30px rgba(0,0,0,.25)}.live-summary{color:#c4cdd7;font-size:11px;line-height:1.55;background:#202b38;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:11px;margin-bottom:8px}.scenario-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.scenario-grid>div{background:#202b38;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px}.scenario-grid b{display:block;font-size:9px;color:#dfe6ed;margin-bottom:5px}.scenario-grid span{display:block;color:#9eabb9;font-size:10px;line-height:1.45}.live-foot{display:flex;gap:6px;margin-top:8px}.live-foot span{flex:1;background:#151d27;border:1px solid var(--line);border-radius:9px;padding:7px 6px;color:#778596;font-size:8px;text-align:center}.live-foot b{display:block;color:#e6ebf0;margin-top:3px;font-size:9px}
 .photo-card.captured{display:none}.analysis-loading{display:grid;gap:6px;padding:20px 8px 14px;color:#c9d2dc}.analysis-loading span{color:var(--muted);font-size:10px}.loading-dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 18px rgba(34,197,94,.55);animation:pulse 1.1s ease-in-out infinite}.captured-preview{display:flex;gap:10px;align-items:center;background:#111922;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:7px;margin-bottom:10px}.captured-preview img{width:74px;height:58px;object-fit:cover;border-radius:9px}.captured-preview b{display:block;font-size:10px}.captured-preview span{display:block;color:var(--muted);font-size:9px;margin-top:3px}.analysis-summary{background:#243140;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;margin-bottom:9px}.analysis-summary small{display:block;color:#8f9cac;font-size:8px;font-weight:800;letter-spacing:.8px;margin-bottom:5px}.analysis-summary strong{display:block;color:#eef3f7;font-size:12px;line-height:1.5}.retry-btn{width:100%;margin-top:10px}.analysis-section{min-height:54px}@keyframes pulse{0%,100%{opacity:.45;transform:scale(.85)}50%{opacity:1;transform:scale(1.08)}}
 
-/* Sticky chart/photo cards: stay visible while the page scrolls and compact slightly */
-main{overflow:visible}
-.hero-card{position:sticky;top:calc(env(safe-area-inset-top,0px) + 58px);z-index:20;transform-origin:top center;transition:transform .2s ease,box-shadow .2s ease}
-.live-card{max-height:430px;overflow:hidden}
-.photo-card{max-height:430px;overflow:hidden}
-.hero-card.is-compact{transform:scale(.94);box-shadow:0 16px 36px rgba(0,0,0,.34)}
-.hero-card.is-compact #chart{height:270px!important}
-.hero-card.is-compact .camera{min-height:250px;height:250px}
+/* Sticky hero cards: solid layer, progressive shrink, and safe scroll ending */
+main{overflow:visible;position:relative;isolation:isolate}
+.screen{position:relative;z-index:1;padding-bottom:112px}
+.hero-card{
+  position:sticky;
+  top:0;
+  z-index:20;
+  isolation:isolate;
+  background:#18222e;
+  background-color:#18222e;
+  transform-origin:top center;
+  transition:box-shadow .18s ease,background-color .18s ease;
+  will-change:height;
+}
+.hero-card::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:-1;
+  background:#18222e;
+  border-radius:inherit;
+}
+.live-card,.photo-card{max-height:none;overflow:hidden}
+.live-card{
+  --chart-height:calc(340px - (190px * var(--sticky-progress,0)));
+  height:auto;
+}
+.live-card #chart{
+  height:var(--chart-height)!important;
+  min-height:150px;
+  transition:height .08s linear;
+}
+.photo-card .camera{
+  height:calc(61vh - (26vh * var(--sticky-progress,0)));
+  min-height:250px;
+  transition:height .08s linear,min-height .08s linear;
+}
+.hero-card.is-compact{
+  box-shadow:0 16px 36px rgba(0,0,0,.42);
+}
+.hero-card.is-compact .market-meta,
+.hero-card.is-compact .tf,
+.hero-card.is-compact .photo-controls{
+  display:none;
+}
+.hero-card.is-compact .asset-bar{
+  padding-top:10px;
+  padding-bottom:10px;
+}
+.hero-card.is-compact .asset-select-wrap .mini-label,
+.hero-card.is-compact .asset-select-wrap select{
+  font-size:0;
+}
+.hero-card.is-compact .asset-select-wrap select{
+  width:0;
+  min-width:0;
+  padding:0;
+  border:0;
+  background:none;
+}
+.hero-card.is-compact .asset-price{padding:6px 9px}
+.hero-card.is-compact .asset-price strong{font-size:16px}
+.hero-card.is-compact .asset-price span{font-size:9px}
+.live-card + .reaction-row,
+.live-card ~ .insight,
+.live-card ~ .live-result,
+.live-card ~ .note,
+.photo-card ~ .analysis,
+.photo-card ~ .note{
+  position:relative;
+  z-index:1;
+}
+.shell{padding-bottom:112px}
