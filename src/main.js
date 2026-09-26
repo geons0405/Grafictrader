@@ -332,7 +332,14 @@ function captureStickyOrigins(){
 }
 function resizeChartToContainer(){
   if(!chartEl?.clientWidth || !chartEl?.clientHeight)return;
-  chart.resize(chartEl.clientWidth,chartEl.clientHeight);
+  const width=chartEl.clientWidth;
+  const height=Math.max(100,Math.round(chartEl.clientHeight));
+
+  // O canvas do Lightweight Charts tem de receber a nova altura real.
+  // Isto força também o price scale direito a recalcular o autoScale
+  // para que as velas ocupem o novo espaço em vez de ficarem comprimidas.
+  chart.resize(width,height);
+  series.priceScale().applyOptions({autoScale:true});
 }
 
 function updateStickyCards(){
