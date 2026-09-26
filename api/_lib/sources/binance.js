@@ -30,7 +30,10 @@ export async function getBinanceTicker(symbols = ['BTCUSDT', 'ETHUSDT']) {
 }
 
 export async function getBinanceMarketEvents(symbol = 'BTCUSDT') {
-  const [data] = await getBinanceTicker([symbol]);
+  const [data, sparkline] = await Promise.all([
+    getBinanceTicker([symbol]).then(rows => rows[0]),
+    getSparkline(symbol, '1h', 24)
+  ]);
   return [{
     id: `binance-market-${symbol}-${Math.floor(Date.now() / 30000)}`,
     source: 'Binance',
@@ -39,6 +42,7 @@ export async function getBinanceMarketEvents(symbol = 'BTCUSDT') {
     timestamp: new Date().toISOString(),
     sentiment: data.change24h > 0.15 ? 'bullish' : data.change24h < -0.15 ? 'bearish' : 'neutral',
     symbol,
+    sparkline,
     metrics: data
   }];
 }
