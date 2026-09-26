@@ -544,6 +544,7 @@ intelligencePanel.innerHTML=`
           <div><small>EXECUTION SIGNATURE</small><b id="mechExecution">—</b></div>
         </div>
         <div class="mechanics-note" id="mechanicsNote">A recolher evidência mecânica do mercado…</div>
+        <div class="mechanics-memory" id="mechanicsMemory">MEMÓRIA · a aguardar histórico…</div>
         <div class="mechanics-ai" id="mechanicsAi">IA mecânica a aguardar dados…</div>
       </section>
     </section>
@@ -784,6 +785,15 @@ function renderMechanics(data){
     else note.textContent='A evidência disponível ainda não é suficiente para classificar um mecanismo dominante.';
   }
 }
+  const mem=document.querySelector('#mechanicsMemory');
+  const memory=data?.memory;
+  if(mem){
+    if(!memory?.available) mem.textContent='MEMÓRIA · histórico insuficiente';
+    else {
+      const transition=memory.transition ? memory.transition.from.replaceAll('_',' ')+' → '+memory.transition.to.replaceAll('_',' ') : 'sem transição de estado';
+      mem.textContent='MEMÓRIA · '+transition+' · '+memory.durationBars+' barras · mudança '+memory.changeScore+'%';
+    }
+  }
 async function loadMechanicsAI(data){
   if(mechanicsAiLoading||!data?.ok)return;
   mechanicsAiLoading=true;
