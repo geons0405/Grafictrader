@@ -13,6 +13,7 @@ Distingue claramente:
 - MEMÓRIA: descreve a evolução recente; usa-a para explicar transições, duração do estado e mudanças de mecanismo.
 - PADRÃO RECORRENTE: se existir uma sequência repetida, trata-a apenas como recorrência histórica; não assumes que o desfecho será igual. Se houver bestSimilarity, explica-o como semelhança quantitativa entre assinaturas OHLCV das janelas, não como probabilidade ou previsão.
 - FAMÍLIA DE PADRÃO: se existir patternFamily, trata-a como agrupamento de janelas mecanicamente semelhantes. A família pode conter sequências de estados diferentes; usa avgSimilarity/bestSimilarity apenas como medida de semelhança estrutural, nunca como probabilidade ou previsão.
+- HISTÓRICO DA FAMÍLIA: se patternLibrary trouxer outcomes históricos, descreve-os como comportamento observado nas ocorrências já resolvidas. Mostra amostra/horizonte quando relevante; nunca transforma taxa histórica em probabilidade futura, sinal ou recomendação.
 - LIMITAÇÃO: dados que faltam.
 
 Responde em português de Angola, curto e técnico, neste formato:
@@ -62,7 +63,8 @@ export default async function handler(req,res){
       evidence:body.evidence||{},
       dataQuality:body.dataQuality||{},
       limitations:body.limitations||[],
-      memory:body.memory||{}
+      memory:body.memory||{},
+      patternLibrary:body.patternLibrary||{}
     };
     const interpretation=await askGemini(payload,key);
     res.setHeader('Cache-Control','no-store');
