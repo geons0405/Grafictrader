@@ -793,7 +793,9 @@ function renderMechanics(data){
       const transition=memory.transition ? memory.transition.from.replaceAll('_',' ')+' → '+memory.transition.to.replaceAll('_',' ') : 'sem transição de estado';
       const pattern=memory.pattern?.sequence?.length ? ' · padrão '+memory.pattern.sequence.map(x=>x.replaceAll('_',' ')).join(' → ') : '';
       const family=memory.patternFamily ? ' · família '+memory.patternFamily.label+' · '+memory.patternFamily.avgSimilarity+'% semelhante' : '';
-      mem.textContent='MEMÓRIA · '+transition+' · '+memory.durationBars+' barras · mudança '+memory.changeScore+'%'+pattern+family;
+      const library=data?.patternLibrary;
+      const historical=library?.available && library?.patterns?.length ? ' · biblioteca '+library.patterns.length+' famílias' : '';
+      mem.textContent='MEMÓRIA · '+transition+' · '+memory.durationBars+' barras · mudança '+memory.changeScore+'%'+pattern+family+historical;
     }
   }
 async function loadMechanicsAI(data){
