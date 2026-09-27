@@ -28,7 +28,9 @@ export default async function handler(req, res) {
     const mechanics = analyzeMarketMechanics(candles, { trades, orderBook });
     const memory = buildMechanicsMemory(candles);
     const library = await loadPatternLibrary(symbol, interval);
-    const savedPattern = memory.patternFamily ? await rememberPatternFamily(symbol, interval, memory.patternFamily) : { saved:false, available:library.available };
+    const savedPattern = memory.patternFamily
+      ? await rememberPatternFamily(symbol, interval, memory.patternFamily, candles)
+      : { saved:false, available:library.available, patterns:library.patterns };
     const hasTrades = trades.length >= 10;
     const hasOrderBook = orderBook?.bids?.length > 0 && orderBook?.asks?.length > 0;
 
@@ -53,7 +55,10 @@ export default async function handler(req, res) {
       patternLibrary:{
         ...library,
         saved:savedPattern.saved || false,
-        patternCount:savedPattern.patternCount ?? library.patterns.length
+        patternCount:savedPattern.patternCount ?? library.patterns.length,
+        patterns:savedPattern.patterns || library.patterns,
+        historicalOutcomes:true,
+        outcomeHorizonsBars:[3,6,12]
       }
     });
   } catch (error) {
