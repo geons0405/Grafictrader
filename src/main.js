@@ -1,5 +1,5 @@
 import { createChart, CandlestickSeries } from 'lightweight-charts';
-import { createIcons, ArrowLeft, Settings, Radio, Sparkles, Plus, Camera, TrendingUp, TrendingDown } from 'lucide';
+import { createIcons, ArrowLeft, Settings, Radio, Sparkles, Plus, Camera, TrendingUp, TrendingDown, ArrowRight, LogIn, UserPlus, Home } from 'lucide';
 import './styles.css';
 
 const app = document.querySelector('#app');
@@ -12,7 +12,65 @@ app.innerHTML = `
   </header>
 
   <main>
-    <section id="live" class="screen active">
+    <section id="home" class="screen landing-screen active">
+      <div class="landing-brand">
+        <div class="landing-mark">G</div>
+        <span>GRAFICTRADER</span>
+      </div>
+      <div class="landing-hero">
+        <span class="eyebrow">AI MARKET INTELLIGENCE</span>
+        <h2>Entende o mercado.<br><em>Não apenas o gráfico.</em></h2>
+        <p>Analisa gráficos com IA, acompanha o mercado em tempo real e transforma dados em contexto mecânico.</p>
+      </div>
+      <div class="landing-preview">
+        <div class="preview-top"><span>BTC/USDT</span><b>LIVE</b></div>
+        <div class="preview-bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="preview-insight"><span>GRAFICTRADER AI</span><strong>Leitura estrutural ativa</strong></div>
+      </div>
+      <div class="landing-actions">
+        <button class="primary-btn landing-primary" id="landingLogin"><i data-lucide="log-in"></i> Entrar</button>
+        <button class="secondary-btn landing-secondary" id="landingRegister"><i data-lucide="user-plus"></i> Criar conta</button>
+      </div>
+      <button class="landing-guest" id="landingGuest">Explorar sem conta <i data-lucide="arrow-right"></i></button>
+      <p class="landing-note">Acesso à plataforma · análise de mercado · sem execução automática de ordens.</p>
+    </section>
+
+    <section id="login" class="screen auth-screen">
+      <div class="auth-card">
+        <button class="auth-back" data-route="home"><i data-lucide="arrow-left"></i><span>Voltar</span></button>
+        <div class="auth-brand"><div class="landing-mark">G</div><span>GRAFICTRADER</span></div>
+        <span class="eyebrow">BEM-VINDO DE VOLTA</span>
+        <h2>Entrar na sua conta</h2>
+        <p class="auth-copy">Acede ao teu espaço de análise e continua a acompanhar o mercado.</p>
+        <form id="loginForm" class="auth-form">
+          <label>Email<input type="email" id="loginEmail" placeholder="nome@email.com" autocomplete="email" required></label>
+          <label>Palavra-passe<input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" required></label>
+          <button class="primary-btn" type="submit">Entrar <i data-lucide="arrow-right"></i></button>
+        </form>
+        <p class="auth-switch">Ainda não tens conta? <button type="button" data-route="register">Criar conta</button></p>
+        <p class="auth-message" id="loginMessage"></p>
+      </div>
+    </section>
+
+    <section id="register" class="screen auth-screen">
+      <div class="auth-card">
+        <button class="auth-back" data-route="home"><i data-lucide="arrow-left"></i><span>Voltar</span></button>
+        <div class="auth-brand"><div class="landing-mark">G</div><span>GRAFICTRADER</span></div>
+        <span class="eyebrow">COMEÇA AGORA</span>
+        <h2>Criar a tua conta</h2>
+        <p class="auth-copy">Cria o teu espaço Grafictrader para guardar preferências e acompanhar as tuas análises.</p>
+        <form id="registerForm" class="auth-form">
+          <label>Nome<input type="text" id="registerName" placeholder="O teu nome" autocomplete="name" required></label>
+          <label>Email<input type="email" id="registerEmail" placeholder="nome@email.com" autocomplete="email" required></label>
+          <label>Palavra-passe<input type="password" id="registerPassword" placeholder="Mínimo 8 caracteres" minlength="8" autocomplete="new-password" required></label>
+          <button class="primary-btn" type="submit">Criar conta <i data-lucide="arrow-right"></i></button>
+        </form>
+        <p class="auth-switch">Já tens conta? <button type="button" data-route="login">Entrar</button></p>
+        <p class="auth-message" id="registerMessage"></p>
+      </div>
+    </section>
+
+    <section id="live" class="screen">
       <div class="feed-head">
         <div class="avatar" aria-label="Grafictrader">G</div>
         <div><b>Grafictrader AI</b><span>dados de mercado em tempo real</span></div>
@@ -475,6 +533,29 @@ function setMode(mode){
   document.querySelector('#pageSub').textContent=mode==='live'?'Mercado em tempo real':'Captura e análise por IA';
   setTimeout(()=>{captureStickyOrigins();updateStickyCards();if(mode==='live')resizeChartToContainer();},30);
 }
+function showRoute(route){
+  const allowed=['home','login','register','live','foto'];
+  const target=allowed.includes(route)?route:'home';
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
+  document.querySelector('#'+target)?.classList.add('active');
+  document.body.classList.toggle('landing-view',target==='home');
+  document.body.classList.toggle('auth-view',target==='login'||target==='register');
+  document.querySelector('.topbar').style.display=(target==='home'||target==='login'||target==='register')?'none':'';
+  document.querySelector('.bottom-nav').style.display=(target==='home'||target==='login'||target==='register')?'none':'';
+  if(target==='live'||target==='foto') setMode(target);
+  if(location.hash!=='#'+target) history.replaceState(null,'','#'+target);
+  window.scrollTo(0,0);
+  createIcons({icons:{ArrowLeft,Settings,Radio,Sparkles,Plus,Camera,TrendingUp,TrendingDown,ArrowRight,LogIn,UserPlus,Home}});
+}
+document.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>showRoute(b.dataset.route));
+document.querySelector('#landingLogin').onclick=()=>showRoute('login');
+document.querySelector('#landingRegister').onclick=()=>showRoute('register');
+document.querySelector('#landingGuest').onclick=()=>showRoute('live');
+document.querySelector('#loginForm').onsubmit=e=>{e.preventDefault();document.querySelector('#loginMessage').textContent='A autenticação ainda não está ligada ao backend. A interface está pronta para integração.';};
+document.querySelector('#registerForm').onsubmit=e=>{e.preventDefault();document.querySelector('#registerMessage').textContent='O cadastro visual está pronto. Liga o formulário ao provedor de autenticação para criar contas reais.';};
+window.addEventListener('hashchange',()=>showRoute(location.hash.slice(1)));
+showRoute(location.hash.slice(1)||'home');
+
 document.querySelectorAll('.nav-btn').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 document.querySelector('#backBtn').onclick=()=>setMode('live');
 window.addEventListener('resize',()=>{captureStickyOrigins();updateStickyCards();resizeChartToContainer();});
@@ -576,7 +657,7 @@ intelligencePanel.innerHTML=`
   </div>
 `;
 document.querySelector('.shell').appendChild(intelligencePanel);
-createIcons({icons:{ArrowLeft,Radio,Sparkles,TrendingUp,TrendingDown}});
+createIcons({icons:{ArrowLeft,Settings,Radio,Sparkles,Plus,Camera,TrendingUp,TrendingDown,ArrowRight,LogIn,UserPlus,Home}});
 
 let intelligenceEvents=[];
 let intelligenceTag='ALL';
