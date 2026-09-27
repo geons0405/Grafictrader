@@ -31,7 +31,6 @@ app.innerHTML = `
         <button class="primary-btn landing-primary" id="landingLogin"><i data-lucide="log-in"></i> Entrar</button>
         <button class="secondary-btn landing-secondary" id="landingRegister"><i data-lucide="user-plus"></i> Criar conta</button>
       </div>
-      <button class="landing-guest" id="landingGuest">Explorar sem conta <i data-lucide="arrow-right"></i></button>
       <p class="landing-note">Acesso à plataforma · análise de mercado · sem execução automática de ordens.</p>
     </section>
 
@@ -533,9 +532,13 @@ function setMode(mode){
   document.querySelector('#pageSub').textContent=mode==='live'?'Mercado em tempo real':'Captura e análise por IA';
   setTimeout(()=>{captureStickyOrigins();updateStickyCards();if(mode==='live')resizeChartToContainer();},30);
 }
+function hasAuthSession(){
+  return sessionStorage.getItem('grafictrader.auth')==='1';
+}
 function showRoute(route){
   const allowed=['home','login','register','live','foto'];
-  const target=allowed.includes(route)?route:'home';
+  let target=allowed.includes(route)?route:'home';
+  if((target==='live'||target==='foto')&&!hasAuthSession()) target='login';
   document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active'));
   document.querySelector('#'+target)?.classList.add('active');
   document.body.classList.toggle('landing-view',target==='home');
@@ -550,9 +553,18 @@ function showRoute(route){
 document.querySelectorAll('[data-route]').forEach(b=>b.onclick=()=>showRoute(b.dataset.route));
 document.querySelector('#landingLogin').onclick=()=>showRoute('login');
 document.querySelector('#landingRegister').onclick=()=>showRoute('register');
-document.querySelector('#landingGuest').onclick=()=>showRoute('live');
-document.querySelector('#loginForm').onsubmit=e=>{e.preventDefault();document.querySelector('#loginMessage').textContent='A autenticação ainda não está ligada ao backend. A interface está pronta para integração.';};
-document.querySelector('#registerForm').onsubmit=e=>{e.preventDefault();document.querySelector('#registerMessage').textContent='O cadastro visual está pronto. Liga o formulário ao provedor de autenticação para criar contas reais.';};
+document.querySelector('#loginForm').onsubmit=e=>{
+  e.preventDefault();
+  if(!e.currentTarget.reportValidity()) return;
+  sessionStorage.setItem('grafictrader.auth','1');
+  showRoute('live');
+};
+document.querySelector('#registerForm').onsubmit=e=>{
+  e.preventDefault();
+  if(!e.currentTarget.reportValidity()) return;
+  sessionStorage.setItem('grafictrader.auth','1');
+  showRoute('live');
+};
 window.addEventListener('hashchange',()=>showRoute(location.hash.slice(1)));
 showRoute(location.hash.slice(1)||'home');
 
