@@ -1,9 +1,9 @@
 const GDELT_BASE = 'https://api.gdeltproject.org/api/v2/doc/doc';
 
-function parseGdeltDate(value) {
+export function parseGdeltDate(value) {
   if (!value) return new Date().toISOString();
   const raw = String(value).trim();
-  const match = raw.match(/^(\\d{8})T(\\d{6})Z$/);
+  const match = raw.match(/^(\d{8})T(\d{6})Z$/);
   if (match) {
     const [, d, t] = match;
     const iso = `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}T${t.slice(0,2)}:${t.slice(2,4)}:${t.slice(4,6)}Z`;
@@ -35,7 +35,12 @@ function tagsFor(text = '') {
 export async function getGdeltEvents(symbol = 'BTCUSDT') {
   const queryMap = {
     BTCUSDT: '(bitcoin OR BTC OR cryptocurrency)',
-    ETHUSDT: '(ethereum OR ETH OR cryptocurrency)'
+    ETHUSDT: '(ethereum OR ETH OR cryptocurrency)',
+    BNBUSDT: '(binance OR BNB OR cryptocurrency)',
+    SOLUSDT: '(solana OR SOL OR cryptocurrency)',
+    XRPUSDT: '(ripple OR XRP OR cryptocurrency)',
+    ADAUSDT: '(cardano OR ADA OR cryptocurrency)',
+    DOGEUSDT: '(dogecoin OR DOGE OR cryptocurrency)'
   };
   const query = queryMap[symbol] || '(bitcoin OR cryptocurrency)';
   const url = GDELT_BASE + '?' + new URLSearchParams({

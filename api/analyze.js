@@ -1,3 +1,11 @@
+import { requireUserIfConfigured } from './_lib/auth.js';
+import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
+import { clientIp } from './_lib/validate.js';
+
+// Vercel rejects bodies above 4.5 MB; the client downsizes captures well below this.
+const MAX_IMAGE_CHARS = 4_000_000;
+const IMAGE_PATTERN = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+
 const ANALYSIS_PROMPT = `Analisa esta imagem de um gráfico de trading de forma objetiva e educativa.
 Responde em português de Angola, sem prometer resultados e sem dizer que uma entrada é garantida.
 Identifica, apenas se forem visíveis: ativo, timeframe, tendência, estrutura de mercado, suporte/resistência, RSI/MACD/EMAs ou outros indicadores, sinais de continuação ou reversão e cenários alternativos.
@@ -29,7 +37,7 @@ function extractOpenAIText(data) {
 
 async function analyzeWithGemini(image, key) {
   const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const match = image.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  const match = image.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s);
   if (!match) throw new Error('Imagem inválida para Gemini.');
 
   const response = await fetch(
@@ -82,7 +90,7 @@ async function analyzeWithOpenAI(image, key) {
       Authorization: `Bearer ${key}`
     },
     body: JSON.stringify({
-      model: 'gpt-5.6-luna',
+      model: process.env.OPENAI_MODEL || 'gpt-5.6-luna',
       input: [{
         role: 'user',
         content: [
@@ -113,9 +121,18 @@ export default async function handler(req, res) {
 
   try {
     const { image } = req.body || {};
-    if (!image || typeof image !== 'string' || !image.startsWith('data:image/')) {
+    if (typeof image !== 'string' || image.length > MAX_IMAGE_CHARS) {
+      return res.status(413).json({ error: 'Imagem demasiado grande ou inválida.' });
+    }
+    if (!IMAGE_PATTERN.test(image)) {
       return res.status(400).json({ error: 'Imagem inválida.' });
     }
+
+    const access = await requireUserIfConfigured(req, res);
+    if (!access.ok) return;
+
+    const limit = await rateLimit('analyze', access.user?.email || clientIp(req), { limit: 10, windowSeconds: 600 });
+    if (!limit.allowed) return sendRateLimited(res, limit);
 
     const geminiKey = process.env.GEMINI_API_KEY;
     const openAIKey = process.env.OPENAI_API_KEY;

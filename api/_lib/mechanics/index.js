@@ -22,7 +22,10 @@ export function analyzeMarketMechanics(candles, { trades = [], orderBook = {} } 
 
   const tradeFlow=calculateTradeFlow(trades);
   const book=calculateOrderBookDynamics(orderBook);
-  const microAbsorption=calculateMicroAbsorption({trades,candles});
+  // Only trades printed inside the last candle are comparable with its price move.
+  const lastOpenMs=Number(candles?.at?.(-1)?.time)*1000;
+  const candleTrades=Number.isFinite(lastOpenMs)?trades.filter(t=>Number(t.time)>=lastOpenMs):trades;
+  const microAbsorption=calculateMicroAbsorption({trades:candleTrades,candles});
   const execution=calculateExecutionSignature(trades);
 
   const structuralPressure=calculateStructuralPressure({
@@ -30,7 +33,7 @@ export function analyzeMarketMechanics(candles, { trades = [], orderBook = {} } 
     persistence,
     absorption:microAbsorption.value ?? absorption.value,
     displacement:displacement.value,
-    liquidity:book.value != null ? Math.abs(book.topImbalance ?? 0) : liquidity.value,
+    liquidity:liquidity.value,
     regime:regime.change
   });
 
@@ -39,7 +42,9 @@ export function analyzeMarketMechanics(candles, { trades = [], orderBook = {} } 
     movementEnergy:pct(energy.value),
     absorption:pct(microAbsorption.value ?? absorption.value),
     displacementCost:pct(displacement.value),
-    liquidityResistance:pct(book.value != null ? Math.abs(book.topImbalance ?? 0) : liquidity.value),
+    // Always the OHLCV proxy so live readings stay comparable with the
+    // historical memory windows; the live book is reported separately.
+    liquidityResistance:pct(liquidity.value),
     marketOrderliness:pct(entropy.orderliness),
     regimeStability:pct(regime.stability),
     structuralPressure:pct(structuralPressure),

@@ -24,6 +24,11 @@ export function calculateLiquidityMemory(candles) {
   const zones=counts.map((count,i)=>({i,count,reactions:reactions[i],score:(count+reactions[i]*2)/maxScore}))
     .filter(z=>z.score>=0.45)
     .map(z=>({price:min+(z.i+0.5)*span/bins,score:z.score,reactions:z.reactions}));
-  const value=zones.length?Math.max(...zones.map(z=>z.score)):0;
-  return{value,zones,evidence:'ohlcv_liquidity_proxy'};
+  // Resistance is measured where price is now: the reaction density of the
+  // bin holding the current close, relative to the densest bin. Taking the
+  // max over all zones would always return 1 (the densest bin is the max).
+  const lastClose=rows.at(-1).close;
+  const currentIdx=Math.max(0,Math.min(bins-1,Math.floor((lastClose-min)/span*bins)));
+  const value=(counts[currentIdx]+reactions[currentIdx]*2)/maxScore;
+  return{value,zones,currentZone:{price:min+(currentIdx+0.5)*span/bins,score:value},evidence:'ohlcv_liquidity_proxy'};
 }

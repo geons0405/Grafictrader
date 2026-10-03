@@ -1,71 +1,43 @@
-const REST_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const REST_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+import { redis, redisConfigured } from '../redis.js';
+import { INTERVAL_SECONDS } from '../validate.js';
+
 const MAX_PATTERNS = 100;
 const MAX_OBSERVATIONS = 240;
-const HORIZONS = [3, 6, 12];
+export const HORIZONS = [3, 6, 12];
+const WRITE_GATE_SECONDS = 30;
 
-const INTERVAL_SECONDS = {
-  '1m': 60,
-  '5m': 300,
-  '15m': 900,
-  '1h': 3600,
-  '4h': 14400
-};
+// Coarse buckets keep the fingerprint stable enough for a family to recur.
+// Quantizing all eight metrics in 5-point steps made almost every
+// observation unique, so no family ever accumulated outcomes.
+const FINGERPRINT_KEYS = ['priceEfficiency', 'movementEnergy', 'structuralPressure'];
 
-function configured() {
-  return Boolean(REST_URL && REST_TOKEN);
+const libraryKey = (symbol, interval) => 'grafictrader:pattern-library:' + symbol + ':' + interval;
+const gateKey = (symbol, interval) => 'grafictrader:pattern-library-gate:' + symbol + ':' + interval;
+
+function bucket(value) {
+  if (!Number.isFinite(value)) return 'x';
+  return value < 34 ? 'L' : value < 67 ? 'M' : 'H';
 }
 
-async function redis(command) {
-  if (!configured()) return null;
-  const response = await fetch(REST_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer ' + REST_TOKEN,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(command)
-  });
-  if (!response.ok) throw new Error('Pattern library storage unavailable.');
-  return response.json();
-}
-
-function key(symbol, interval) {
-  return 'grafictrader:pattern-library:' + symbol + ':' + interval;
-}
-
-function familyFingerprint(family) {
+export function familyFingerprint(family) {
   if (!family) return null;
   const signature = family.familySignature || {};
-  return [
-    family.id,
-    ...Object.entries(signature).map(([k, v]) => k + ':' + (Number.isFinite(v) ? Math.round(v / 5) * 5 : 'x'))
-  ].join('|');
+  return [family.id, ...FINGERPRINT_KEYS.map(key => key + ':' + bucket(signature[key]))].join('|');
 }
 
 function emptyOutcome() {
-  return {
-    samples: 0,
-    positive: 0,
-    negative: 0,
-    flat: 0,
-    avgReturnPct: 0,
-    avgAbsReturnPct: 0
-  };
+  return { samples: 0, positive: 0, negative: 0, flat: 0, avgReturnPct: 0, avgAbsReturnPct: 0 };
 }
 
-function updateOutcome(stats, returnPct) {
-  const next = stats || emptyOutcome();
+export function updateOutcome(stats, returnPct) {
+  const next = { ...emptyOutcome(), ...(stats || {}) };
   const n = Number(next.samples || 0);
   next.samples = n + 1;
-  if (returnPct > 0.02) next.positive = Number(next.positive || 0) + 1;
-  else if (returnPct < -0.02) next.negative = Number(next.negative || 0) + 1;
-  else next.flat = Number(next.flat || 0) + 1;
-
-  const oldAvg = Number(next.avgReturnPct || 0);
-  const oldAbs = Number(next.avgAbsReturnPct || 0);
-  next.avgReturnPct = Number(((oldAvg * n + returnPct) / next.samples).toFixed(4));
-  next.avgAbsReturnPct = Number(((oldAbs * n + Math.abs(returnPct)) / next.samples).toFixed(4));
+  if (returnPct > 0.02) next.positive += 1;
+  else if (returnPct < -0.02) next.negative += 1;
+  else next.flat += 1;
+  next.avgReturnPct = Number(((Number(next.avgReturnPct) * n + returnPct) / next.samples).toFixed(4));
+  next.avgAbsReturnPct = Number(((Number(next.avgAbsReturnPct) * n + Math.abs(returnPct)) / next.samples).toFixed(4));
   return next;
 }
 
@@ -83,150 +55,104 @@ function summarize(patterns) {
   }));
 }
 
-function normalizeStored(raw, symbol, interval) {
-  if (!raw) return { version: 2, symbol, interval, updatedAt: null, patterns: [], observations: [] };
+export function normalizeStored(raw, symbol, interval) {
+  const empty = { version: 3, symbol, interval, updatedAt: null, patterns: [], observations: [] };
+  if (!raw) return empty;
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return {
-        version: 2,
-        symbol,
-        interval,
-        updatedAt: null,
-        patterns: parsed.map(item => ({ ...item, outcomes: item.outcomes || {} })),
-        observations: []
-      };
+      return { ...empty, patterns: parsed.map(item => ({ ...item, outcomes: item.outcomes || {} })) };
     }
     return {
-      version: 2,
-      symbol,
-      interval,
+      ...empty,
       updatedAt: parsed.updatedAt || null,
       patterns: Array.isArray(parsed.patterns) ? parsed.patterns : [],
       observations: Array.isArray(parsed.observations) ? parsed.observations : []
     };
   } catch {
-    return { version: 2, symbol, interval, updatedAt: null, patterns: [], observations: [] };
+    return empty;
   }
 }
 
-export async function loadPatternLibrary(symbol, interval) {
-  if (!configured()) {
-    return {
-      available: false,
-      reason: 'Pattern Library não configurada.',
-      patterns: [],
-      observations: []
-    };
-  }
-
-  try {
-    const result = await redis(['GET', key(symbol, interval)]);
-    const library = normalizeStored(result?.result, symbol, interval);
-    return {
-      available: true,
-      patterns: summarize(library.patterns),
-      observations: library.observations
-    };
-  } catch (error) {
-    return {
-      available: false,
-      reason: error?.message || 'Não foi possível ler a Pattern Library.',
-      patterns: [],
-      observations: []
-    };
-  }
+/** Candles whose period has fully elapsed; the last kline from Binance is still forming. */
+export function closedCandles(candles, interval, nowMs = Date.now()) {
+  const seconds = INTERVAL_SECONDS[interval] || 300;
+  return (Array.isArray(candles) ? candles : [])
+    .filter(candle => Number.isFinite(Number(candle.time)) && (Number(candle.time) + seconds) * 1000 <= nowMs);
 }
 
-export async function rememberPatternFamily(symbol, interval, family, candles = []) {
-  if (!family || !configured()) {
-    return {
-      available: configured(),
-      saved: false,
-      reason: configured() ? 'Nenhuma família encontrada.' : 'Pattern Library não configurada.',
-      patterns: []
-    };
-  }
+/**
+ * Pure library update: resolves pending outcomes with closed candles, records
+ * the current family observation and refreshes pattern statistics.
+ */
+export function updateLibrary(library, { family, candles, interval, nowMs = Date.now() }) {
+  const intervalSeconds = INTERVAL_SECONDS[interval] || 300;
+  const patterns = (library.patterns || []).map(item => ({ ...item, outcomes: { ...(item.outcomes || {}) } }));
+  const observations = (library.observations || []).map(item => ({ ...item, outcomes: { ...(item.outcomes || {}) } }));
+  const closed = closedCandles(candles, interval, nowMs);
+  const nowIso = new Date(nowMs).toISOString();
+  const fingerprint = familyFingerprint(family);
 
-  try {
-    const result = await redis(['GET', key(symbol, interval)]);
-    const library = normalizeStored(result?.result, symbol, interval);
-    const patterns = library.patterns || [];
-    const observations = library.observations || [];
-    const fingerprint = familyFingerprint(family);
-    const now = new Date().toISOString();
-    const latestCandle = candles.at(-1);
-    const entryTime = Number(latestCandle?.time);
-    const entryPrice = Number(latestCandle?.close);
-    const intervalSeconds = INTERVAL_SECONDS[interval] || 300;
+  for (const observation of observations) {
+    if (!Number.isFinite(observation.entryTime) || !Number.isFinite(observation.entryPrice)) continue;
+    for (const horizon of HORIZONS) {
+      if (observation.outcomes[horizon]) continue;
+      const targetTime = observation.entryTime + horizon * intervalSeconds;
+      const target = closed.find(candle => Number(candle.time) >= targetTime);
+      if (!target || !Number.isFinite(Number(target.close))) continue;
 
-    // Resolve older observations as enough future candles become available.
-    for (const observation of observations) {
-      if (!Number.isFinite(observation.entryTime) || !Number.isFinite(observation.entryPrice)) continue;
-      for (const horizon of HORIZONS) {
-        if (observation.outcomes?.[horizon]) continue;
-        const targetTime = observation.entryTime + horizon * intervalSeconds;
-        const target = candles.find(candle => Number(candle.time) >= targetTime);
-        if (!target || !Number.isFinite(target.close)) continue;
-
-        const returnPct = ((Number(target.close) - observation.entryPrice) / observation.entryPrice) * 100;
-        observation.outcomes = observation.outcomes || {};
-        observation.outcomes[horizon] = {
-          returnPct: Number(returnPct.toFixed(4)),
-          resolvedAt: new Date().toISOString(),
-          targetTime: Number(target.time)
-        };
-
-        const pattern = patterns.find(item => item.fingerprint === observation.fingerprint);
-        if (pattern) {
-          pattern.outcomes = pattern.outcomes || {};
-          pattern.outcomes[horizon] = updateOutcome(pattern.outcomes[horizon], returnPct);
-        }
-      }
+      const returnPct = ((Number(target.close) - observation.entryPrice) / observation.entryPrice) * 100;
+      observation.outcomes[horizon] = {
+        returnPct: Number(returnPct.toFixed(4)),
+        resolvedAt: nowIso,
+        targetTime: Number(target.time)
+      };
+      const pattern = patterns.find(item => item.fingerprint === observation.fingerprint);
+      if (pattern) pattern.outcomes[horizon] = updateOutcome(pattern.outcomes[horizon], returnPct);
     }
+  }
 
-    if (Number.isFinite(entryTime) && Number.isFinite(entryPrice)) {
-      const lastObservation = observations.at(-1);
-      const duplicate = lastObservation &&
-        lastObservation.fingerprint === fingerprint &&
-        Math.abs(Number(lastObservation.entryTime) - entryTime) < intervalSeconds;
+  const entry = closed.at(-1);
+  const entryTime = Number(entry?.time);
+  const entryPrice = Number(entry?.close);
 
-      if (!duplicate) {
-        observations.push({
-          fingerprint,
-          familyId: family.id,
-          familyLabel: family.label,
-          stateSequence: family.matches?.[0]?.sequence || [],
-          signature: family.currentSignature,
-          similarity: family.bestSimilarity,
-          entryTime,
-          entryPrice,
-          recordedAt: now,
-          outcomes: {}
-        });
-      }
+  if (family && Number.isFinite(entryTime) && Number.isFinite(entryPrice)) {
+    const duplicate = observations.some(item => item.fingerprint === fingerprint && item.entryTime === entryTime);
+    if (!duplicate) {
+      observations.push({
+        fingerprint,
+        familyId: family.id,
+        familyLabel: family.label,
+        stateSequence: family.matches?.[0]?.sequence || [],
+        signature: family.currentSignature,
+        similarity: family.bestSimilarity,
+        entryTime,
+        entryPrice,
+        recordedAt: nowIso,
+        outcomes: {}
+      });
     }
 
     const existing = patterns.find(item => item.fingerprint === fingerprint);
     if (existing) {
-      // Count unique observations rather than every API poll.
-      const alreadyCounted = existing.lastObservationTime &&
-        Number(existing.lastObservationTime) === entryTime;
-      if (!alreadyCounted) existing.occurrences = Number(existing.occurrences || 0) + 1;
-      existing.lastSeenAt = now;
-      existing.lastObservationTime = entryTime;
-      existing.lastSimilarity = family.bestSimilarity;
-      existing.avgSimilarity = family.avgSimilarity;
-      existing.label = family.label;
-      existing.signature = family.familySignature;
+      // Count unique closed candles rather than every API poll.
+      if (Number(existing.lastObservationTime) !== entryTime) existing.occurrences = Number(existing.occurrences || 0) + 1;
+      Object.assign(existing, {
+        lastSeenAt: nowIso,
+        lastObservationTime: entryTime,
+        lastSimilarity: family.bestSimilarity,
+        avgSimilarity: family.avgSimilarity,
+        label: family.label,
+        signature: family.familySignature
+      });
     } else {
       patterns.unshift({
         id: family.id,
         fingerprint,
         label: family.label,
         occurrences: 1,
-        firstSeenAt: now,
-        lastSeenAt: now,
+        firstSeenAt: nowIso,
+        lastSeenAt: nowIso,
         lastObservationTime: entryTime,
         lastSimilarity: family.bestSimilarity,
         avgSimilarity: family.avgSimilarity,
@@ -235,39 +161,65 @@ export async function rememberPatternFamily(symbol, interval, family, candles = 
         outcomes: {}
       });
     }
+  }
 
-    const cutoff = Date.now() / 1000 - intervalSeconds * Math.max(HORIZONS) * 20;
-    const recentObservations = observations
-      .filter(item => !Number.isFinite(item.entryTime) || item.entryTime >= cutoff)
-      .slice(-MAX_OBSERVATIONS);
+  // Keep observations while their longest horizon can still be resolved.
+  const cutoff = nowMs / 1000 - intervalSeconds * Math.max(...HORIZONS) * 20;
+  const recentObservations = observations
+    .filter(item => Number.isFinite(item.entryTime) && item.entryTime >= cutoff)
+    .slice(-MAX_OBSERVATIONS);
 
-    patterns.sort((a, b) => new Date(b.lastSeenAt) - new Date(a.lastSeenAt));
-    const trimmed = patterns.slice(0, MAX_PATTERNS);
+  patterns.sort((a, b) => new Date(b.lastSeenAt) - new Date(a.lastSeenAt));
 
-    const stored = {
-      version: 2,
-      symbol,
-      interval,
-      updatedAt: now,
-      patterns: trimmed,
+  return {
+    fingerprint,
+    library: {
+      version: 3,
+      symbol: library.symbol,
+      interval: library.interval,
+      updatedAt: nowIso,
+      patterns: patterns.slice(0, MAX_PATTERNS),
       observations: recentObservations
-    };
+    }
+  };
+}
 
-    await redis(['SET', key(symbol, interval), JSON.stringify(stored)]);
+export async function loadPatternLibrary(symbol, interval) {
+  if (!redisConfigured()) {
+    return { available: false, reason: 'Pattern Library não configurada.', patterns: [], observations: [] };
+  }
+  try {
+    const library = normalizeStored(await redis(['GET', libraryKey(symbol, interval)]), symbol, interval);
+    return { available: true, patterns: summarize(library.patterns), observations: library.observations };
+  } catch (error) {
+    return { available: false, reason: error?.message || 'Não foi possível ler a Pattern Library.', patterns: [], observations: [] };
+  }
+}
+
+export async function rememberPatternFamily(symbol, interval, family, candles = []) {
+  if (!redisConfigured()) {
+    return { available: false, saved: false, reason: 'Pattern Library não configurada.', patterns: [] };
+  }
+
+  try {
+    // Write gate: at most one read-modify-write per symbol/interval every
+    // WRITE_GATE_SECONDS. It also serialises concurrent requests, which
+    // previously overwrote each other's updates.
+    const gate = await redis(['SET', gateKey(symbol, interval), '1', 'NX', 'EX', String(WRITE_GATE_SECONDS)]);
+    if (gate !== 'OK') return { available: true, saved: false, reason: 'Atualização recente; escrita adiada.' };
+
+    const stored = normalizeStored(await redis(['GET', libraryKey(symbol, interval)]), symbol, interval);
+    const { library, fingerprint } = updateLibrary(stored, { family, candles, interval });
+    await redis(['SET', libraryKey(symbol, interval), JSON.stringify(library)]);
 
     return {
       available: true,
       saved: true,
-      patternCount: trimmed.length,
+      patternCount: library.patterns.length,
       fingerprint,
-      patterns: summarize(trimmed)
+      patterns: summarize(library.patterns)
     };
   } catch (error) {
-    return {
-      available: false,
-      saved: false,
-      reason: error?.message || 'Não foi possível guardar a família.',
-      patterns: []
-    };
+    return { available: false, saved: false, reason: error?.message || 'Não foi possível guardar a família.', patterns: [] };
   }
 }
