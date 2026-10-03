@@ -165,6 +165,12 @@ Procurar regiões históricas em que o preço:
 
 Criar zonas e medir persistência/reincidência.
 
+O valor (`liquidityResistance`) é a densidade de reações **na zona onde o preço está agora**, relativa à zona mais densa.
+
+- Usar o máximo de todas as zonas daria sempre 100%, porque a zona mais densa é o próprio máximo.
+- O valor vem sempre do proxy OHLCV, para ficar comparável com as janelas históricas da memória.
+- O order book real é reportado à parte, em `orderBookImbalance`.
+
 Quando não houver histórico suficiente, retornar `insufficient_data`.
 
 ### 6. Market Entropy

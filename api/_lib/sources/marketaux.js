@@ -1,4 +1,4 @@
-const SYMBOLS = { BTCUSDT: 'BTC', ETHUSDT: 'ETH' };
+const SYMBOLS = { BTCUSDT: 'BTC', ETHUSDT: 'ETH', BNBUSDT: 'BNB', SOLUSDT: 'SOL', XRPUSDT: 'XRP', ADAUSDT: 'ADA', DOGEUSDT: 'DOGE' };
 
 export async function getMarketauxEvents(symbol = 'BTCUSDT') {
   const key = process.env.MARKETAUX_API_KEY;

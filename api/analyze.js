@@ -1,163 +1,99 @@
-const ANALYSIS_PROMPT = `Analisa esta imagem de um gráfico de trading de forma objetiva e educativa.
-Responde em português de Angola, sem prometer resultados e sem dizer que uma entrada é garantida.
-Identifica, apenas se forem visíveis: ativo, timeframe, tendência, estrutura de mercado, suporte/resistência, RSI/MACD/EMAs ou outros indicadores, sinais de continuação ou reversão e cenários alternativos.
-Não inventes valores, indicadores ou níveis que não estejam visíveis.
-Se a imagem não permitir uma conclusão confiável, diz exatamente o que falta.
-Formato:
-RESUMO: uma frase
-TENDÊNCIA: ...
-ESTRUTURA: ...
-NÍVEIS: ...
-INDICADORES: ...
-CENÁRIO A: ...
-CENÁRIO B: ...
-RISCO: ...
-CONFIANÇA VISUAL: baixa/média/alta`;
+import { requireUserIfConfigured } from './_lib/auth.js';
+import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
+import { clientIp, parseMarketQuery } from './_lib/validate.js';
+import { marketReading } from './_lib/quant/service.js';
+import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict } from './_lib/quant/verdict.js';
+import { photoGuidance } from './_lib/quant/explain.js';
 
-function extractGeminiText(data) {
-  return data?.candidates?.flatMap(candidate =>
-    candidate?.content?.parts?.map(part => part?.text).filter(Boolean) || []
-  ).join('\n').trim() || '';
-}
+import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
 
-function extractOpenAIText(data) {
-  return data?.output_text ||
-    data?.output?.flatMap(item =>
-      item?.content?.filter(part => part?.type === 'output_text').map(part => part?.text) || []
-    ).join('\n').trim() || '';
-}
-
-async function analyzeWithGemini(image, key) {
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const match = image.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
-  if (!match) throw new Error('Imagem inválida para Gemini.');
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': key
-      },
-      body: JSON.stringify({
-        contents: [{
-          role: 'user',
-          parts: [
-            { text: ANALYSIS_PROMPT },
-            {
-              inline_data: {
-                mime_type: match[1],
-                data: match[2]
-              }
-            }
-          ]
-        }],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 1200
-        }
-      })
-    }
-  );
-
-  const data = await response.json();
-  if (!response.ok) {
-    const message = data?.error?.message || 'Falha na análise com Gemini.';
-    const error = new Error(message);
-    error.status = response.status;
-    throw error;
-  }
-
-  const analysis = extractGeminiText(data);
-  if (!analysis) throw new Error('Gemini não devolveu uma análise.');
-  return { analysis, provider: 'Gemini' };
-}
-
-async function analyzeWithOpenAI(image, key) {
-  const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`
-    },
-    body: JSON.stringify({
-      model: 'gpt-5.6-luna',
-      input: [{
-        role: 'user',
-        content: [
-          { type: 'input_text', text: ANALYSIS_PROMPT },
-          { type: 'input_image', image_url: image }
-        ]
-      }]
-    })
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    const message = data?.error?.message || 'Falha na análise com OpenAI.';
-    const error = new Error(message);
-    error.status = response.status;
-    throw error;
-  }
-
-  const analysis = extractOpenAIText(data);
-  if (!analysis) throw new Error('OpenAI não devolveu uma análise.');
-  return { analysis, provider: 'OpenAI' };
-}
+const ANALYSIS_PROMPT = `És um analista técnico experiente. Analisa a imagem de um gráfico de trading.
+Lê apenas o que é visível: ativo, timeframe, preço atual, estrutura (topos/fundos), suportes e resistências, padrões de velas e gráficos, indicadores visíveis, volume.
+Decide uma orientação para a próxima fase do gráfico:
+- "COMPRAR" se a estrutura e o momentum favorecem subida;
+- "VENDER" se favorecem descida;
+- "AGUARDAR" se o gráfico está lateral, confuso, sem confirmação ou se a imagem não chega para decidir.
+Não inventes valores que não estejam visíveis. Não prometas resultados. Responde em português de Angola.
+Responde APENAS com JSON válido neste formato:
+{
+  "ativo": "ex.: BTC/USDT ou null",
+  "timeframe": "ex.: 5m, 15m, 1h ou null",
+  "precoAtual": número ou null,
+  "tendencia": "alta" | "baixa" | "lateral" | "indefinida",
+  "decisao": "COMPRAR" | "VENDER" | "AGUARDAR",
+  "confianca": 0-100,
+  "entrada": "zona ou condição de entrada",
+  "stop": "nível ou condição de invalidação",
+  "alvos": ["alvo 1", "alvo 2"],
+  "estrutura": "descrição curta da estrutura",
+  "padroes": ["padrões visíveis"],
+  "indicadores": "o que os indicadores visíveis mostram",
+  "motivos": ["até 4 motivos objetivos"],
+  "riscos": ["até 3 riscos"],
+  "resumo": "uma frase",
+  "explicacaoSimples": "3 a 5 frases informais, como se falasses com um amigo que nunca operou: o que fazer agora, porquê, onde entrar, onde pôr o stop loss e onde tirar o lucro (ou porque é melhor não operar)",
+  "qualidadeImagem": "boa" | "média" | "fraca"
+}`;
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Método não permitido.' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
+  res.setHeader('Cache-Control', 'no-store');
 
+  const { image, symbol: hintSymbol, interval: hintInterval } = req.body || {};
+  if (typeof image !== 'string' || image.length > MAX_IMAGE_CHARS) {
+    return res.status(413).json({ ok: false, error: 'Imagem demasiado grande ou inválida.' });
+  }
+  if (!IMAGE_PATTERN.test(image)) return res.status(400).json({ ok: false, error: 'Imagem inválida.' });
+
+  const access = await requireUserIfConfigured(req, res);
+  if (!access.ok) return;
+
+  const limit = await rateLimit('analyze', access.user?.email || clientIp(req), { limit: 10, windowSeconds: 600 });
+  if (!limit.allowed) return sendRateLimited(res, limit);
+
+  let vision;
   try {
-    const { image } = req.body || {};
-    if (!image || typeof image !== 'string' || !image.startsWith('data:image/')) {
-      return res.status(400).json({ error: 'Imagem inválida.' });
-    }
-
-    const geminiKey = process.env.GEMINI_API_KEY;
-    const openAIKey = process.env.OPENAI_API_KEY;
-
-    if (!geminiKey && !openAIKey) {
-      return res.status(503).json({
-        error: 'Nenhuma IA de análise está configurada. Configure GEMINI_API_KEY (recomendado) ou OPENAI_API_KEY no Vercel.',
-        setupRequired: true
-      });
-    }
-
-    if (geminiKey) {
-      try {
-        const result = await analyzeWithGemini(image, geminiKey);
-        return res.status(200).json(result);
-      } catch (error) {
-        console.error('[Gemini] Falha na análise:', error?.message || error);
-        if (!openAIKey) {
-          return res.status(error?.status || 502).json({
-            error: 'O Gemini não conseguiu analisar a imagem.',
-            provider: 'Gemini'
-          });
-        }
-      }
-    }
-
-    if (openAIKey) {
-      try {
-        const result = await analyzeWithOpenAI(image, openAIKey);
-        return res.status(200).json(result);
-      } catch (error) {
-        console.error('[OpenAI] Falha na análise:', error?.message || error);
-        return res.status(error?.status || 502).json({
-          error: 'Nenhum provedor de IA conseguiu analisar a imagem.',
-          provider: 'fallback'
-        });
-      }
-    }
-
-    return res.status(503).json({ error: 'Serviço de análise indisponível.' });
+    vision = await runVision(image, ANALYSIS_PROMPT);
   } catch (error) {
-    console.error('[Analyze] Erro interno:', error);
-    return res.status(500).json({ error: 'Erro interno ao analisar a imagem.' });
+    return res.status(error.status || 502).json({ ok: false, setupRequired: Boolean(error.setupRequired), error: error.message });
   }
+
+  const normalized = normalizeVision(vision.raw);
+  // Cross-check with the live engine when the chart is a market we track.
+  const hint = parseMarketQuery({ symbol: hintSymbol, interval: hintInterval });
+  const symbol = mapAsset(normalized.asset) || null;
+  const interval = mapTimeframe(normalized.timeframe) || hint?.interval || '15m';
+  let reading = null;
+  if (symbol) {
+    try {
+      reading = await marketReading(symbol, interval);
+    } catch (error) {
+      console.warn('[Analyze] leitura ao vivo indisponível:', error?.message || error);
+    }
+  }
+  const verdict = mergeVerdict(normalized, reading);
+
+  return res.status(200).json({
+    ok: true,
+    provider: vision.provider,
+    vision: normalized,
+    verdict,
+    guidance: photoGuidance(verdict, normalized, reading),
+    live: reading && {
+      symbol,
+      interval,
+      price: reading.price,
+      signal: { action: reading.signal.action, confidence: reading.signal.confidence, regimeLabel: reading.signal.regimeLabel, reasons: reading.signal.reasons },
+      context: reading.context,
+      quant: reading.snapshot && {
+        hurst: reading.snapshot.hurst,
+        varianceRatio: reading.snapshot.varianceRatio,
+        kalmanZ: reading.snapshot.kalmanZ,
+        entropy: reading.snapshot.entropy,
+        vpin: reading.snapshot.vpin,
+        volPercentile: reading.snapshot.volPercentile
+      }
+    },
+    disclaimer: 'Orientação educativa gerada por IA. Não é aconselhamento financeiro nem garantia de resultado.'
+  });
 }

@@ -149,7 +149,9 @@ function findPatternFamily(items) {
   if (items.length < PATTERN_LENGTH * 2) return null;
 
   const currentItems = items.slice(-PATTERN_LENGTH);
-  const candidates = patternWindows(items).slice(0, -1);
+  // Only windows that end before the current pattern starts: overlapping
+  // windows share timeline steps with it and would inflate similarity.
+  const candidates = patternWindows(items).slice(0, -PATTERN_LENGTH);
   const matches = [];
 
   for (const candidateItems of candidates) {
@@ -157,7 +159,7 @@ function findPatternFamily(items) {
     if (similarity != null && similarity >= FAMILY_THRESHOLD) {
       matches.push({
         startStep: items.indexOf(candidateItems[0]) + 1,
-        endStep: items.indexOf(candidateItems[candidateItems.length - 1]) + 1,
+        endStep: items.indexOf(candidateItems.at(-1)) + 1,
         sequence: stateSequence(candidateItems),
         similarity,
         signature: familySignature(candidateItems)

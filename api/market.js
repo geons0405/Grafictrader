@@ -1,20 +1,28 @@
-import { getBinanceTicker, getBinanceCandles } from './_lib/sources/binance.js';
+import { getBinanceTicker, getBinanceCandles, getBinanceUsdtMarkets } from './_lib/sources/binance.js';
+import { parseMarketQuery } from './_lib/validate.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
 
-  const symbol = String(req.query?.symbol || 'BTCUSDT').toUpperCase();
-  const interval = String(req.query?.interval || '5m');
-  const allowed = ['1m', '5m', '15m', '1h', '4h'];
-
-  if (!/^[A-Z0-9]{6,12}$/.test(symbol) || !allowed.includes(interval)) {
-    return res.status(400).json({ ok: false, error: 'Parâmetros inválidos.' });
+  // GET /api/market?list=1 → every Binance USDT pair, most traded first.
+  if (req.query?.list) {
+    try {
+      const markets = await getBinanceUsdtMarkets();
+      res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+      return res.status(200).json({ ok: true, markets });
+    } catch (error) {
+      return res.status(502).json({ ok: false, error: error?.message || 'Lista de mercados indisponível.' });
+    }
   }
+
+  const market = parseMarketQuery(req.query);
+  if (!market) return res.status(400).json({ ok: false, error: 'Parâmetros inválidos.' });
+  const { symbol, interval } = market;
 
   try {
     const [tickers, candles] = await Promise.all([
       getBinanceTicker([symbol]),
-      getBinanceCandles(symbol, interval, 120)
+      getBinanceCandles(symbol, interval, 300)
     ]);
     const ticker = tickers[0];
 
@@ -22,12 +30,11 @@ export default async function handler(req, res) {
       throw new Error('Nenhuma fonte de mercado devolveu dados para este ativo.');
     }
 
-    const source = ticker.source || (candles.length ? 'Binance/Twelve Data' : 'unknown');
     res.setHeader('Cache-Control', 's-maxage=5, stale-while-revalidate=10');
 
     return res.status(200).json({
       ok: true,
-      source,
+      source: ticker.source || 'unknown',
       symbol,
       interval,
       updatedAt: new Date().toISOString(),

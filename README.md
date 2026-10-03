@@ -1,51 +1,165 @@
 # Grafictrader
 
-Mobile-first trading chart and market-intelligence application.
+Aplicação web mobile-first de gráficos e inteligência de mercado cripto, com tema claro e escuro.
 
-## Current
-- LIVE market data from Binance public REST + WebSocket.
-- CCXT integration on the server for unified exchange market data.
-- Asset selector: BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT, ADA/USDT and DOGE/USDT.
-- Timeframe selector: 1m, 5m, 15m, 1h and 4h.
-- Interactive candlestick chart with TradingView Lightweight Charts.
-- FOTO camera capture flow with server-side AI analysis endpoint.
-- LIVE Intelligence panel opened from the settings icon.
-- Realtime intelligence feed with tags, clickable events and event detail.
-- GDELT news is available without a private API key.
-- Optional Finnhub crypto news integration.
-- Optional Twelve Data quote integration.
-- Public Binance/CCXT market data requires no private trading credentials.
-- No order execution is implemented.
+Não executa ordens e não é aconselhamento financeiro.
 
-## Intelligence providers
+## Áreas
 
-The /api/intelligence endpoint aggregates:
-- GDELT news from the last hour.
-- Binance market data through CCXT.
-- Finnhub crypto news when FINNHUB_API_KEY is configured.
-- Twelve Data live quote when TWELVE_DATA_API_KEY is configured.
+O menu inferior tem só duas áreas: **FOTO** (esquerda) e **LIVE** (direita). O botão no canto superior direito abre **Live Inteligente** e **Perfil**.
 
-The frontend refreshes the intelligence feed automatically every 12 seconds while the panel is open. Market price/candle updates remain on the Binance WebSocket.
+### FOTO
 
-## Environment variables
+- A foto é tirada com a câmara ou carregada como imagem e é reduzida no cliente.
+- A IA de visão (Gemini, com fallback OpenAI) devolve JSON estruturado: ativo, timeframe, decisão, entrada, stop, alvos, motivos e riscos.
+- Se o ativo for um dos acompanhados (BTC, ETH, SOL, BNB, XRP, ADA, DOGE), a decisão é cruzada com o motor estatístico ao vivo e com o contexto (fluxo, livro de ordens, notícias).
+- Veredito final: **COMPRAR**, **VENDER** ou **AGUARDAR** (instável ou sinais divergentes).
 
-Configure these as server-side environment variables in Vercel:
+### LIVE · Minha corretora (modo principal)
 
-```text
-OPENAI_API_KEY=
-FINNHUB_API_KEY=
-TWELVE_DATA_API_KEY=
-```
+A IA acompanha a corretora do próprio utilizador, seja ela qual for (MT5, XM, Exness, Quotex, IQ Option…), sem integrações.
 
-Never put private provider keys in src/main.js.
+- **Formas de mostrar a corretora:** partilha de ecrã no computador (`getDisplayMedia`), câmara no telemóvel, ou carregar um vídeo gravado.
+- **Quando analisa:** só quando o gráfico muda (comparação de uma miniatura do frame), com no mínimo 8 s entre análises e uma análise de controlo a cada 45 s.
+  - O relógio corre num Web Worker e a imagem é lida diretamente da faixa de vídeo (`ImageCapture`), por isso continua a funcionar com o separador em segundo plano.
+- **`/api/watch`:**
+  - Recebe o frame e a leitura anterior, para dar continuidade.
+  - Devolve a decisão, a explicação informal e, quando reconhece o ativo, o cruzamento com o motor ao vivo.
+  - Limite de 60 análises por 10 min por utilizador.
+- **Estabilizador:**
+  - Passar a "não operar" é imediato.
+  - Mudar para comprar ou vender exige a mesma leitura duas vezes seguidas.
+  - Frames sem gráfico nunca mudam a orientação.
+- **Extras:**
+  - Janela flutuante (Document Picture-in-Picture, Chrome no computador) por cima da corretora.
+  - Voz e alertas do sistema quando a orientação muda.
+  - Histórico das mudanças da sessão.
+  - A sessão para sozinha ao fim de 45 min.
 
-## Production
+### LIVE · Mercado
 
-Vercel can build the project with:
+O seletor no topo escolhe a fonte do gráfico:
+
+- **TradingView**: widget oficial (cripto, forex, ouro, petróleo, índices). A marca TradingView do widget só sai num plano pago.
+- **Binance**: todos os pares USDT (com pesquisa), em tempo real por WebSocket.
+- **MetaTrader 5**: as velas da tua própria corretora, enviadas pelo EA `public/bridge/GrafictraderBridge.mq5` para `/api/mt5`.
+  - A chave de ligação gera-se em Perfil > MetaTrader 5.
+  - O EA só lê preços: não envia ordens.
+
+No gráfico próprio (Lightweight Charts), o logótipo foi retirado. A atribuição exigida pela licença está por baixo do gráfico e em Perfil > Créditos.
+
+O cartão da IA tem duas vistas:
+
+- **Orientação**: COMPRAR, VENDER ou NÃO OPERAR, com entrada, stop loss e take profit. Inclui uma explicação informal para quem nunca operou: o que fazer agora, porquê e o passo a passo.
+- **Resultados**: win rate, operações e histórico.
+
+- Gráfico de velas em tempo real com dados Binance (WebSocket `data-stream.binance.vision`, com polling de reserva).
+- **IA instrutora**: opera uma conta demo de $1.000 com risco de 1% por operação.
+  - Entra no fecho da vela de sinal, com stop a 1,5×ATR e alvo a 2R.
+  - Move o stop para a entrada depois de +1R e fecha por tempo ao fim de 24 velas.
+- Entradas, saídas, stop e alvo aparecem no gráfico para o utilizador acompanhar e copiar por sua conta e risco.
+- Com Redis, o estado da conta é persistente e cada decisão fica gravada com o contexto ao vivo do momento. Sem Redis, as operações são reconstruídas de forma determinística a partir das velas; todos os utilizadores veem as mesmas.
+
+### Live Inteligente
+
+Painel tipo terminal com:
+
+- mercados globais: índices, VIX, dólar, câmbio, juros, ouro, petróleo e cripto;
+- leitura de apetite ou aversão ao risco;
+- calendário económico com contagem decrescente (ForexFactory);
+- Fear & Greed cripto;
+
+- saldo, P&L, posição e win rate;
+- histórico de saldo e log de atividade;
+- order book real;
+- motor estatístico, contexto ao vivo e decisão atual;
+- Market Mechanics com leitura IA;
+- notícias ao vivo (GDELT, Finnhub, Marketaux);
+- um cartão por ativo com o estado do instrutor.
+
+### Motor estatístico (`api/_lib/quant`)
+
+- Expoente de Hurst R/S com correção de Anis-Lloyd-Peters: persistência ou reversão.
+- Variance ratio de Lo-MacKinlay: momentum nos retornos.
+- Filtro de Kalman de tendência local: deriva escondida e o seu z-score.
+- Entropia de permutação de Bandt-Pompe: previsibilidade da ordem das velas.
+- Volatilidade Garman-Klass e o seu percentil: regime de volatilidade.
+- Bulk Volume Classification e VPIN: pressão e toxicidade do fluxo.
+- Desvio ao VWAP em desvios-padrão e autocorrelação.
+
+O regime (tendência, reversão, ruído ou caos) decide o tipo de entrada. O contexto ao vivo pode vetar entradas.
+
+Notícias de alto impacto nas moedas do ativo, de 15 min antes a 30 min depois, bloqueiam novas entradas. O USD conta sempre, porque mexe com quase tudo.
+
+O win rate e o P&L mostrados são o histórico real destas operações simuladas. Não há ordens reais e o app não é aconselhamento financeiro.
+
+## Contas
+
+Com `KV_REST_API_URL`/`KV_REST_API_TOKEN` configurados, as contas são reais:
+
+- palavras-passe com hash scrypt guardadas no Redis;
+- sessões em cookie `HttpOnly`, `SameSite=Lax` e `Secure`, válidas por 30 dias;
+- registo, login e logout em `/api/auth?action=…`;
+- as rotas de IA (`/api/analyze`, `/api/mechanics-ai`) exigem sessão válida.
+
+Sem Redis, o app funciona em **modo local**: o perfil (só o nome) fica no dispositivo e o ecrã de login avisa disso.
+
+## Proteções de custo e segurança
+
+- Limite de pedidos: 10 análises de foto e 20 interpretações mecânicas por 10 min, por utilizador ou IP. Partilhado via Redis quando existe; caso contrário, por instância.
+- `/api/mechanics-ai` recebe só `{ symbol, interval }` e recalcula as métricas no servidor, por isso não entra texto do cliente no prompt. Cada interpretação fica em cache 60 s.
+- O cliente só pede nova interpretação quando o mecanismo muda ou a anterior tem mais de 2 min.
+- Imagens limitadas a JPEG, PNG ou WebP com menos de 4 MB; a câmara reduz a captura para 1600 px.
+- Links de notícias só abrem se forem `http(s)`.
+- Símbolos e timeframes validados contra uma lista fechada.
+
+## Variáveis de ambiente
+
+Ver `.env.example`. Nunca colocar chaves de fornecedores no código do frontend.
+
+## Desenvolvimento
 
 ```bash
 npm install
-npm run build
+npm test        # testes unitários (node:test)
+npm run build   # build de produção (Vite)
+npm run dev     # só frontend; as rotas /api precisam de `vercel dev`
 ```
 
-No order execution is implemented.
+O CI (`.github/workflows/ci.yml`) corre `npm ci`, `npm test` e `npm run build` em cada push.
+
+## Estrutura
+
+```text
+api/                 funções serverless da Vercel
+  _lib/auth.js       contas e sessões
+  _lib/redis.js      cliente Upstash REST
+  _lib/rate-limit.js limitador de pedidos
+  _lib/mechanics/    motor de mecânica, memória e Pattern Library
+  _lib/quant/        estatística avançada, decisão, IA instrutora, veredito da foto
+  instructor.js      /api/instructor (um ativo) e ?desk=1 (todos)
+  global.js          /api/global: mercados mundiais, calendário, Fear & Greed
+  mt5.js             /api/mt5: ponte MetaTrader 5 (POST do EA, GET do app)
+  watch.js           /api/watch: análise ao vivo de frames da corretora
+  _lib/vision.js     chamadas à IA de visão (Gemini, fallback OpenAI)
+public/bridge/       EA MQL5 para ligar o MetaTrader 5
+  _lib/sources/      Binance, Twelve Data, GDELT, Finnhub, Marketaux
+src/
+  lib/               tema, sessão, indicadores, utilitários
+  views/             ecrãs (shell, live-screen, watch, live, foto, intel/Live Inteligente, profile, sheet)
+  styles.css         design system monocromático claro/escuro
+tests/               testes unitários
+```
+
+## Fontes e repositórios de referência
+
+- MetaTrader 5:
+  - EA próprio em `public/bridge/` (via WebRequest).
+  - Alternativas: [mt5-bridge (REST + WebSocket)](https://github.com/mobjoy0/mt5-bridge), [MetaApi SDK (cloud, pago com tier grátis)](https://github.com/metaapi/metaapi-javascript-sdk), [mt5-rest-api](https://github.com/DevRico003/mt5-rest-api).
+- Binance:
+  - WebSocket público + [Lightweight Charts](https://github.com/tradingview/lightweight-charts).
+  - Exemplo de referência: [binance-tutorials](https://github.com/hackingthemarkets/binance-tutorials).
+- TradingView: [widgets gratuitos](https://www.tradingview.com/widget/).
+- Calendário: `nfs.faireconomy.media/ff_calendar_thisweek.json` (máx. ~2 pedidos por 5 min; o app guarda em cache 15 min).
+- Mercados globais: endpoint público de gráficos do Yahoo Finance.
+- Fear & Greed: [alternative.me](https://alternative.me/crypto/fear-and-greed-index/).

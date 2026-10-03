@@ -11,26 +11,26 @@ o que depende de preço em "—" / OFFLINE.
 - A fonte de preços é sempre `https://data-api.binance.vision` (mirror
   público de só-leitura da Binance, sem o bloqueio de "restricted location
   according to eligibility" que `api.binance.com` aplica nalgumas regiões).
-- Se usares **CCXT**, tens de sobrepor a URL manualmente — o CCXT aponta
-  para `api.binance.com` por defeito:
-  ```ts
-  exchange.urls['api']['public'] = 'https://data-api.binance.vision/api';
-  ```
+- O tempo real no browser usa o WebSocket público
+  `wss://data-stream.binance.vision/ws/<symbol>@kline_<interval>`. Enquanto o
+  stream não está aberto, `src/views/live.js` faz polling de `/api/market`.
+  O stream só é usado quando a fonte REST é a Binance, para não misturar
+  preços USDT com o fallback em USD da Twelve Data.
 - Nunca hardcodar `api.binance.com` num componente novo. Se precisares de
-  preços/candles, importa de `lib/sources/binance.ts` — não faças fetch
+  preços/candles, importa de `api/_lib/sources/binance.js` — não faças fetch
   direto à Binance a partir de outro sítio do código.
 
 ## Fallback obrigatório: Twelve Data
 
-- `lib/sources/binance.ts` já deteta bloqueio geográfico (status 451 ou
+- `api/_lib/sources/binance.js` já deteta bloqueio geográfico (status 451 ou
   corpo da resposta com "restricted location" / "eligibility") e cai
-  automaticamente para `lib/sources/twelvedata.ts`.
+  automaticamente para `api/_lib/sources/twelvedata.js`.
 - Qualquer novo consumidor de preços (um novo widget, um novo gráfico) deve
   usar as funções já existentes (`getBinanceTicker`, `getSparkline`) em vez
   de reimplementar fetch + fallback do zero — a lógica de deteção de
   bloqueio só deve existir num sítio.
 - `TWELVE_DATA_API_KEY` tem de estar configurada no Vercel (Production **e**
-  Preview) para o fallback funcionar — sem ela, `twelvedata.ts` devolve `[])
+  Preview) para o fallback funcionar — sem ela, `twelvedata.js` devolve `[])
   silenciosamente, e a UI mostra "—" mesmo com o fallback implementado.
 
 ## Regras específicas do Lightweight Charts (candlesticks)

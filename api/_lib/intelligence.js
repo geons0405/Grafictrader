@@ -3,8 +3,6 @@ import { getGdeltEvents } from './sources/gdelt.js';
 import { getMarketauxEvents } from './sources/marketaux.js';
 import { getFinnhubEvents } from './sources/finnhub.js';
 
-const SOURCE_NAMES = ['Binance', 'GDELT', 'Marketaux', 'Finnhub'];
-
 export async function getAllIntelligence(symbol = 'BTCUSDT') {
   const tasks = [
     ['Binance', () => getBinanceMarketEvents(symbol)],
@@ -39,6 +37,6 @@ export async function getAllIntelligence(symbol = 'BTCUSDT') {
     events: [...unique.values()].sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 100),
     activeSources,
     failedSources,
-    sourceCount: 5 // inclui o canal de mercado CCXT/Binance já existente no terminal
+    sourceCount: tasks.length
   };
 }
