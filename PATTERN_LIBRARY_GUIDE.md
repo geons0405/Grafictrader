@@ -21,6 +21,19 @@ Exemplo:
 
 `grafictrader:pattern-library:BTCUSDT:5m`
 
+## Escrita
+
+- `/api/mechanics` atualiza a biblioteca, no máximo, uma vez a cada 30 s por ativo e timeframe.
+- Essa porta de escrita (`SET NX EX`) também serializa pedidos simultâneos, que antes se sobrepunham e perdiam atualizações.
+- A memória usa 240 velas, ou seja, 12 janelas de 20 velas.
+- As famílias só comparam janelas que terminam antes do padrão atual; janelas sobrepostas inflacionavam a semelhança.
+
+## Identidade de uma família
+
+A impressão digital combina a sequência de estados com três métricas em faixas baixa, média e alta (`L`, `M`, `H`): eficiência, energia e pressão estrutural.
+
+Antes, oito métricas em passos de 5 pontos tornavam quase todas as observações únicas, e nenhuma família acumulava histórico.
+
 ## O que é guardado
 
 Cada família mantém:
@@ -35,6 +48,8 @@ Cada família mantém:
 Os resultados históricos são descrições retrospectivas das ocorrências já observadas. Não são probabilidades, previsões nem recomendações.
 
 ## Resolução de outcomes
+
+Só são usadas velas **fechadas**: a última vela da Binance ainda está em formação e não serve como entrada nem como alvo.
 
 Quando uma família é observada, o sistema regista:
 

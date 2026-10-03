@@ -1,51 +1,65 @@
 # Grafictrader
 
-Mobile-first trading chart and market-intelligence application.
+Aplicação web mobile-first de gráficos e inteligência de mercado cripto, com tema claro e escuro.
 
-## Current
-- LIVE market data from Binance public REST + WebSocket.
-- CCXT integration on the server for unified exchange market data.
-- Asset selector: BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT, ADA/USDT and DOGE/USDT.
-- Timeframe selector: 1m, 5m, 15m, 1h and 4h.
-- Interactive candlestick chart with TradingView Lightweight Charts.
-- FOTO camera capture flow with server-side AI analysis endpoint.
-- LIVE Intelligence panel opened from the settings icon.
-- Realtime intelligence feed with tags, clickable events and event detail.
-- GDELT news is available without a private API key.
-- Optional Finnhub crypto news integration.
-- Optional Twelve Data quote integration.
-- Public Binance/CCXT market data requires no private trading credentials.
-- No order execution is implemented.
+Não executa ordens e não é aconselhamento financeiro.
 
-## Intelligence providers
+## Funcionalidades
 
-The /api/intelligence endpoint aggregates:
-- GDELT news from the last hour.
-- Binance market data through CCXT.
-- Finnhub crypto news when FINNHUB_API_KEY is configured.
-- Twelve Data live quote when TWELVE_DATA_API_KEY is configured.
+- **Início (LIVE)**: gráfico de velas (TradingView Lightweight Charts) para BTC, ETH, SOL, BNB, XRP, ADA e DOGE em 1m, 5m, 15m, 1h e 4h.
+  - Tempo real pelo WebSocket público `data-stream.binance.vision`; enquanto o stream não está ligado, o gráfico atualiza por polling de `/api/market` a cada 5 s.
+  - Leitura técnica por regras objetivas: EMA 20/50, estrutura de swings, RSI de Wilder e momentum, com suporte/resistência e um índice de confluência.
+- **Foto**: captura pela câmara ou carregamento de imagem, reduzida no cliente e analisada por IA multimodal (`/api/analyze`, Gemini com fallback OpenAI).
+- **Live Intelligence**: pulso BTC/ETH, resumo de 24h, motor Market Mechanics (OHLCV + trades + order book), memória de estados, Pattern Library e interpretação por IA, mais feed de notícias (GDELT, Finnhub, Marketaux).
+- **Perfil**: conta, tema (Sistema / Claro / Escuro) e terminar sessão.
 
-The frontend refreshes the intelligence feed automatically every 12 seconds while the panel is open. Market price/candle updates remain on the Binance WebSocket.
+## Contas
 
-## Environment variables
+Com `KV_REST_API_URL`/`KV_REST_API_TOKEN` configurados, as contas são reais:
 
-Configure these as server-side environment variables in Vercel:
+- palavras-passe com hash scrypt guardadas no Redis;
+- sessões em cookie `HttpOnly`, `SameSite=Lax` e `Secure`, válidas por 30 dias;
+- registo, login e logout em `/api/auth?action=…`;
+- as rotas de IA (`/api/analyze`, `/api/mechanics-ai`) exigem sessão válida.
 
-```text
-OPENAI_API_KEY=
-FINNHUB_API_KEY=
-TWELVE_DATA_API_KEY=
-```
+Sem Redis, o app funciona em **modo local**: o perfil (só o nome) fica no dispositivo e o ecrã de login avisa disso.
 
-Never put private provider keys in src/main.js.
+## Proteções de custo e segurança
 
-## Production
+- Limite de pedidos: 10 análises de foto e 20 interpretações mecânicas por 10 min, por utilizador ou IP. Partilhado via Redis quando existe; caso contrário, por instância.
+- `/api/mechanics-ai` recebe só `{ symbol, interval }` e recalcula as métricas no servidor, por isso não entra texto do cliente no prompt. Cada interpretação fica em cache 60 s.
+- O cliente só pede nova interpretação quando o mecanismo muda ou a anterior tem mais de 2 min.
+- Imagens limitadas a JPEG, PNG ou WebP com menos de 4 MB; a câmara reduz a captura para 1600 px.
+- Links de notícias só abrem se forem `http(s)`.
+- Símbolos e timeframes validados contra uma lista fechada.
 
-Vercel can build the project with:
+## Variáveis de ambiente
+
+Ver `.env.example`. Nunca colocar chaves de fornecedores no código do frontend.
+
+## Desenvolvimento
 
 ```bash
 npm install
-npm run build
+npm test        # testes unitários (node:test)
+npm run build   # build de produção (Vite)
+npm run dev     # só frontend; as rotas /api precisam de `vercel dev`
 ```
 
-No order execution is implemented.
+O CI (`.github/workflows/ci.yml`) corre `npm ci`, `npm test` e `npm run build` em cada push.
+
+## Estrutura
+
+```text
+api/                 funções serverless da Vercel
+  _lib/auth.js       contas e sessões
+  _lib/redis.js      cliente Upstash REST
+  _lib/rate-limit.js limitador de pedidos
+  _lib/mechanics/    motor de mecânica, memória e Pattern Library
+  _lib/sources/      Binance, Twelve Data, GDELT, Finnhub, Marketaux
+src/
+  lib/               tema, sessão, indicadores, utilitários
+  views/             ecrãs (shell, live, foto, intel, sheet)
+  styles.css         design system monocromático claro/escuro
+tests/               testes unitários
+```
