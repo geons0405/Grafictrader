@@ -1105,3 +1105,82 @@ button.asset-pill svg.lucide { position: static; }
 .c-event { border-radius: 10px; background: var(--well); padding: 8px 10px; display: grid; gap: 2px; font-size: 10.5px; }
 .c-event small { color: var(--muted); font-size: 10px; }
 .c-event[data-sign="down"] { background: color-mix(in srgb, var(--down) 15%, var(--card)); color: var(--down); }
+
+/* =========================================================
+   LIVE · "Minha corretora" (AI watching the user's broker)
+   ========================================================= */
+.live-top { display: flex; align-items: center; gap: 10px; }
+.live-top .live-mode { flex: 1; }
+.live-top .round-btn { width: 50px; height: 50px; }
+.live-mode button { font-size: 13px; }
+.live-pane { display: grid; gap: 14px; }
+.live-pane[hidden] { display: none !important; }
+
+.watch-card { display: grid; gap: 12px; padding: 10px; }
+.watch-stage {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  max-width: 100%;
+  border-radius: 18px;
+  background: var(--well);
+  overflow: hidden;
+}
+.watch-stage video { width: 100%; height: 100%; object-fit: contain; display: none; background: #000; }
+.watch-stage.active video { display: block; }
+.watch-overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  background: var(--card);
+  color: var(--text);
+  display: none;
+}
+.watch-stage.active .watch-overlay { display: block; }
+.watch-overlay[data-side="up"] { background: var(--up); color: #fff; }
+.watch-overlay[data-side="down"] { background: var(--down); color: #fff; }
+.watch-empty { position: absolute; inset: 0; padding: 18px; display: grid; align-content: center; gap: 10px; color: var(--text-2); }
+.watch-empty b { font-size: 15px; color: var(--text); }
+.watch-empty ol { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; line-height: 1.45; }
+.watch-stage.active .watch-empty { display: none; }
+@media (max-width: 420px) { .watch-stage:not(.active) { aspect-ratio: auto; min-height: 260px; } }
+.watch-controls { display: grid; gap: 8px; }
+.watch-controls[hidden] { display: none !important; }
+.watch-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--well);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.chip-toggle svg.lucide { width: 15px; height: 15px; }
+.chip-toggle.active { background: var(--accent); color: var(--on-accent); }
+.watch-pending { font-size: 12.5px; color: var(--text-2); background: var(--well); border-radius: 12px; padding: 10px 12px; }
+.watch-change { font-size: 13px; color: var(--text-2); font-style: italic; }
+.watch-card .muted-line { margin: 0; padding: 0 4px 4px; }
+
+/* LIVE tab shows a pulsing dot while a broker session is running */
+.tabbar button[data-tab="live"] { position: relative; }
+body.is-watching .tabbar button[data-tab="live"]::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  right: 22%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--up);
+  animation: blink 1.6s ease-in-out infinite;
+}
+#watchLevels b { white-space: normal; font-size: 12.5px; }
+.guide-block .op small { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11px; margin: 0; }

@@ -65,9 +65,9 @@ function renderResult(image, data) {
     </div>
     ${v.direction !== 0 ? `
     <div class="levels levels-3">
-      <div><small>Entrada</small><b>${escapeHtml(vis.entry || '—')}</b></div>
-      <div><small>Stop</small><b class="neg">${escapeHtml(vis.stop || '—')}</b></div>
-      <div><small>Alvos</small><b class="pos">${escapeHtml(vis.targets.join(' · ') || '—')}</b></div>
+      <div><small>Entrada</small><b>${escapeHtml(data.guidance?.levels?.entry || vis.entry || '—')}</b></div>
+      <div><small>Stop</small><b class="neg">${escapeHtml(data.guidance?.levels?.stop || vis.stop || '—')}</b></div>
+      <div><small>Alvos</small><b class="pos">${escapeHtml(data.guidance?.levels?.target || vis.targets.join(' · ') || '—')}</b></div>
     </div>` : ''}
     ${data.guidance ? `
     <div class="guide">

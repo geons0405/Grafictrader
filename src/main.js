@@ -4,7 +4,8 @@ import { renderIcons } from './lib/icons.js';
 import { applyTheme, toggleTheme, getThemePreference, onThemeChange } from './lib/theme.js';
 import { loadSession, currentUser, sessionMode, login, register, startLocalProfile, logout } from './lib/session.js';
 import { shellTemplate } from './views/shell.js';
-import { initLive, activateLive, deactivateLive } from './views/live.js';
+import { initLiveScreen, activateLiveScreen, deactivateLiveScreen } from './views/live-screen.js';
+import { stop as stopWatch } from './views/watch.js';
 import { initFoto, deactivateFoto } from './views/foto.js';
 import { initIntel, activateIntel, deactivateIntel } from './views/intel.js';
 import { initProfile, activateProfile } from './views/profile.js';
@@ -15,7 +16,7 @@ const PRIVATE_ROUTES = ['live', 'foto', 'intel', 'perfil'];
 const TITLES = { home: 'Grafictrader', login: 'Entrar', register: 'Criar conta', live: 'Live', foto: 'Foto', intel: 'Live Inteligente', perfil: 'Perfil' };
 
 const VIEWS = {
-  live: { activate: activateLive, deactivate: deactivateLive },
+  live: { activate: activateLiveScreen, deactivate: deactivateLiveScreen },
   foto: { deactivate: deactivateFoto },
   intel: { activate: activateIntel, deactivate: deactivateIntel },
   perfil: { activate: activateProfile }
@@ -167,6 +168,7 @@ function wire() {
   $('#loginForm').addEventListener('submit', event => { event.preventDefault(); submitAuth(event.currentTarget, 'login'); });
   $('#registerForm').addEventListener('submit', event => { event.preventDefault(); submitAuth(event.currentTarget, 'register'); });
   $('#logoutBtn').addEventListener('click', async () => {
+    stopWatch();
     await logout();
     renderUser();
     navigate('home');
@@ -178,7 +180,7 @@ function wire() {
 
 async function boot() {
   initSheets();
-  initLive();
+  initLiveScreen();
   initFoto();
   initIntel();
   initProfile();

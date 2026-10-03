@@ -15,7 +15,28 @@ O menu inferior tem só duas áreas: **FOTO** (esquerda) e **LIVE** (direita). O
 - Se o ativo for um dos acompanhados (BTC, ETH, SOL, BNB, XRP, ADA, DOGE), a decisão é cruzada com o motor estatístico ao vivo e com o contexto (fluxo, livro de ordens, notícias).
 - Veredito final: **COMPRAR**, **VENDER** ou **AGUARDAR** (instável ou sinais divergentes).
 
-### LIVE
+### LIVE · Minha corretora (modo principal)
+
+A IA acompanha a corretora do próprio utilizador, seja ela qual for (MT5, XM, Exness, Quotex, IQ Option…), sem integrações.
+
+- **Formas de mostrar a corretora:** partilha de ecrã no computador (`getDisplayMedia`), câmara no telemóvel, ou carregar um vídeo gravado.
+- **Quando analisa:** só quando o gráfico muda (comparação de uma miniatura do frame), com no mínimo 8 s entre análises e uma análise de controlo a cada 45 s.
+  - O relógio corre num Web Worker e a imagem é lida diretamente da faixa de vídeo (`ImageCapture`), por isso continua a funcionar com o separador em segundo plano.
+- **`/api/watch`:**
+  - Recebe o frame e a leitura anterior, para dar continuidade.
+  - Devolve a decisão, a explicação informal e, quando reconhece o ativo, o cruzamento com o motor ao vivo.
+  - Limite de 60 análises por 10 min por utilizador.
+- **Estabilizador:**
+  - Passar a "não operar" é imediato.
+  - Mudar para comprar ou vender exige a mesma leitura duas vezes seguidas.
+  - Frames sem gráfico nunca mudam a orientação.
+- **Extras:**
+  - Janela flutuante (Document Picture-in-Picture, Chrome no computador) por cima da corretora.
+  - Voz e alertas do sistema quando a orientação muda.
+  - Histórico das mudanças da sessão.
+  - A sessão para sozinha ao fim de 45 min.
+
+### LIVE · Mercado
 
 O seletor no topo escolhe a fonte do gráfico:
 
@@ -119,11 +140,13 @@ api/                 funções serverless da Vercel
   instructor.js      /api/instructor (um ativo) e ?desk=1 (todos)
   global.js          /api/global: mercados mundiais, calendário, Fear & Greed
   mt5.js             /api/mt5: ponte MetaTrader 5 (POST do EA, GET do app)
+  watch.js           /api/watch: análise ao vivo de frames da corretora
+  _lib/vision.js     chamadas à IA de visão (Gemini, fallback OpenAI)
 public/bridge/       EA MQL5 para ligar o MetaTrader 5
   _lib/sources/      Binance, Twelve Data, GDELT, Finnhub, Marketaux
 src/
   lib/               tema, sessão, indicadores, utilitários
-  views/             ecrãs (shell, live, foto, intel/Live Inteligente, sheet)
+  views/             ecrãs (shell, live-screen, watch, live, foto, intel/Live Inteligente, profile, sheet)
   styles.css         design system monocromático claro/escuro
 tests/               testes unitários
 ```

@@ -105,10 +105,70 @@ export const shellTemplate = `
 
   <!-- LIVE -->
   <section id="live" class="screen">
+    <header class="live-top">
+      <div class="segmented live-mode" role="tablist" aria-label="Modo do LIVE">
+        <button type="button" data-live-mode="broker">Minha corretora</button>
+        <button type="button" data-live-mode="market">Mercado</button>
+      </div>
+      <button class="round-btn" type="button" data-open-menu aria-label="Menu"><i data-lucide="sliders-horizontal"></i></button>
+    </header>
+
+    <div class="live-pane" data-live-pane="broker">
+      <article class="card watch-card">
+        <div class="watch-stage" id="watchStage">
+          <video id="watchVideo" autoplay playsinline muted></video>
+          <span class="watch-overlay" id="watchOverlay">—</span>
+          <div class="watch-empty" id="watchEmpty">
+            <b>A IA acompanha a tua corretora ao vivo</b>
+            <ol>
+              <li>Abre a tua corretora (qualquer uma: MT5, XM, Exness, Quotex, IQ Option…).</li>
+              <li>No computador, toca em <b>Partilhar ecrã</b> e escolhe a janela da corretora. No telemóvel, usa a <b>câmara</b> apontada ao gráfico.</li>
+              <li>Continua a operar na corretora: a IA analisa sempre que o gráfico muda e avisa-te.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="watch-controls" id="watchStarts">
+          <button class="btn btn-primary" type="button" id="watchShare"><i data-lucide="monitor"></i>Partilhar ecrã</button>
+          <button class="btn btn-soft" type="button" id="watchCamera"><i data-lucide="camera"></i>Usar câmara</button>
+          <label class="btn btn-ghost"><i data-lucide="upload"></i>Carregar vídeo<input type="file" id="watchFile" accept="video/*" hidden></label>
+          <p class="fine-print left" id="watchShareHint" hidden>Neste dispositivo o navegador não deixa partilhar o ecrã. Usa a câmara apontada ao gráfico, ou abre o Grafictrader no computador.</p>
+        </div>
+        <button class="btn btn-soft" type="button" id="watchStop" hidden><i data-lucide="x"></i>Parar análise</button>
+        <div class="watch-tools">
+          <button type="button" class="chip-toggle" id="watchPip" hidden><i data-lucide="image"></i>Janela flutuante</button>
+          <button type="button" class="chip-toggle" id="watchVoice"><i data-lucide="radio"></i>Voz</button>
+          <button type="button" class="chip-toggle" id="watchAlerts"><i data-lucide="sparkles"></i>Alertas</button>
+        </div>
+        <small class="muted-line" id="watchStatus">Escolhe como queres mostrar a tua corretora.</small>
+      </article>
+
+      <article class="card instructor" id="watchResult" hidden aria-live="polite">
+        <header class="card-head"><b class="instructor-title"><i data-lucide="bot"></i>IA ao vivo</b><small>análise da tua corretora</small></header>
+        <div class="position">
+          <span class="badge" id="watchBadge">—</span>
+          <div class="position-main"><b id="watchTitle">—</b><small id="watchSub">—</small></div>
+        </div>
+        <p class="watch-pending" id="watchPending" hidden></p>
+        <div class="levels levels-3" id="watchLevels" hidden>
+          <div><small>Entrar em</small><b id="wlEntry">—</b></div>
+          <div><small>Stop loss</small><b id="wlStop" class="neg">—</b></div>
+          <div><small>Take profit</small><b id="wlTarget" class="pos">—</b></div>
+        </div>
+        <div class="guide">
+          <div class="guide-now"><small>O que fazer agora</small><p id="watchNow">—</p></div>
+          <p class="watch-change" id="watchChange" hidden></p>
+          <div class="guide-block"><small>Porquê</small><div id="watchWhy"></div></div>
+          <div class="guide-block"><small>Passo a passo</small><ol id="watchSteps"></ol></div>
+        </div>
+        <div class="guide-block"><small>Mudanças nesta sessão</small><div class="ops" id="watchHistory"></div></div>
+        <p class="fine-print left">Orientação educativa gerada por IA a partir do que aparece no teu ecrã. Não é aconselhamento financeiro; decide sempre com o teu stop loss.</p>
+      </article>
+    </div>
+
+    <div class="live-pane" data-live-pane="market" hidden>
     <header class="live-head">
       <button class="asset-pill" type="button" id="assetPicker" aria-label="Escolher ativo"><span id="assetLabel">BTC/USDT</span><i data-lucide="chevron-down"></i></button>
       <div class="live-quote"><strong id="price">—</strong><span class="delta" id="change">—</span></div>
-      <button class="round-btn" type="button" data-open-menu aria-label="Menu"><i data-lucide="sliders-horizontal"></i></button>
     </header>
     <div class="segmented source-switch" id="sources" role="tablist" aria-label="Fonte do gráfico">
       <button type="button" data-source="tradingview">TradingView</button>
@@ -166,6 +226,7 @@ export const shellTemplate = `
       <p class="fine-print left">Operações simuladas pela IA (conta demo de $1.000, risco 1% por operação). Copiar é por tua conta e risco; resultados passados não garantem resultados futuros.</p>
     </article>
     <p class="fine-print">Gráficos <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView Lightweight Charts™</a> · dados Binance, MetaTrader 5 e TradingView.</p>
+    </div>
   </section>
 
   <!-- LIVE INTELIGENTE -->

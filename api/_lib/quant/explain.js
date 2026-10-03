@@ -183,6 +183,7 @@ export function photoGuidance(verdict, vision, reading) {
     const decision = { direction: verdict.direction, setup: reading.signal?.setup, reasons: reading.signal?.reasons || [] };
     const plan = verdict.direction ? buildPlan(null, { direction: verdict.direction, setup: reading.signal?.setup || 'trend' }, reading.snapshot, reading.price) : null;
     const guidance = explainPlain({ decision, snapshot: reading.snapshot, context: reading.context, plan });
+    if (plan) guidance.levels = { entry: money(plan.entry), stop: money(plan.initialStop ?? plan.stop), target: money(plan.target) };
     if (verdict.direction === 0 && verdict.agreement === 'diverge') {
       guidance.why.unshift('A foto e o mercado ao vivo não concordam: o gráfico da imagem sugere um lado, mas os dados em tempo real apontam para o outro. Quando há esta dúvida, o mais inteligente é não arriscar.');
     }
