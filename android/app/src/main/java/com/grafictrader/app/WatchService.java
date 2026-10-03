@@ -11,6 +11,9 @@ import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
@@ -77,6 +80,7 @@ public class WatchService extends Service {
     private static final double THRESHOLD = 1.5;
     private static final int SIG_W = 96;
     private static final int SIG_H = 54;
+    private static final long CLEAN_FRAME_TIMEOUT_MS = 900;
 
     private static volatile Listener listener;
     private static volatile boolean running;
@@ -101,7 +105,7 @@ public class WatchService extends Service {
     private VirtualDisplay display;
     private ImageReader reader;
     private Image latest;
-    private Bubble bubble;
+    private volatile Bubble bubble;
     private TextToSpeech tts;
     private ComponentCallbacks configCallbacks;
 
@@ -109,6 +113,8 @@ public class WatchService extends Service {
     private boolean voice;
     private volatile boolean inflight;
     private byte[] lastSig;
+    private volatile float captureScale = 1f;
+    private volatile long frameCount;
     private long lastSentAt;
     private volatile long minGap = MIN_GAP_MS;
     private long startedAt;
@@ -200,6 +206,7 @@ public class WatchService extends Service {
         DisplayMetrics metrics = new DisplayMetrics();
         windowManager.getDefaultDisplay().getRealMetrics(metrics);
         float scale = Math.min(1f, (float) MAX_SIDE / Math.max(metrics.widthPixels, metrics.heightPixels));
+        captureScale = scale;
         int w = Math.max(2, Math.round(metrics.widthPixels * scale) & ~1);
         int h = Math.max(2, Math.round(metrics.heightPixels * scale) & ~1);
         return new int[] {w, h, metrics.densityDpi};
@@ -218,6 +225,7 @@ public class WatchService extends Service {
             synchronized (imageLock) {
                 if (latest != null) latest.close();
                 latest = image;
+                frameCount += 1;
             }
         }, capture);
         return imageReader;
@@ -270,17 +278,42 @@ public class WatchService extends Service {
         }
     }
 
-    private static byte[] signature(Bitmap bitmap) {
-        Bitmap small = Bitmap.createScaledBitmap(bitmap, SIG_W, SIG_H, true);
+    /**
+     * Tiny grayscale fingerprint of the frame. The bubble's area is blanked out
+     * so moving or updating the bubble never counts as a chart change.
+     */
+    private byte[] signature(Bitmap bitmap) {
+        Bubble current = bubble;
+        Rect mask = current == null ? null : current.bounds();
+        Bitmap source = bitmap;
+        if (mask != null) {
+            if (!source.isMutable()) source = bitmap.copy(Bitmap.Config.ARGB_8888, true);
+            float scale = captureScale;
+            int pad = 4;
+            Rect scaled = new Rect(
+                    Math.round(mask.left * scale) - pad,
+                    Math.round(mask.top * scale) - pad,
+                    Math.round(mask.right * scale) + pad,
+                    Math.round(mask.bottom * scale) + pad);
+            new Canvas(source).drawRect(scaled, blackPaint());
+        }
+        Bitmap small = Bitmap.createScaledBitmap(source, SIG_W, SIG_H, true);
         int[] pixels = new int[SIG_W * SIG_H];
         small.getPixels(pixels, 0, SIG_W, 0, 0, SIG_W, SIG_H);
-        if (small != bitmap) small.recycle();
+        if (small != source) small.recycle();
+        if (source != bitmap) source.recycle();
         byte[] out = new byte[pixels.length];
         for (int i = 0; i < pixels.length; i++) {
             int p = pixels[i];
             out[i] = (byte) ((((p >> 16) & 0xFF) * 299 + ((p >> 8) & 0xFF) * 587 + (p & 0xFF) * 114) / 1000);
         }
         return out;
+    }
+
+    private static android.graphics.Paint blackPaint() {
+        android.graphics.Paint paint = new android.graphics.Paint();
+        paint.setColor(Color.BLACK);
+        return paint;
     }
 
     private static double diff(byte[] a, byte[] b) {
@@ -307,14 +340,29 @@ public class WatchService extends Service {
         double change = diff(sig, lastSig);
         if (lastSentAt != 0 && change < THRESHOLD && now - lastSentAt < MAX_GAP_MS) return;
 
-        lastSig = sig;
         lastSentAt = now;
         inflight = true;
-        // Hide the bubble so it does not cover the chart in the frame we send.
+        if (bubble == null) {
+            grabAndSend();
+            return;
+        }
+        // Hide the bubble first, then wait for a frame drawn without it, so the
+        // AI never sees the bubble covering the chart.
         main.post(() -> {
             if (bubble != null) bubble.setHidden(true);
+            long frameAtHide = frameCount;
+            long deadline = System.currentTimeMillis() + CLEAN_FRAME_TIMEOUT_MS;
+            capture.postDelayed(() -> waitForCleanFrame(frameAtHide, deadline), 120);
         });
-        capture.postDelayed(this::grabAndSend, 300);
+    }
+
+    private void waitForCleanFrame(long frameAtHide, long deadline) {
+        if (!running) {
+            inflight = false;
+            return;
+        }
+        if (frameCount > frameAtHide || System.currentTimeMillis() >= deadline) grabAndSend();
+        else capture.postDelayed(() -> waitForCleanFrame(frameAtHide, deadline), 50);
     }
 
     private void grabAndSend() {
@@ -324,10 +372,14 @@ public class WatchService extends Service {
         });
         if (bitmap == null || !running) {
             inflight = false;
+            // Nothing was sent (e.g. right after a rotation): try again on the next tick.
+            lastSentAt = 0;
             return;
         }
         ByteArrayOutputStream jpeg = new ByteArrayOutputStream();
         bitmap.compress(Bitmap.CompressFormat.JPEG, 80, jpeg);
+        // Fingerprint of the frame actually sent (bubble-free) for the next change check.
+        lastSig = signature(bitmap);
         bitmap.recycle();
         String image = "data:image/jpeg;base64," + Base64.encodeToString(jpeg.toByteArray(), Base64.NO_WRAP);
         network.execute(() -> send(image));

@@ -2,6 +2,7 @@ package com.grafictrader.app;
 
 import android.content.Context;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -36,6 +37,7 @@ final class Bubble {
     private TextView stop;
     private WindowManager.LayoutParams params;
     private boolean expanded;
+    private volatile Rect bounds;
 
     Bubble(Context context, Runnable onOpenApp, Runnable onStop) {
         this.context = context;
@@ -104,7 +106,20 @@ final class Bubble {
         params.x = dp(12);
         params.y = dp(140);
         root.setOnTouchListener(new DragListener());
+        root.getViewTreeObserver().addOnGlobalLayoutListener(this::updateBounds);
         windowManager.addView(root, params);
+    }
+
+    /** Where the bubble is on screen, in real pixels, or null when it is not shown. */
+    Rect bounds() {
+        return bounds;
+    }
+
+    private void updateBounds() {
+        if (root == null || root.getWidth() == 0) return;
+        int[] location = new int[2];
+        root.getLocationOnScreen(location);
+        bounds = new Rect(location[0], location[1], location[0] + root.getWidth(), location[1] + root.getHeight());
     }
 
     void update(String label, String side, String assetText, String detailText) {
@@ -128,6 +143,7 @@ final class Bubble {
             // already detached
         }
         root = null;
+        bounds = null;
     }
 
     private void toggle() {
@@ -171,6 +187,7 @@ final class Bubble {
                         params.x = startX + Math.round(dx);
                         params.y = startY + Math.round(dy);
                         windowManager.updateViewLayout(root, params);
+                        updateBounds();
                     }
                     return true;
                 case MotionEvent.ACTION_UP:
