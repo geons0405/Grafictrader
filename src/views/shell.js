@@ -1,8 +1,6 @@
 import { ASSETS, INTERVALS } from '../lib/store.js';
 
-const assetChips = ASSETS.map(asset =>
-  `<button class="chip" type="button" data-symbol="${asset.symbol}" data-search="${asset.short} ${asset.name}"><span class="chip-dot"></span>${asset.short}</button>`
-).join('');
+const assetOptions = ASSETS.map(asset => `<option value="${asset.symbol}">${asset.short}/USDT</option>`).join('');
 
 const timeframeButtons = INTERVALS.map(item =>
   `<button type="button" data-interval="${item.value}">${item.label}</button>`
@@ -24,7 +22,7 @@ export const shellTemplate = `
     <div class="landing-hero">
       <span class="eyebrow">AI Market Intelligence</span>
       <h1>Entende o mercado.<br><span class="muted-text">Não apenas o gráfico.</span></h1>
-      <p>Gráficos ao vivo, leitura técnica, mecânica de mercado e análise de fotos com IA, num só lugar.</p>
+      <p>Fotografa um gráfico e recebe a orientação da IA: comprar, vender ou aguardar. No LIVE, acompanha a IA a operar em tempo real.</p>
     </div>
     <div class="landing-preview" aria-hidden="true">
       <div class="preview-card">
@@ -84,82 +82,11 @@ export const shellTemplate = `
     <p class="switch" data-server-only>Já tens conta? <button type="button" data-route="login">Entrar</button></p>
   </section>
 
-  <!-- DASHBOARD / LIVE -->
-  <section id="live" class="screen">
-    <header class="greeting">
-      <div>
-        <h1>Olá, <b data-user-name>trader</b></h1>
-        <p>O que queres analisar hoje?</p>
-      </div>
-      <button class="round-btn" type="button" data-theme-toggle aria-label="Alternar tema"><i data-lucide="moon" class="when-light"></i><i data-lucide="sun" class="when-dark"></i></button>
-    </header>
-
-    <div class="search-row">
-      <label class="search"><i data-lucide="search"></i><input id="assetSearch" type="search" placeholder="Procurar ativo" autocomplete="off" aria-label="Procurar ativo"></label>
-      <button class="square-btn" type="button" data-open-sheet aria-label="Preferências"><i data-lucide="sliders-horizontal"></i></button>
-    </div>
-
-    <div class="chips" id="assetChips">${assetChips}</div>
-
-    <div class="bento">
-      <article class="card price-card">
-        <small id="pairLabel">BTC/USDT</small>
-        <strong id="price">—</strong>
-        <span class="delta" id="change">—</span>
-      </article>
-      <article class="card upload-card">
-        <button class="well" type="button" data-route="foto">
-          <i data-lucide="upload"></i>
-          <b>Analisar gráfico</b>
-          <small>Foto ou imagem · IA multimodal</small>
-        </button>
-        <button class="btn btn-primary btn-sm" type="button" data-route="foto">Abrir câmara</button>
-      </article>
-      <article class="card status-card">
-        <span class="status-icon"><i data-lucide="radio"></i></span>
-        <span class="status-text"><b id="connection">A ligar</b><small id="streamState">A aguardar dados</small></span>
-      </article>
-    </div>
-
-    <div class="segmented" id="timeframes" role="tablist" aria-label="Timeframe">${timeframeButtons}</div>
-
-    <article class="card chart-card">
-      <header class="card-head"><b>Gráfico</b><small id="chartMeta">Binance · 5 minutos</small></header>
-      <div id="chart" class="chart"></div>
-    </article>
-
-    <div class="bento-2">
-      <article class="card stat-card">
-        <small>RSI 14</small>
-        <strong id="rsi">—</strong>
-        <span id="rsiState">Sem dados</span>
-        <div class="mini-bars" id="volumeBars" aria-hidden="true"></div>
-      </article>
-      <article class="card ring-card">
-        <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="48" class="ring-track" pathLength="100"/><circle cx="60" cy="60" r="48" class="ring-value" pathLength="100" id="confidenceRing" style="--value:0"/></svg>
-        <div class="ring-center"><strong id="confidence">—</strong><small>Confluência</small></div>
-      </article>
-    </div>
-
-    <article class="card reading-card">
-      <header class="card-head"><b>Leitura técnica</b><small>automática · regras</small></header>
-      <div class="pill-row">
-        <span class="pill" id="trend"><i data-lucide="trending-up" class="when-up"></i><i data-lucide="trending-down" class="when-down"></i><span>—</span></span>
-        <span class="pill" id="structure">—</span>
-      </div>
-      <p id="readingSummary" class="reading-summary">A aguardar dados suficientes para gerar a leitura.</p>
-      <div class="levels">
-        <div><small>Suporte</small><b id="support">—</b></div>
-        <div><small>Resistência</small><b id="resistance">—</b></div>
-      </div>
-      <p class="fine-print left">Regras objetivas (EMA 20/50, estrutura de swings, RSI de Wilder, momentum). Não é uma previsão.</p>
-    </article>
-  </section>
-
   <!-- FOTO -->
   <section id="foto" class="screen">
     <header class="page-head">
-      <div><h1>Foto do gráfico</h1><p>Captura ou carrega uma imagem para análise por IA</p></div>
+      <div><h1>Foto</h1><p>Fotografa ou carrega um gráfico e recebe a orientação da IA</p></div>
+      <button class="round-btn" type="button" data-open-menu aria-label="Menu"><i data-lucide="sliders-horizontal"></i></button>
     </header>
     <article class="card camera-card">
       <div class="camera" id="camera">
@@ -169,67 +96,136 @@ export const shellTemplate = `
       </div>
       <div class="camera-actions">
         <button class="btn btn-soft" type="button" id="startCam"><i data-lucide="camera"></i>Abrir câmara</button>
-        <button class="btn btn-primary" type="button" id="snap" disabled>Capturar</button>
+        <button class="btn btn-primary" type="button" id="snap" disabled>Fotografar</button>
       </div>
-      <label class="btn btn-ghost upload-file"><i data-lucide="image"></i>Carregar imagem<input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" hidden></label>
+      <label class="btn btn-ghost upload-file"><i data-lucide="upload"></i>Carregar imagem do gráfico<input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" hidden></label>
     </article>
     <div id="analysis" class="analysis" hidden></div>
-    <p class="fine-print">A IA descreve o que é visível na imagem; não garante resultados.</p>
+    <p class="fine-print">Orientação educativa gerada por IA. Não é aconselhamento financeiro nem garantia de resultado.</p>
   </section>
 
-  <!-- INTEL -->
-  <section id="intel" class="screen">
-    <header class="page-head">
-      <div><h1>Live Intelligence</h1><p id="intelSubtitle">Mercado · mecânica · notícias</p></div>
-      <button class="round-btn" type="button" id="intelRefresh" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button>
+  <!-- LIVE -->
+  <section id="live" class="screen">
+    <header class="live-head">
+      <label class="asset-pill"><span class="sr-only">Ativo</span><select id="assetSelect" aria-label="Ativo">${assetOptions}</select><i data-lucide="chevron-down"></i></label>
+      <div class="live-quote"><strong id="price">—</strong><span class="delta" id="change">—</span></div>
+      <button class="round-btn" type="button" data-open-menu aria-label="Menu"><i data-lucide="sliders-horizontal"></i></button>
     </header>
-
-    <div class="pulse">
-      <article class="card mini"><small>BTC</small><b id="pulseBtcPrice">—</b><span class="delta" id="pulseBtcChange">—</span></article>
-      <article class="card mini"><small>ETH</small><b id="pulseEthPrice">—</b><span class="delta" id="pulseEthChange">—</span></article>
-      <article class="card mini"><small>Pulso</small><b id="pulseState">—</b><span>24h</span></article>
-    </div>
-
-    <article class="card">
-      <header class="card-head"><b id="intelAssetLabel">BTC/USDT</b><small id="intelMarketChange">—</small></header>
-      <div class="kv-grid">
-        <div><small>Preço</small><b id="intelMarketPrice">—</b></div>
-        <div><small>Volume 24h</small><b id="intelVolume">—</b></div>
-        <div><small>Máx. 24h</small><b id="intelHigh">—</b></div>
-        <div><small>Mín. 24h</small><b id="intelLow">—</b></div>
-      </div>
+    <div class="segmented" id="timeframes" role="tablist" aria-label="Timeframe">${timeframeButtons}</div>
+    <article class="card chart-card">
+      <header class="card-head"><b><span class="dot" id="liveDot"></span><span id="connection">A ligar</span></b><small id="chartMeta">Binance · 5 minutos</small></header>
+      <div id="chart" class="chart"></div>
     </article>
 
-    <article class="card mechanics-card" aria-live="polite">
-      <header class="card-head"><b>Market Mechanics</b><span class="pill pill-strong" id="mechanicsState">A analisar</span></header>
-      <small class="muted-line" id="mechanicsQuality">—</small>
-      <div class="metric-grid" id="mechanicsGrid"></div>
-      <p class="reading-summary" id="mechanicsNote">A recolher evidência mecânica do mercado…</p>
-      <div class="inset" id="mechanicsMemory">Memória · a aguardar histórico…</div>
-      <div class="ai-box">
-        <header><span><i data-lucide="sparkles"></i>Interpretação IA</span><small id="mechanicsAiMeta">Gemini</small></header>
-        <p id="mechanicsAi">A aguardar dados…</p>
+    <article class="card instructor" id="instructor" aria-live="polite">
+      <header class="card-head">
+        <b class="instructor-title"><i data-lucide="bot"></i>IA instrutora</b>
+        <small id="instructorMode">a carregar…</small>
+      </header>
+      <div class="position" id="positionBox">
+        <span class="badge" id="positionBadge">—</span>
+        <div class="position-main">
+          <b id="positionTitle">A preparar o instrutor…</b>
+          <small id="positionSub">A analisar o histórico de velas.</small>
+        </div>
+        <div class="position-pnl"><strong id="positionPnl">—</strong><small id="positionPnlSub"></small></div>
       </div>
+      <div class="levels levels-3" id="positionLevels" hidden>
+        <div><small>Entrada</small><b id="lvEntry">—</b></div>
+        <div><small>Stop</small><b id="lvStop" class="neg">—</b></div>
+        <div><small>Alvo</small><b id="lvTarget" class="pos">—</b></div>
+      </div>
+      <ul class="reasons" id="instructorReasons"></ul>
+      <div class="stat-row">
+        <div><small>Win rate</small><b id="stWin">—</b></div>
+        <div><small>Operações</small><b id="stTrades">—</b></div>
+        <div><small>Conta demo</small><b id="stPnl">—</b></div>
+      </div>
+      <div class="ops" id="recentOps"></div>
+      <p class="fine-print left">Operações simuladas pela IA (conta demo de $1.000, risco 1% por operação). Copiar é por tua conta e risco; resultados passados não garantem resultados futuros.</p>
     </article>
+  </section>
 
-    <div class="feed-head">
-      <b id="intelCount">0 eventos</b>
-      <small id="intelStatus">A ligar às fontes…</small>
+  <!-- LIVE INTELIGENTE -->
+  <section id="intel" class="screen term-screen">
+    <header class="term-top">
+      <button class="round-btn sm" type="button" data-route="live" aria-label="Voltar ao LIVE"><i data-lucide="arrow-left"></i></button>
+      <div class="term-brand"><b>GRAFICTRADER AI</b><span>/ LIVE INTELIGENTE</span></div>
+      <button class="round-btn sm" type="button" id="intelRefresh" aria-label="Atualizar"><i data-lucide="refresh-cw"></i></button>
+    </header>
+    <div class="term-status">
+      <span><i class="alive"></i><b id="tAlive">ATIVO</b></span>
+      <span><i data-lucide="flame"></i><b id="tStreak">0</b> WIN STREAK</span>
+      <span><small>DESDE</small><b id="tUptime">—</b></span>
+      <span><small>CICLO</small><b id="tCycle">#—</b></span>
+      <span><small>ATIVO</small><b id="tSymbol">BTC/USDT</b></span>
     </div>
-    <div class="chips" id="intelTags">
-      <button class="chip active" type="button" data-tag="ALL">Todos</button>
-      <button class="chip" type="button" data-tag="BTC">#BTC</button>
-      <button class="chip" type="button" data-tag="CRYPTO">#Crypto</button>
-      <button class="chip" type="button" data-tag="MACRO">#Macro</button>
-      <button class="chip" type="button" data-tag="NEWS">#News</button>
-      <button class="chip" type="button" data-tag="MARKET">#Market</button>
+
+    <div class="term-tiles">
+      <div class="term-box tile"><small>SALDO ATUAL</small><strong id="tBalance">—</strong><div class="tile-spark" id="tBalanceSpark"></div><span id="tBalanceSub">inicial: $1,000.00</span></div>
+      <div class="term-box tile"><small>P&amp;L TOTAL</small><strong id="tPnl">—</strong><div class="tile-spark" id="tPnlSpark"></div><span id="tPnlSub">—</span></div>
+      <div class="term-box tile"><small>POSIÇÃO</small><strong id="tPosition">—</strong><span id="tPositionSub">—</span></div>
+      <div class="term-box tile"><small>WIN RATE</small><strong id="tWinRate">—</strong><span id="tWinSub">—</span></div>
     </div>
-    <div class="feed" id="intelFeed" aria-live="polite"></div>
+
+    <div class="term-box">
+      <div class="term-label"><span>// BALANCE HISTORY</span><span id="tEquityMeta">—</span></div>
+      <div id="equityChart" class="equity-chart"></div>
+    </div>
+
+    <div class="term-grid">
+      <div class="term-box">
+        <div class="term-label"><span>// ACTIVITY LOG</span><span id="tLogCount">—</span></div>
+        <div class="term-log" id="tLog"></div>
+      </div>
+      <div class="term-box">
+        <div class="term-label"><span id="tBookTitle">// ORDER BOOK</span><span id="tSpread">spread —</span></div>
+        <div class="term-book" id="tBook"></div>
+      </div>
+    </div>
+
+    <div class="term-grid">
+      <div class="term-box">
+        <div class="term-label"><span>// MOTOR ESTATÍSTICO</span><span id="tRegime">—</span></div>
+        <div class="term-quant" id="tQuant"></div>
+      </div>
+      <div class="term-box">
+        <div class="term-label"><span>// CONTEXTO AO VIVO</span><span id="tContextScore">—</span></div>
+        <div class="term-context" id="tContext"></div>
+        <div class="term-label second"><span>// DECISÃO AGORA</span><span id="tDecision">—</span></div>
+        <ul class="term-reasons" id="tDecisionReasons"></ul>
+      </div>
+    </div>
+
+    <div class="term-box">
+      <div class="term-label"><span>// MARKET MECHANICS</span><span id="mechanicsState">—</span></div>
+      <div class="term-quant" id="mechanicsGrid"></div>
+      <p class="term-note" id="mechanicsNote">A recolher evidência mecânica do mercado…</p>
+      <div class="term-ai"><span><i data-lucide="sparkles"></i>LEITURA IA</span><p id="mechanicsAi">A aguardar dados…</p></div>
+    </div>
+
+    <div class="term-box">
+      <div class="term-label"><span>// NOTÍCIAS E EVENTOS AO VIVO</span><span id="intelStatus">—</span></div>
+      <div class="term-tags" id="intelTags">
+        <button class="active" type="button" data-tag="ALL">TODOS</button>
+        <button type="button" data-tag="BTC">#BTC</button>
+        <button type="button" data-tag="CRYPTO">#CRYPTO</button>
+        <button type="button" data-tag="MACRO">#MACRO</button>
+        <button type="button" data-tag="MARKET">#MARKET</button>
+      </div>
+      <div class="term-feed" id="intelFeed"></div>
+    </div>
+
+    <div class="term-bots" id="tBots"></div>
+    <p class="fine-print">Conta demo simulada pela IA. Não executa ordens reais e não é aconselhamento financeiro.</p>
   </section>
 
   <!-- PERFIL -->
   <section id="perfil" class="screen">
-    <header class="page-head"><div><h1>Perfil</h1><p>Conta e preferências</p></div></header>
+    <header class="page-head">
+      <button class="round-btn" type="button" data-route="live" aria-label="Voltar"><i data-lucide="arrow-left"></i></button>
+      <div class="grow"><h1>Perfil</h1><p>Conta e preferências</p></div>
+    </header>
     <article class="card profile-card">
       <span class="avatar" data-user-initial>G</span>
       <div><b data-user-name>—</b><small data-user-email>—</small></div>
@@ -242,18 +238,14 @@ export const shellTemplate = `
       <header class="card-head"><b>Sessão</b><small data-session-mode>—</small></header>
       <button class="btn btn-soft" type="button" id="logoutBtn"><i data-lucide="log-out"></i>Terminar sessão</button>
     </article>
-    <p class="fine-print">Grafictrader · apenas análise, sem execução de ordens.</p>
+    <p class="fine-print">Grafictrader · análise e operações simuladas, sem execução de ordens reais.</p>
   </section>
 
-  <!-- PREFERENCES SHEET -->
-  <div class="sheet-backdrop" id="sheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
-      <div class="sheet-grip"></div>
-      <header class="card-head"><b id="sheetTitle">Preferências</b><button class="round-btn sm" type="button" data-close-sheet aria-label="Fechar"><i data-lucide="x"></i></button></header>
-      <small class="sheet-label">Timeframe</small>
-      <div class="segmented" data-sheet-timeframes>${timeframeButtons}</div>
-      <small class="sheet-label">Tema</small>
-      <div class="segmented" data-theme-group>${themeButtons}</div>
+  <!-- MENU (top-right) -->
+  <div class="menu-backdrop" id="menu" hidden>
+    <div class="menu" role="menu" aria-label="Menu">
+      <button type="button" role="menuitem" data-route="intel"><span class="menu-icon"><i data-lucide="activity"></i></span><span><b>Live Inteligente</b><small>Informação e estatística em tempo real</small></span></button>
+      <button type="button" role="menuitem" data-route="perfil"><span class="menu-icon"><i data-lucide="user"></i></span><span><b>Perfil</b><small>Conta, tema e sessão</small></span></button>
     </div>
   </div>
 
@@ -267,9 +259,7 @@ export const shellTemplate = `
   </div>
 
   <nav class="tabbar" aria-label="Navegação principal">
-    <button type="button" data-tab="live"><i data-lucide="home"></i><span>Início</span></button>
-    <button type="button" data-tab="foto"><i data-lucide="camera"></i><span>Foto</span></button>
-    <button type="button" data-tab="intel"><i data-lucide="chart-pie"></i><span>Intel</span></button>
-    <button type="button" data-tab="perfil"><i data-lucide="user"></i><span>Perfil</span></button>
+    <button type="button" data-tab="foto"><i data-lucide="camera"></i><span>FOTO</span></button>
+    <button type="button" data-tab="live"><i data-lucide="radio"></i><span>LIVE</span></button>
   </nav>
 </div>`;

@@ -1,28 +1,11 @@
-import { $, api, escapeHtml } from '../lib/dom.js';
+import { $, api, escapeHtml, fmtPrice, pairLabel } from '../lib/dom.js';
+import { market } from '../lib/store.js';
 import { renderIcons } from '../lib/icons.js';
 
 const MAX_SIDE = 1600;
-const LABELS = ['RESUMO', 'TENDÊNCIA', 'ESTRUTURA', 'NÍVEIS', 'INDICADORES', 'CENÁRIO A', 'CENÁRIO B', 'RISCO', 'CONFIANÇA VISUAL'];
 
 let stream = null;
 let busy = false;
-
-export function parseAnalysis(raw) {
-  const result = { raw };
-  LABELS.forEach(label => { result[label] = 'Não identificado na imagem.'; });
-  let current = null;
-  for (const line of String(raw).split(/\r?\n/)) {
-    const match = line.replace(/\*\*/g, '').match(/^\s*([^:]+):\s*(.*)$/);
-    const label = match?.[1].trim().toUpperCase();
-    if (label && LABELS.includes(label)) {
-      current = label;
-      result[label] = match[2].trim() || 'Não identificado na imagem.';
-    } else if (current && line.trim()) {
-      result[current] += ' ' + line.trim();
-    }
-  }
-  return result;
-}
 
 /** Draws a source onto a canvas no larger than MAX_SIDE and returns a JPEG data URL. */
 function toJpeg(source, width, height) {
@@ -44,22 +27,70 @@ function showPanel(html) {
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+const DECISION_ICON = { COMPRAR: 'trending-up', VENDER: 'trending-down', AGUARDAR: 'pause' };
+const AGREEMENT_LABEL = {
+  confirma: 'Motor ao vivo confirma',
+  diverge: 'Motor ao vivo diverge',
+  neutro: 'Motor ao vivo sem sinal',
+  'sem dados ao vivo': 'Ativo fora do motor ao vivo'
+};
+
+const list = items => (items || []).map(item => `<li>${escapeHtml(item)}</li>`).join('');
+
+function renderResult(image, data) {
+  const v = data.verdict;
+  const vis = data.vision;
+  const side = v.direction > 0 ? 'up' : v.direction < 0 ? 'down' : 'flat';
+  const live = data.live;
+  const quant = live?.quant;
+  const f2 = n => (Number.isFinite(n) ? n.toFixed(2) : '—');
+  return `
+    <div class="verdict" data-side="${side}">
+      <span class="verdict-icon"><i data-lucide="${DECISION_ICON[v.decision]}"></i></span>
+      <div class="verdict-main">
+        <small>Orientação da IA</small>
+        <strong>${v.decision}</strong>
+        <span>${escapeHtml(v.headline)}</span>
+      </div>
+      <div class="verdict-ring">
+        <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26" class="ring-track" pathLength="100"/><circle cx="32" cy="32" r="26" class="ring-value" pathLength="100" style="--value:${v.confidence}"/></svg>
+        <b>${v.confidence}%</b>
+      </div>
+    </div>
+    <div class="pill-row">
+      <span class="pill">${escapeHtml(vis.asset || 'Ativo não identificado')}</span>
+      <span class="pill">${escapeHtml(vis.timeframe || 'timeframe ?')}</span>
+      <span class="pill" data-agree="${escapeHtml(v.agreement)}">${escapeHtml(AGREEMENT_LABEL[v.agreement] || v.agreement)}</span>
+    </div>
+    ${v.direction !== 0 ? `
+    <div class="levels levels-3">
+      <div><small>Entrada</small><b>${escapeHtml(vis.entry || '—')}</b></div>
+      <div><small>Stop</small><b class="neg">${escapeHtml(vis.stop || '—')}</b></div>
+      <div><small>Alvos</small><b class="pos">${escapeHtml(vis.targets.join(' · ') || '—')}</b></div>
+    </div>` : ''}
+    <div class="analysis-item"><small>Porquê</small><ul class="reasons">${list([...v.reasons, ...vis.reasons])}</ul></div>
+    ${vis.structure || vis.indicators ? `<div class="analysis-item"><small>Leitura do gráfico</small><p>${escapeHtml([vis.structure, vis.indicators, vis.patterns.join(', ')].filter(Boolean).join(' · '))}</p></div>` : ''}
+    ${vis.risks.length ? `<div class="analysis-item"><small>Riscos</small><ul class="reasons">${list(vis.risks)}</ul></div>` : ''}
+    ${live ? `
+    <div class="analysis-item">
+      <small>Motor ao vivo · ${escapeHtml(pairLabel(live.symbol))} ${escapeHtml(live.interval)} · ${fmtPrice(live.price)}</small>
+      <p>${escapeHtml(live.signal.action)} · ${escapeHtml(live.signal.regimeLabel)}${live.context ? ' · contexto ' + Math.round((live.context.score || 0) * 100) + '%' : ''}</p>
+      ${quant ? `<div class="quant-chips"><span>Hurst ${f2(quant.hurst)}</span><span>VR ${f2(quant.varianceRatio)}</span><span>Kalman z ${f2(quant.kalmanZ)}</span><span>Entropia ${f2(quant.entropy)}</span><span>VPIN ${f2(quant.vpin)}</span></div>` : ''}
+    </div>` : ''}
+    <div class="analysis-preview"><img src="${image}" alt="Gráfico analisado"><div><small>Resumo</small><b>${escapeHtml(vis.summary || '—')}</b></div></div>
+    <p class="fine-print left">${escapeHtml(data.disclaimer || '')} Imagem: qualidade ${escapeHtml(vis.imageQuality || '—')} · ${escapeHtml(data.provider)}.</p>
+    <button class="btn btn-soft" type="button" id="retryPhoto"><i data-lucide="refresh-cw"></i>Nova análise</button>`;
+}
+
 async function analyze(image) {
   if (busy) return;
   busy = true;
   showPanel(`
-    <header class="card-head"><b>Grafictrader AI</b><span class="pill">A processar</span></header>
-    <div class="loading"><span class="spinner"></span><b>A ler o gráfico…</b><small>Tendência · estrutura · níveis · indicadores · cenários</small></div>`);
+    <header class="card-head"><b>Grafictrader AI</b><span class="pill">A analisar</span></header>
+    <div class="loading"><span class="spinner"></span><b>A ler o gráfico e a cruzar com o mercado ao vivo…</b><small>Estrutura · níveis · padrões · motor estatístico · contexto</small></div>`);
   try {
-    const data = await api('/api/analyze', { method: 'POST', body: { image } });
-    const p = parseAnalysis(String(data.analysis || ''));
-    const sections = LABELS.slice(1).map(label =>
-      `<div class="analysis-item"><small>${escapeHtml(label)}</small><p>${escapeHtml(p[label])}</p></div>`).join('');
-    showPanel(`
-      <header class="card-head"><b>Análise concluída</b><span class="pill">${escapeHtml(data.provider || 'IA')}</span></header>
-      <div class="analysis-preview"><img src="${image}" alt="Gráfico analisado"><div><small>Resumo</small><b>${escapeHtml(p.RESUMO)}</b></div></div>
-      <div class="analysis-list">${sections}</div>
-      <button class="btn btn-soft" type="button" id="retryPhoto"><i data-lucide="refresh-cw"></i>Nova análise</button>`);
+    const data = await api('/api/analyze', { method: 'POST', body: { image, symbol: market.symbol, interval: market.interval } });
+    showPanel(renderResult(image, data));
   } catch (error) {
     const hint = error.status === 401 ? 'Inicia sessão novamente para usar a IA.'
       : error.status === 429 ? 'Atingiste o limite de análises. Aguarda uns minutos.'

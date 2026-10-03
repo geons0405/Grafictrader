@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   try {
     const [tickers, candles] = await Promise.all([
       getBinanceTicker([symbol]),
-      getBinanceCandles(symbol, interval, 120)
+      getBinanceCandles(symbol, interval, 300)
     ]);
     const ticker = tickers[0];
 

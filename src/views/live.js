@@ -1,38 +1,46 @@
-import { createChart, CandlestickSeries } from 'lightweight-charts';
-import { $, $$, api, fmtPrice, fmtPct, pairLabel } from '../lib/dom.js';
+import { createChart, CandlestickSeries, createSeriesMarkers, LineStyle } from 'lightweight-charts';
+import { $, $$, api, escapeHtml, fmtPrice, fmtPriceShort, fmtPct, pairLabel, fmtTime } from '../lib/dom.js';
 import { chartOptions, seriesOptions, onThemeChange, resolvedTheme } from '../lib/theme.js';
-import { technicalReading } from '../lib/indicators.js';
 import { market, setMarket, onMarketChange, intervalName } from '../lib/store.js';
 
 const POLL_MS = 5000;
+const INSTRUCTOR_MS = 15000;
 const WS_BASE = 'wss://data-stream.binance.vision/ws/';
 
 let chart = null;
 let series = null;
+let markers = null;
+let priceLines = [];
 let candles = [];
 let source = '';
 let ticker = null;
+let instructor = null;
 let ws = null;
 let wsRetry = 0;
 let reconnectTimer = null;
 let pollTimer = null;
+let instructorTimer = null;
 let active = false;
 let loadToken = 0;
 
-function setConnection(label, detail, live = false) {
+const semantic = () => (resolvedTheme() === 'dark'
+  ? { up: '#4ade80', down: '#f87171', neutral: '#d1d1d6' }
+  : { up: '#15803d', down: '#dc2626', neutral: '#3a3a3d' });
+
+function setConnection(label, live = false) {
   $('#connection').textContent = label;
-  $('#streamState').textContent = detail;
-  $('.status-card').classList.toggle('is-live', live);
+  $('#liveDot').classList.toggle('on', live);
 }
 
 function ensureChart() {
   if (chart) return;
-  const el = $('#chart');
-  chart = createChart(el, { ...chartOptions(resolvedTheme()), autoSize: true });
+  chart = createChart($('#chart'), { ...chartOptions(resolvedTheme()), autoSize: true });
   series = chart.addSeries(CandlestickSeries, seriesOptions(resolvedTheme()));
+  markers = createSeriesMarkers(series, []);
   onThemeChange(theme => {
     chart.applyOptions(chartOptions(theme));
     series.applyOptions(seriesOptions(theme));
+    renderOverlay();
   });
 }
 
@@ -41,49 +49,129 @@ function upsertCandle(candle) {
   if (last && last.time === candle.time) candles[candles.length - 1] = candle;
   else if (!last || candle.time > last.time) candles.push(candle);
   else return;
-  if (candles.length > 500) candles.shift();
+  if (candles.length > 600) candles.shift();
   series.update(candle);
 }
 
-function renderSummary() {
+function renderQuote() {
   const last = candles.at(-1);
-  $('#pairLabel').textContent = pairLabel(market.symbol);
   $('#price').textContent = last ? fmtPrice(last.close) : '—';
-  const change = $('#change');
   const pct = Number(ticker?.change24h);
-  change.textContent = Number.isFinite(pct) ? fmtPct(pct) + ' · 24h' : '—';
+  const change = $('#change');
+  change.textContent = Number.isFinite(pct) ? fmtPct(pct) + ' 24h' : '—';
   change.dataset.sign = Number.isFinite(pct) ? (pct >= 0 ? 'up' : 'down') : '';
   $('#chartMeta').textContent = (source || 'Mercado') + ' · ' + intervalName(market.interval);
-  renderReading();
+  if (instructor?.summary?.open && last) renderPosition(last.close);
 }
 
-function renderReading() {
-  const reading = technicalReading(candles);
-  const trend = $('#trend');
-  if (!reading) {
-    trend.dataset.dir = '';
-    trend.querySelector('span').textContent = '—';
-    $('#structure').textContent = '—';
-    $('#rsi').textContent = '—';
-    $('#rsiState').textContent = 'Sem dados';
-    $('#confidence').textContent = '—';
-    $('#confidenceRing').style.setProperty('--value', 0);
-    return;
+/* ---------- AI instructor overlay ---------- */
+
+function renderOverlay() {
+  if (!series || !instructor) return;
+  const c = semantic();
+  // Only the most recent operations, inside the visible window, to keep the chart readable.
+  const first = candles.at(-90)?.time ?? candles[0]?.time ?? 0;
+  const list = [];
+  for (const t of (instructor.trades || []).slice(-8)) {
+    if (t.openedAt >= first) {
+      list.push({ time: t.openedAt, position: t.side === 'BUY' ? 'belowBar' : 'aboveBar', shape: t.side === 'BUY' ? 'arrowUp' : 'arrowDown', color: t.side === 'BUY' ? c.up : c.down });
+    }
+    if (t.closedAt >= first) {
+      list.push({ time: t.closedAt, position: t.side === 'BUY' ? 'aboveBar' : 'belowBar', shape: 'circle', color: t.r >= 0 ? c.up : c.down, text: (t.r >= 0 ? '+' : '') + t.r + 'R' });
+    }
   }
-  trend.dataset.dir = reading.direction > 0 ? 'up' : reading.direction < 0 ? 'down' : 'flat';
-  trend.querySelector('span').textContent = reading.trend;
-  $('#structure').textContent = reading.structure.label;
-  $('#rsi').textContent = reading.rsi == null ? '—' : reading.rsi.toFixed(1);
-  $('#rsiState').textContent = reading.rsiState;
-  $('#confidence').textContent = reading.confidence + '%';
-  $('#confidenceRing').style.setProperty('--value', reading.confidence);
-  $('#readingSummary').textContent = reading.summary;
-  $('#support').textContent = fmtPrice(reading.support);
-  $('#resistance').textContent = fmtPrice(reading.resistance);
+  const open = instructor.summary?.open;
+  if (open && open.openedAt >= first) {
+    list.push({ time: open.openedAt, position: open.side === 'BUY' ? 'belowBar' : 'aboveBar', shape: open.side === 'BUY' ? 'arrowUp' : 'arrowDown', color: open.side === 'BUY' ? c.up : c.down, text: (open.side === 'BUY' ? 'COMPRA' : 'VENDA') + ' (aberta)' });
+  }
+  list.sort((a, b) => a.time - b.time);
+  markers.setMarkers(list);
 
-  const max = Math.max(...reading.volumes, 1);
-  $('#volumeBars').innerHTML = reading.volumes.map(v => `<i style="--h:${Math.max(8, Math.round((v / max) * 100))}%"></i>`).join('');
+  priceLines.forEach(line => series.removePriceLine(line));
+  priceLines = [];
+  if (open) {
+    priceLines.push(series.createPriceLine({ price: open.entry, color: c.neutral, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: 'Entrada' }));
+    priceLines.push(series.createPriceLine({ price: open.stop, color: c.down, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'Stop' }));
+    priceLines.push(series.createPriceLine({ price: open.target, color: c.up, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: 'Alvo' }));
+  }
 }
+
+function renderPosition(livePrice) {
+  const open = instructor?.summary?.open;
+  if (!open) return;
+  // Targets sit at 2R, so the initial risk is half the entry→target distance
+  // (the stop may already have moved to break-even).
+  const initialRisk = Math.abs(open.target - open.entry) / 2;
+  const r = initialRisk > 0 ? ((livePrice - open.entry) * (open.side === 'BUY' ? 1 : -1)) / initialRisk : 0;
+  const pct = ((livePrice - open.entry) / open.entry) * 100 * (open.side === 'BUY' ? 1 : -1);
+  const pnl = $('#positionPnl');
+  pnl.textContent = (r >= 0 ? '+' : '') + r.toFixed(2) + 'R';
+  pnl.dataset.sign = r >= 0 ? 'up' : 'down';
+  $('#positionPnlSub').textContent = fmtPct(pct) + ' ao vivo';
+}
+
+function renderInstructor() {
+  const data = instructor;
+  if (!data) return;
+  const s = data.summary;
+  const open = s.open;
+  $('#instructorMode').textContent = (data.mode === 'persistent' ? 'ao vivo · conta persistente' : 'ao vivo') + ' · ' + fmtTime(data.updatedAt);
+
+  const badge = $('#positionBadge');
+  if (open) {
+    badge.textContent = open.side === 'BUY' ? 'COMPRA' : 'VENDA';
+    badge.dataset.side = open.side === 'BUY' ? 'up' : 'down';
+    $('#positionTitle').textContent = `${open.side === 'BUY' ? 'Comprou' : 'Vendeu'} ${pairLabel(data.symbol)} a ${fmtPrice(open.entry)}`;
+    $('#positionSub').textContent = `Aberta às ${fmtTime(open.openedAt * 1000)} · ${open.bars} vela(s) · confiança ${open.confidence}%`;
+    $('#positionLevels').hidden = false;
+    $('#lvEntry').textContent = fmtPriceShort(open.entry);
+    $('#lvStop').textContent = fmtPriceShort(open.stop);
+    $('#lvTarget').textContent = fmtPriceShort(open.target);
+    $('#instructorReasons').innerHTML = (open.reasons || []).map(r => `<li>${escapeHtml(r)}</li>`).join('');
+    renderPosition(candles.at(-1)?.close ?? open.livePrice);
+  } else {
+    const sig = data.signal || {};
+    badge.textContent = sig.action === 'COMPRAR' ? 'COMPRAR' : sig.action === 'VENDER' ? 'VENDER' : 'AGUARDAR';
+    badge.dataset.side = sig.action === 'COMPRAR' ? 'up' : sig.action === 'VENDER' ? 'down' : '';
+    $('#positionTitle').textContent = sig.action === 'AGUARDAR' || !sig.action ? 'Sem posição · a observar o mercado' : `Sinal de ${sig.action.toLowerCase()} a formar-se`;
+    $('#positionSub').textContent = `Regime: ${sig.regimeLabel || '—'}`;
+    $('#positionLevels').hidden = true;
+    $('#positionPnl').textContent = '';
+    $('#positionPnlSub').textContent = '';
+    $('#instructorReasons').innerHTML = (sig.reasons || []).slice(0, 3).map(r => `<li>${escapeHtml(r)}</li>`).join('');
+  }
+
+  $('#stWin').textContent = s.winRate == null ? '—' : s.winRate + '%';
+  $('#stTrades').textContent = `${s.trades} (${s.wins}W/${s.losses}L)`;
+  const stPnl = $('#stPnl');
+  stPnl.textContent = (s.pnl >= 0 ? '+' : '') + '$' + Math.abs(s.pnl).toFixed(2);
+  stPnl.dataset.sign = s.pnl >= 0 ? 'up' : 'down';
+
+  $('#recentOps').innerHTML = (data.trades || []).slice(-4).reverse().map(t => `
+    <div class="op">
+      <span class="op-side" data-side="${t.side === 'BUY' ? 'up' : 'down'}">${t.side === 'BUY' ? 'COMPRA' : 'VENDA'}</span>
+      <span class="op-prices">${fmtPrice(t.entry)} → ${fmtPrice(t.exit)}<small>${escapeHtml(t.exitReason)} · ${fmtTime(t.closedAt * 1000)}</small></span>
+      <b data-sign="${t.r >= 0 ? 'up' : 'down'}">${t.r >= 0 ? '+' : ''}${t.r}R</b>
+    </div>`).join('') || '<p class="muted-line">Ainda sem operações fechadas neste timeframe.</p>';
+
+  renderOverlay();
+}
+
+async function loadInstructor() {
+  clearTimeout(instructorTimer);
+  const token = loadToken;
+  try {
+    const data = await api(`/api/instructor?symbol=${market.symbol}&interval=${market.interval}`);
+    if (token !== loadToken) return;
+    instructor = data;
+    renderInstructor();
+  } catch (error) {
+    if (token === loadToken) $('#instructorMode').textContent = 'instrutor indisponível · ' + error.message;
+  }
+  if (active) instructorTimer = setTimeout(loadInstructor, INSTRUCTOR_MS);
+}
+
+/* ---------- market data ---------- */
 
 function closeSocket() {
   clearTimeout(reconnectTimer);
@@ -94,8 +182,8 @@ function closeSocket() {
   }
 }
 
-// Real-time candles come from Binance's public market-data stream. While it is
-// not open, REST polling through /api/market keeps the chart updated.
+// Real-time candles from Binance's public market-data stream; REST polling
+// through /api/market covers the gaps while the stream is not open.
 function connectSocket() {
   closeSocket();
   if (!active || !source.toLowerCase().includes('binance')) return;
@@ -104,21 +192,22 @@ function connectSocket() {
   socket.onopen = () => {
     wsRetry = 0;
     clearTimeout(pollTimer);
-    setConnection('Ao vivo', 'Stream Binance', true);
+    setConnection('Ao vivo · Binance', true);
   };
   socket.onmessage = event => {
     const k = JSON.parse(event.data)?.k;
     if (!k || k.s !== market.symbol || k.i !== market.interval) return;
     upsertCandle({ time: k.t / 1000, open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v });
-    renderSummary();
+    renderQuote();
+    // A closed candle is when the instructor can act: refresh right away.
+    if (k.x) setTimeout(loadInstructor, 1500);
   };
   socket.onclose = () => {
     if (ws !== socket) return;
     ws = null;
-    setConnection('A reconectar', 'Polling ativo');
+    setConnection('A reconectar…');
     schedulePoll();
-    const delay = Math.min(30000, 2000 * 2 ** wsRetry++);
-    reconnectTimer = setTimeout(connectSocket, delay);
+    reconnectTimer = setTimeout(connectSocket, Math.min(30000, 2000 * 2 ** wsRetry++));
   };
 }
 
@@ -134,10 +223,10 @@ function schedulePoll() {
       ticker = data.ticker;
       source = data.source || source;
       for (const k of data.candles.slice(-10)) upsertCandle({ ...k });
-      renderSummary();
-      if (!ws) setConnection(source.includes('Binance') ? 'Atualizado' : 'Fallback', `${source} · ${POLL_MS / 1000}s`);
+      renderQuote();
+      if (!ws) setConnection(source.includes('Binance') ? 'Atualizado · Binance' : 'Atualizado · ' + source, true);
     } catch {
-      if (token === loadToken) setConnection('Instável', 'A tentar novamente');
+      if (token === loadToken) setConnection('Instável · a tentar novamente');
     }
     schedulePoll();
   }, POLL_MS);
@@ -148,9 +237,12 @@ async function load() {
   closeSocket();
   clearTimeout(pollTimer);
   candles = [];
+  instructor = null;
   series.setData([]);
-  setConnection('A ligar', 'A carregar ' + pairLabel(market.symbol));
-  renderSummary();
+  markers.setMarkers([]);
+  priceLines.forEach(line => series.removePriceLine(line));
+  priceLines = [];
+  setConnection('A ligar…');
   try {
     const data = await api(`/api/market?symbol=${market.symbol}&interval=${market.interval}`);
     if (token !== loadToken) return;
@@ -158,20 +250,21 @@ async function load() {
     ticker = data.ticker;
     source = data.source || 'Mercado';
     series.setData(candles);
-    chart.timeScale().fitContent();
-    renderSummary();
-    setConnection('Carregado', source);
+    chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, candles.length - 90), to: candles.length + 4 });
+    renderQuote();
+    setConnection('Carregado · ' + source, true);
     connectSocket();
   } catch (error) {
     if (token !== loadToken) return;
-    setConnection('Sem dados', error.message || 'Fontes de mercado indisponíveis');
+    setConnection('Sem dados · ' + (error.message || 'fontes indisponíveis'));
   }
   schedulePoll();
+  loadInstructor();
 }
 
 function syncControls() {
-  $$('#assetChips .chip').forEach(chip => chip.classList.toggle('active', chip.dataset.symbol === market.symbol));
-  $$('[data-interval]').forEach(btn => {
+  $('#assetSelect').value = market.symbol;
+  $$('#timeframes [data-interval]').forEach(btn => {
     const on = btn.dataset.interval === market.interval;
     btn.classList.toggle('active', on);
     btn.setAttribute('aria-pressed', String(on));
@@ -179,32 +272,10 @@ function syncControls() {
 }
 
 export function initLive() {
-  $$('#assetChips .chip').forEach(chip => {
-    chip.onclick = () => setMarket({ symbol: chip.dataset.symbol });
-  });
-  $$('[data-interval]').forEach(btn => {
+  $('#assetSelect').onchange = event => setMarket({ symbol: event.target.value });
+  $$('#timeframes [data-interval]').forEach(btn => {
     btn.onclick = () => setMarket({ interval: btn.dataset.interval });
   });
-
-  const search = $('#assetSearch');
-  const matches = () => {
-    const q = search.value.trim().toLowerCase();
-    return $$('#assetChips .chip').filter(chip => !q || chip.dataset.search.toLowerCase().includes(q));
-  };
-  search.oninput = () => {
-    const visible = new Set(matches());
-    $$('#assetChips .chip').forEach(chip => { chip.hidden = !visible.has(chip); });
-  };
-  search.onkeydown = event => {
-    if (event.key !== 'Enter') return;
-    event.preventDefault();
-    const first = matches()[0];
-    if (first) setMarket({ symbol: first.dataset.symbol });
-    search.value = '';
-    search.oninput();
-    search.blur();
-  };
-
   onMarketChange(() => {
     syncControls();
     if (active) load();
@@ -224,4 +295,5 @@ export function deactivateLive() {
   loadToken++;
   closeSocket();
   clearTimeout(pollTimer);
+  clearTimeout(instructorTimer);
 }

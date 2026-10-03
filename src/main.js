@@ -7,11 +7,11 @@ import { shellTemplate } from './views/shell.js';
 import { initLive, activateLive, deactivateLive } from './views/live.js';
 import { initFoto, deactivateFoto } from './views/foto.js';
 import { initIntel, activateIntel, deactivateIntel } from './views/intel.js';
-import { initSheets, openSheet, closeSheet } from './views/sheet.js';
+import { initSheets, closeSheet } from './views/sheet.js';
 
 const PUBLIC_ROUTES = ['home', 'login', 'register'];
 const PRIVATE_ROUTES = ['live', 'foto', 'intel', 'perfil'];
-const TITLES = { home: 'Grafictrader', login: 'Entrar', register: 'Criar conta', live: 'Início', foto: 'Foto', intel: 'Live Intelligence', perfil: 'Perfil' };
+const TITLES = { home: 'Grafictrader', login: 'Entrar', register: 'Criar conta', live: 'Live', foto: 'Foto', intel: 'Live Inteligente', perfil: 'Perfil' };
 
 const VIEWS = {
   live: { activate: activateLive, deactivate: deactivateLive },
@@ -63,13 +63,16 @@ function show(route) {
   const user = currentUser();
   if (PRIVATE_ROUTES.includes(target) && !user) target = 'login';
   if (PUBLIC_ROUTES.includes(target) && user) target = 'live';
+  closeMenu();
 
   if (target !== currentRoute) {
     VIEWS[currentRoute]?.deactivate?.();
     closeSheet();
     $$('.screen').forEach(screen => screen.classList.toggle('active', screen.id === target));
+    // Live Inteligente and Perfil are reached from the LIVE menu.
+    const tabTarget = target === 'intel' || target === 'perfil' ? 'live' : target;
     $$('[data-tab]').forEach(tab => {
-      const on = tab.dataset.tab === target;
+      const on = tab.dataset.tab === tabTarget;
       tab.classList.toggle('active', on);
       if (on) tab.setAttribute('aria-current', 'page'); else tab.removeAttribute('aria-current');
     });
@@ -126,17 +129,38 @@ async function submitAuth(form, action) {
   }
 }
 
+function openMenu() {
+  const menu = $('#menu');
+  menu.hidden = false;
+  requestAnimationFrame(() => menu.classList.add('open'));
+  menu.querySelector('button')?.focus();
+}
+
+function closeMenu() {
+  const menu = $('#menu');
+  if (menu.hidden) return;
+  menu.classList.remove('open');
+  menu.hidden = true;
+}
+
 function wire() {
   document.addEventListener('click', event => {
     const route = event.target.closest('[data-route]');
-    if (route) return navigate(route.dataset.route);
+    if (route) {
+      closeMenu();
+      return navigate(route.dataset.route);
+    }
     const tab = event.target.closest('[data-tab]');
     if (tab) return navigate(tab.dataset.tab);
     if (event.target.closest('[data-theme-toggle]')) return toggleTheme();
     const choice = event.target.closest('[data-theme-choice]');
     if (choice) return applyTheme(choice.dataset.themeChoice);
-    if (event.target.closest('[data-open-sheet]')) return openSheet('#sheet');
+    if (event.target.closest('[data-open-menu]')) return openMenu();
   });
+  $('#menu').addEventListener('click', event => {
+    if (event.target === event.currentTarget) closeMenu();
+  });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeMenu(); });
 
   $('#loginForm').addEventListener('submit', event => { event.preventDefault(); submitAuth(event.currentTarget, 'login'); });
   $('#registerForm').addEventListener('submit', event => { event.preventDefault(); submitAuth(event.currentTarget, 'register'); });
