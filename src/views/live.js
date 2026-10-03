@@ -64,7 +64,7 @@ function ensureChart() {
     chart.applyOptions({ ...chartOptions(theme), layout: { ...chartOptions(theme).layout, attributionLogo: false } });
     series.applyOptions(seriesOptions(theme));
     renderOverlay();
-    if (plan?.chart === 'tv') renderTradingView();
+    if (market.source === 'tradingview' && !plan?.fallback) renderTradingView();
   });
 }
 
@@ -121,13 +121,27 @@ function renderQuote() {
     change.textContent = 'TradingView';
     change.dataset.sign = '';
   }
-  const feedName = plan?.chart === 'tv' ? 'TradingView' : plan?.feed === 'mt5' ? (mt5Meta?.broker || 'MetaTrader 5') : (source || 'Binance');
+  const feedName = plan?.chart === 'tv' ? 'TradingView' : plan?.fallback ? (plan.feed === 'mt5' ? 'MT5' : 'Binance') + ' (no lugar do TradingView)' : plan?.feed === 'mt5' ? (mt5Meta?.broker || 'MetaTrader 5') : (source || 'Binance');
   $('#chartMeta').textContent = feedName + ' · ' + intervalName(market.interval);
   if (instructor?.summary?.open && last) renderPnl(last.close);
 }
 
-function renderTradingView() {
+// The TradingView widget is rebuilt only when what it shows changes; rebuilding
+// it on every refresh made it flash and vanish. If it cannot load (blocked
+// network, sandboxed preview), the same instrument is shown on our own chart.
+let tvKey = '';
+let tvWatch = null;
+
+function renderTradingView(force = false) {
   const el = $('#tvChart');
+  const key = [market.tvSymbol, market.interval, resolvedTheme()].join('|');
+  if (!force && key === tvKey && el.querySelector('iframe')) return;
+  tvKey = key;
+  clearInterval(tvWatch);
+  if (window.__GT_EMBED_BLOCKED__) {
+    tvFallback('Nesta pré-visualização o TradingView está bloqueado; no app publicado ele aparece aqui.');
+    return;
+  }
   el.innerHTML = '';
   const holder = document.createElement('div');
   holder.className = 'tradingview-widget-container';
@@ -151,14 +165,40 @@ function renderTradingView() {
     save_image: false,
     support_host: 'https://www.tradingview.com'
   });
+  script.onerror = () => tvFallback('Não foi possível ligar ao TradingView.');
   holder.appendChild(script);
   el.appendChild(holder);
+
   const token = loadToken;
-  setTimeout(() => {
-    if (token === loadToken && plan?.chart === 'tv' && !el.querySelector('iframe')) {
-      showNotice('O gráfico TradingView não carregou nesta ligação. Experimenta a fonte Binance ou MetaTrader 5.');
+  const started = Date.now();
+  tvWatch = setInterval(() => {
+    if (token !== loadToken || market.source !== 'tradingview') return clearInterval(tvWatch);
+    if (el.querySelector('iframe')) {
+      clearInterval(tvWatch);
+      showNotice('');
+    } else if (Date.now() - started > 8000) {
+      clearInterval(tvWatch);
+      tvFallback('O TradingView não carregou nesta ligação.');
     }
-  }, 9000);
+  }, 500);
+}
+
+function tvFallback(reason) {
+  clearInterval(tvWatch);
+  tvKey = '';
+  if (!plan || market.source !== 'tradingview') return;
+  if (plan.feed) {
+    plan = { ...plan, chart: 'lw', fallback: true };
+    $('#tvChart').hidden = true;
+    $('#chart').hidden = false;
+    const name = plan.feed === 'mt5' ? 'do teu MetaTrader 5' : 'da Binance';
+    showNotice(`${escapeHtml(reason)} A mostrar o mesmo ativo com os dados ${name}, ao vivo.`);
+    if (candles.length) chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, candles.length - 90), to: candles.length + 4 });
+    renderOverlay();
+    renderQuote();
+  } else {
+    showNotice(`${escapeHtml(reason)} Para este ativo escolhe a fonte MetaTrader 5 (liga-o no Perfil) ou um ativo cripto.`);
+  }
 }
 
 /* ---------- AI instructor ---------- */
@@ -440,7 +480,8 @@ async function load() {
   priceLines.forEach(line => series.removePriceLine(line));
   priceLines = [];
   showNotice('');
-  if (market.source === 'tradingview' && !mt5Symbols.length) await refreshMt5Symbols();
+  const isCryptoTv = /^BINANCE:/.test(market.tvSymbol);
+  if (market.source === 'tradingview' && !isCryptoTv && !mt5Symbols.length) await refreshMt5Symbols();
   if (token !== loadToken) return;
   plan = computePlan();
 
@@ -448,6 +489,7 @@ async function load() {
   $('#chart').hidden = plan.chart !== 'lw';
   $('#tvChart').hidden = plan.chart !== 'tv';
   if (plan.chart === 'tv') renderTradingView();
+  else { clearInterval(tvWatch); tvKey = ''; }
   setConnection('A ligar…');
   renderQuote();
 
