@@ -1,8 +1,19 @@
-import { getBinanceTicker, getBinanceCandles } from './_lib/sources/binance.js';
+import { getBinanceTicker, getBinanceCandles, getBinanceUsdtMarkets } from './_lib/sources/binance.js';
 import { parseMarketQuery } from './_lib/validate.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
+
+  // GET /api/market?list=1 → every Binance USDT pair, most traded first.
+  if (req.query?.list) {
+    try {
+      const markets = await getBinanceUsdtMarkets();
+      res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+      return res.status(200).json({ ok: true, markets });
+    } catch (error) {
+      return res.status(502).json({ ok: false, error: error?.message || 'Lista de mercados indisponível.' });
+    }
+  }
 
   const market = parseMarketQuery(req.query);
   if (!market) return res.status(400).json({ ok: false, error: 'Parâmetros inválidos.' });

@@ -1,7 +1,7 @@
 import {
   authConfigured, normalizeEmail, validEmail, findUser, createUser, verifyPassword,
   createSession, destroySession, sessionToken, getSessionUser, setSessionCookie,
-  clearSessionCookie, publicUser
+  clearSessionCookie, publicUser, rotateBridgeKey
 } from './_lib/auth.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 import { clientIp } from './_lib/validate.js';
@@ -32,6 +32,12 @@ export default async function handler(req, res) {
     }
 
     if (!authConfigured()) return notConfigured(res);
+
+    if (action === 'mt5key') {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
+      return res.status(200).json({ ok: true, key: await rotateBridgeKey(user.email) });
+    }
 
     const body = req.body || {};
     const email = normalizeEmail(body.email);

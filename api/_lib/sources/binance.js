@@ -185,3 +185,18 @@ export async function getBinanceOrderBook(symbol = 'BTCUSDT', limit = 100) {
     return { bids: [], asks: [], source: 'unavailable' };
   }
 }
+
+/** All Binance spot pairs quoted in USDT with 24h stats, sorted by volume. */
+export async function getBinanceUsdtMarkets() {
+  const rows = await binanceJson('/ticker/24hr', 12000);
+  return (Array.isArray(rows) ? rows : [])
+    .filter(r => /USDT$/.test(r.symbol) && Number(r.quoteVolume) > 0 && Number(r.count) > 0)
+    .map(r => ({
+      symbol: r.symbol,
+      base: r.symbol.replace(/USDT$/, ''),
+      price: Number(r.lastPrice),
+      change24h: Number(r.priceChangePercent),
+      volume24h: Number(r.quoteVolume)
+    }))
+    .sort((a, b) => b.volume24h - a.volume24h);
+}

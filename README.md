@@ -17,6 +17,21 @@ O menu inferior tem só duas áreas: **FOTO** (esquerda) e **LIVE** (direita). O
 
 ### LIVE
 
+O seletor no topo escolhe a fonte do gráfico:
+
+- **TradingView**: widget oficial (cripto, forex, ouro, petróleo, índices). A marca TradingView do widget só sai num plano pago.
+- **Binance**: todos os pares USDT (com pesquisa), em tempo real por WebSocket.
+- **MetaTrader 5**: as velas da tua própria corretora, enviadas pelo EA `public/bridge/GrafictraderBridge.mq5` para `/api/mt5`.
+  - A chave de ligação gera-se em Perfil > MetaTrader 5.
+  - O EA só lê preços: não envia ordens.
+
+No gráfico próprio (Lightweight Charts), o logótipo foi retirado. A atribuição exigida pela licença está por baixo do gráfico e em Perfil > Créditos.
+
+O cartão da IA tem duas vistas:
+
+- **Orientação**: COMPRAR, VENDER ou NÃO OPERAR, com entrada, stop loss e take profit. Inclui uma explicação informal para quem nunca operou: o que fazer agora, porquê e o passo a passo.
+- **Resultados**: win rate, operações e histórico.
+
 - Gráfico de velas em tempo real com dados Binance (WebSocket `data-stream.binance.vision`, com polling de reserva).
 - **IA instrutora**: opera uma conta demo de $1.000 com risco de 1% por operação.
   - Entra no fecho da vela de sinal, com stop a 1,5×ATR e alvo a 2R.
@@ -27,6 +42,11 @@ O menu inferior tem só duas áreas: **FOTO** (esquerda) e **LIVE** (direita). O
 ### Live Inteligente
 
 Painel tipo terminal com:
+
+- mercados globais: índices, VIX, dólar, câmbio, juros, ouro, petróleo e cripto;
+- leitura de apetite ou aversão ao risco;
+- calendário económico com contagem decrescente (ForexFactory);
+- Fear & Greed cripto;
 
 - saldo, P&L, posição e win rate;
 - histórico de saldo e log de atividade;
@@ -47,6 +67,8 @@ Painel tipo terminal com:
 - Desvio ao VWAP em desvios-padrão e autocorrelação.
 
 O regime (tendência, reversão, ruído ou caos) decide o tipo de entrada. O contexto ao vivo pode vetar entradas.
+
+Notícias de alto impacto nas moedas do ativo, de 15 min antes a 30 min depois, bloqueiam novas entradas. O USD conta sempre, porque mexe com quase tudo.
 
 O win rate e o P&L mostrados são o histórico real destas operações simuladas. Não há ordens reais e o app não é aconselhamento financeiro.
 
@@ -95,6 +117,9 @@ api/                 funções serverless da Vercel
   _lib/mechanics/    motor de mecânica, memória e Pattern Library
   _lib/quant/        estatística avançada, decisão, IA instrutora, veredito da foto
   instructor.js      /api/instructor (um ativo) e ?desk=1 (todos)
+  global.js          /api/global: mercados mundiais, calendário, Fear & Greed
+  mt5.js             /api/mt5: ponte MetaTrader 5 (POST do EA, GET do app)
+public/bridge/       EA MQL5 para ligar o MetaTrader 5
   _lib/sources/      Binance, Twelve Data, GDELT, Finnhub, Marketaux
 src/
   lib/               tema, sessão, indicadores, utilitários
@@ -102,3 +127,16 @@ src/
   styles.css         design system monocromático claro/escuro
 tests/               testes unitários
 ```
+
+## Fontes e repositórios de referência
+
+- MetaTrader 5:
+  - EA próprio em `public/bridge/` (via WebRequest).
+  - Alternativas: [mt5-bridge (REST + WebSocket)](https://github.com/mobjoy0/mt5-bridge), [MetaApi SDK (cloud, pago com tier grátis)](https://github.com/metaapi/metaapi-javascript-sdk), [mt5-rest-api](https://github.com/DevRico003/mt5-rest-api).
+- Binance:
+  - WebSocket público + [Lightweight Charts](https://github.com/tradingview/lightweight-charts).
+  - Exemplo de referência: [binance-tutorials](https://github.com/hackingthemarkets/binance-tutorials).
+- TradingView: [widgets gratuitos](https://www.tradingview.com/widget/).
+- Calendário: `nfs.faireconomy.media/ff_calendar_thisweek.json` (máx. ~2 pedidos por 5 min; o app guarda em cache 15 min).
+- Mercados globais: endpoint público de gráficos do Yahoo Finance.
+- Fear & Greed: [alternative.me](https://alternative.me/crypto/fear-and-greed-index/).

@@ -28,6 +28,7 @@ function showPanel(html) {
 }
 
 const DECISION_ICON = { COMPRAR: 'trending-up', VENDER: 'trending-down', AGUARDAR: 'pause' };
+const DECISION_LABEL = { COMPRAR: 'COMPRAR', VENDER: 'VENDER', AGUARDAR: 'NÃO OPERAR' };
 const AGREEMENT_LABEL = {
   confirma: 'Motor ao vivo confirma',
   diverge: 'Motor ao vivo diverge',
@@ -49,7 +50,7 @@ function renderResult(image, data) {
       <span class="verdict-icon"><i data-lucide="${DECISION_ICON[v.decision]}"></i></span>
       <div class="verdict-main">
         <small>Orientação da IA</small>
-        <strong>${v.decision}</strong>
+        <strong>${DECISION_LABEL[v.decision] || v.decision}</strong>
         <span>${escapeHtml(v.headline)}</span>
       </div>
       <div class="verdict-ring">
@@ -68,15 +69,24 @@ function renderResult(image, data) {
       <div><small>Stop</small><b class="neg">${escapeHtml(vis.stop || '—')}</b></div>
       <div><small>Alvos</small><b class="pos">${escapeHtml(vis.targets.join(' · ') || '—')}</b></div>
     </div>` : ''}
-    <div class="analysis-item"><small>Porquê</small><ul class="reasons">${list([...v.reasons, ...vis.reasons])}</ul></div>
-    ${vis.structure || vis.indicators ? `<div class="analysis-item"><small>Leitura do gráfico</small><p>${escapeHtml([vis.structure, vis.indicators, vis.patterns.join(', ')].filter(Boolean).join(' · '))}</p></div>` : ''}
-    ${vis.risks.length ? `<div class="analysis-item"><small>Riscos</small><ul class="reasons">${list(vis.risks)}</ul></div>` : ''}
-    ${live ? `
-    <div class="analysis-item">
-      <small>Motor ao vivo · ${escapeHtml(pairLabel(live.symbol))} ${escapeHtml(live.interval)} · ${fmtPrice(live.price)}</small>
-      <p>${escapeHtml(live.signal.action)} · ${escapeHtml(live.signal.regimeLabel)}${live.context ? ' · contexto ' + Math.round((live.context.score || 0) * 100) + '%' : ''}</p>
-      ${quant ? `<div class="quant-chips"><span>Hurst ${f2(quant.hurst)}</span><span>VR ${f2(quant.varianceRatio)}</span><span>Kalman z ${f2(quant.kalmanZ)}</span><span>Entropia ${f2(quant.entropy)}</span><span>VPIN ${f2(quant.vpin)}</span></div>` : ''}
+    ${data.guidance ? `
+    <div class="guide">
+      <div class="guide-now"><small>O que fazer agora</small><p>${escapeHtml(data.guidance.now)}</p></div>
+      <div class="guide-block"><small>Porquê</small>${(data.guidance.why || []).map(p => `<p>${escapeHtml(p)}</p>`).join('')}</div>
+      <div class="guide-block"><small>Passo a passo</small><ol>${list(data.guidance.steps)}</ol></div>
     </div>` : ''}
+    <details class="guide-tech">
+      <summary>Detalhes técnicos</summary>
+      <div class="analysis-item"><small>Sinais</small><ul class="reasons">${list([...v.reasons, ...vis.reasons])}</ul></div>
+      ${vis.structure || vis.indicators ? `<div class="analysis-item"><small>Leitura do gráfico</small><p>${escapeHtml([vis.structure, vis.indicators, vis.patterns.join(', ')].filter(Boolean).join(' · '))}</p></div>` : ''}
+      ${vis.risks.length ? `<div class="analysis-item"><small>Riscos</small><ul class="reasons">${list(vis.risks)}</ul></div>` : ''}
+      ${live ? `
+      <div class="analysis-item">
+        <small>Motor ao vivo · ${escapeHtml(pairLabel(live.symbol))} ${escapeHtml(live.interval)} · ${fmtPrice(live.price)}</small>
+        <p>${escapeHtml(live.signal.action)} · ${escapeHtml(live.signal.regimeLabel)}${live.context ? ' · contexto ' + Math.round((live.context.score || 0) * 100) + '%' : ''}</p>
+        ${quant ? `<div class="quant-chips"><span>Hurst ${f2(quant.hurst)}</span><span>VR ${f2(quant.varianceRatio)}</span><span>Kalman z ${f2(quant.kalmanZ)}</span><span>Entropia ${f2(quant.entropy)}</span><span>VPIN ${f2(quant.vpin)}</span></div>` : ''}
+      </div>` : ''}
+    </details>
     <div class="analysis-preview"><img src="${image}" alt="Gráfico analisado"><div><small>Resumo</small><b>${escapeHtml(vis.summary || '—')}</b></div></div>
     <p class="fine-print left">${escapeHtml(data.disclaimer || '')} Imagem: qualidade ${escapeHtml(vis.imageQuality || '—')} · ${escapeHtml(data.provider)}.</p>
     <button class="btn btn-soft" type="button" id="retryPhoto"><i data-lucide="refresh-cw"></i>Nova análise</button>`;

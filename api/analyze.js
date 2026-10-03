@@ -3,6 +3,7 @@ import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 import { clientIp, parseMarketQuery } from './_lib/validate.js';
 import { marketReading } from './_lib/quant/service.js';
 import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict } from './_lib/quant/verdict.js';
+import { photoGuidance } from './_lib/quant/explain.js';
 
 // Vercel rejects bodies above 4.5 MB; the client downsizes captures well below this.
 const MAX_IMAGE_CHARS = 4_000_000;
@@ -32,6 +33,7 @@ Responde APENAS com JSON válido neste formato:
   "motivos": ["até 4 motivos objetivos"],
   "riscos": ["até 3 riscos"],
   "resumo": "uma frase",
+  "explicacaoSimples": "3 a 5 frases informais, como se falasses com um amigo que nunca operou: o que fazer agora, porquê, onde entrar, onde pôr o stop loss e onde tirar o lucro (ou porque é melhor não operar)",
   "qualidadeImagem": "boa" | "média" | "fraca"
 }`;
 
@@ -69,7 +71,7 @@ async function visionGemini(image, key) {
     { 'x-goog-api-key': key },
     {
       contents: [{ role: 'user', parts: [{ text: ANALYSIS_PROMPT }, { inline_data: { mime_type: mime, data } }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 1400, responseMimeType: 'application/json' }
+      generationConfig: { temperature: 0.2, maxOutputTokens: 1800, responseMimeType: 'application/json' }
     }
   );
   const text = result?.candidates?.flatMap(c => c?.content?.parts?.map(p => p?.text).filter(Boolean) || []).join('\n');
@@ -142,6 +144,7 @@ export default async function handler(req, res) {
     provider: vision.provider,
     vision: normalized,
     verdict,
+    guidance: photoGuidance(verdict, normalized, reading),
     live: reading && {
       symbol,
       interval,

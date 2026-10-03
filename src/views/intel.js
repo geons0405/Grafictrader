@@ -9,6 +9,7 @@ const INSTRUCTOR_MS = 15000;
 const DESK_MS = 30000;
 const MECHANICS_MS = 20000;
 const FEED_MS = 30000;
+const GLOBAL_MS = 60000;
 const AI_MIN_INTERVAL_MS = 120000;
 
 // Muted per-asset hues, used only on the bot cards (as in the reference terminal).
@@ -46,6 +47,7 @@ let equityChart = null;
 let equitySeries = null;
 let startedAt = null;
 let uptimeTimer = null;
+let calendar = [];
 const loading = {};
 
 const sign = v => (v > 0 ? 'up' : v < 0 ? 'down' : '');
@@ -82,6 +84,59 @@ function duration(seconds) {
 
 function tickUptime() {
   $('#tUptime').textContent = startedAt ? duration(Date.now() / 1000 - startedAt) : '—';
+  $$('#gCalendar [data-at]').forEach(el => { el.textContent = countdown(Number(el.dataset.at)); });
+}
+
+function countdown(at) {
+  const diff = Math.round((at - Date.now()) / 1000);
+  if (diff <= -1800) return 'saiu';
+  if (diff <= 0) return 'agora';
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  const sec = diff % 60;
+  return h > 23 ? `${Math.floor(h / 24)}d ${h % 24}h` : h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m ${String(sec).padStart(2, '0')}s`;
+}
+
+/* ---------- international context ---------- */
+
+function renderGlobal(data) {
+  const risk = $('#gRisk');
+  risk.textContent = data.risk?.label || '—';
+  risk.dataset.sign = sign(data.risk?.score ?? 0);
+  const groups = {};
+  for (const m of data.markets || []) (groups[m.group] ||= []).push(m);
+  $('#gMarkets').innerHTML = Object.entries(groups).map(([group, rows]) => `
+    <div class="g-group"><small>${escapeHtml(group)}</small>
+      ${rows.map(m => `<div class="g-row"><span class="g-name">${escapeHtml(m.name)}</span><span class="g-spark" data-sign="${sign(m.changePct ?? 0)}">${sparkline(m.spark)}</span><b>${m.price == null ? '—' : m.price.toLocaleString('en-US', { maximumFractionDigits: m.price < 10 ? 4 : 2 })}</b><span class="g-chg" data-sign="${sign(m.changePct ?? 0)}">${m.changePct == null ? '—' : fmtPct(m.changePct)}</span></div>`).join('')}
+    </div>`).join('') || '<p class="term-note">Mercados globais indisponíveis neste momento.</p>';
+
+  calendar = data.calendar || [];
+  $('#gCalMeta').textContent = calendar.length ? calendar.length + ' eventos' : '—';
+  $('#gCalendar').innerHTML = calendar.slice(0, 25).map(e => `
+    <div class="cal-row" data-impact="${escapeHtml(e.impact)}">
+      <span class="cal-impact" title="Impacto ${escapeHtml(e.impact)}"></span>
+      <span class="cal-time"><b>${fmtTime(e.time)}</b><small data-at="${e.time}">${countdown(e.time)}</small></span>
+      <span class="cal-main"><b>${escapeHtml(e.currency)}</b> ${escapeHtml(e.title)}<small>${e.actual ? 'Atual ' + escapeHtml(e.actual) + ' · ' : ''}Previsão ${escapeHtml(e.forecast || '—')} · Anterior ${escapeHtml(e.previous || '—')}</small></span>
+    </div>`).join('') || '<p class="term-note">Calendário indisponível neste momento.</p>';
+
+  const fng = data.fearGreed;
+  $('#gFng').innerHTML = fng ? `
+    <div class="fng-gauge"><span style="--v:${fng.value}"></span></div>
+    <div class="fng-value"><strong>${fng.value}</strong><span>${escapeHtml(fng.label)}</span></div>
+    <div class="fng-spark">${sparkline(fng.history)}</div>
+    <p class="term-note">0 = medo extremo · 100 = ganância extrema. Medo extremo costuma aparecer perto de fundos; ganância extrema perto de topos.</p>`
+    : '<p class="term-note">Índice indisponível.</p>';
+}
+
+async function loadGlobal() {
+  await guarded('global', async () => {
+    try {
+      renderGlobal(await api('/api/global'));
+    } catch {
+      $('#gMarkets').innerHTML = '<p class="term-note">Mercados globais indisponíveis neste momento.</p>';
+    }
+  });
+  schedule('global', loadGlobal, GLOBAL_MS);
 }
 
 /* ---------- instructor terminal ---------- */
@@ -90,6 +145,7 @@ function ensureEquityChart() {
   if (equityChart) return;
   equityChart = createChart($('#equityChart'), {
     ...chartOptions(resolvedTheme()),
+    layout: { ...chartOptions(resolvedTheme()).layout, attributionLogo: false },
     autoSize: true,
     rightPriceScale: { borderVisible: false },
     timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
@@ -98,7 +154,7 @@ function ensureEquityChart() {
   });
   equitySeries = equityChart.addSeries(LineSeries, { color: chartPalette().up, lineWidth: 2, priceLineVisible: false, lastValueVisible: true });
   onThemeChange(theme => {
-    equityChart.applyOptions(chartOptions(theme));
+    equityChart.applyOptions({ ...chartOptions(theme), layout: { ...chartOptions(theme).layout, attributionLogo: false } });
     equitySeries.applyOptions({ color: chartPalette(theme).up });
   });
 }
@@ -135,7 +191,9 @@ function renderContext(ctx, signal) {
   $('#tContext').innerHTML = ctx ? [
     row('Fluxo agressor', ctx.flow, 'últimos 500 trades'),
     row('Livro de ordens', ctx.book, 'topo 10 níveis'),
-    row('Notícias (3h)', news.total ? news.score : null, `${news.bullish || 0} positivas · ${news.bearish || 0} negativas`)
+    row('Notícias (3h)', news.total ? news.score : null, `${news.bullish || 0} positivas · ${news.bearish || 0} negativas`),
+    row('Mercados mundiais', ctx.global?.score ?? null, ctx.global?.label || 'sem dados'),
+    eventRow(ctx.eventRisk)
   ].join('') : '<p class="term-note">Contexto indisponível.</p>';
   const score = $('#tContextScore');
   score.textContent = ctx ? 'score ' + pct(ctx.score) : '—';
@@ -145,6 +203,17 @@ function renderContext(ctx, signal) {
   decision.textContent = signal ? `${signal.action}${signal.confidence ? ' · ' + signal.confidence + '%' : ''}` : '—';
   decision.dataset.sign = signal?.action === 'COMPRAR' ? 'up' : signal?.action === 'VENDER' ? 'down' : '';
   $('#tDecisionReasons').innerHTML = (signal?.reasons || []).map(r => `<li>${escapeHtml(r)}</li>`).join('');
+}
+
+function eventRow(risk) {
+  if (!risk) return '';
+  if (risk.blocked && risk.event) {
+    return `<div class="c-event" data-sign="down"><b>NOTÍCIA FORTE AGORA</b><small>${escapeHtml(risk.event.currency)} · ${escapeHtml(risk.event.title)} · a IA não abre operações</small></div>`;
+  }
+  if (risk.next) {
+    return `<div class="c-event"><b>PRÓXIMA NOTÍCIA FORTE</b><small>${escapeHtml(risk.next.currency)} · ${escapeHtml(risk.next.title)} · ${fmtTime(risk.next.time)}</small></div>`;
+  }
+  return '';
 }
 
 function renderBook(book, price) {
@@ -329,6 +398,7 @@ async function loadFeed() {
 }
 
 function refreshAll() {
+  loadGlobal();
   loadTerminal();
   loadDesk();
   loadMechanics();

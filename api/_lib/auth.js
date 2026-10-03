@@ -114,3 +114,26 @@ export async function requireUserIfConfigured(req, res) {
   res.status(401).json({ ok: false, error: 'Inicia sessão para usar a análise por IA.', authRequired: true });
   return { ok: false };
 }
+
+/* ---------- MetaTrader 5 bridge keys ---------- */
+
+const bridgeKey = hash => 'grafictrader:mt5key:' + hash;
+const sha = value => createHash('sha256').update(String(value)).digest('hex');
+
+/** Creates a new bridge key for the user (revoking the previous one). Returned only once. */
+export async function rotateBridgeKey(email) {
+  const user = await findUser(email);
+  if (!user) throw new Error('Utilizador não encontrado.');
+  if (user.mt5KeyHash) await redis(['DEL', bridgeKey(user.mt5KeyHash)]);
+  const key = 'gtb_' + randomBytes(24).toString('base64url');
+  const hash = sha(key);
+  await redis(['SET', bridgeKey(hash), email]);
+  await redis(['SET', 'grafictrader:user:' + email, JSON.stringify({ ...user, mt5KeyHash: hash })]);
+  return key;
+}
+
+/** Email that owns a bridge key, or null. */
+export async function resolveBridgeKey(key) {
+  if (!key || !/^gtb_[A-Za-z0-9_-]{20,64}$/.test(key)) return null;
+  return redis(['GET', bridgeKey(sha(key))]);
+}

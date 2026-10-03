@@ -1022,3 +1022,86 @@ svg.lucide { width: 20px; height: 20px; flex: none; }
 .analysis > * { min-width: 0; }
 .levels.levels-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .camera-actions .btn { white-space: nowrap; font-size: 14px; padding: 0 12px; }
+
+/* =========================================================
+   Chart sources, AI guidance, asset picker, MT5, global info
+   ========================================================= */
+button.asset-pill { gap: 8px; font-weight: 700; font-size: 15px; padding: 0 14px 0 16px; }
+button.asset-pill svg.lucide { position: static; }
+#assetLabel { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-switch button { font-size: 12px; }
+.tv-chart { height: min(52vh, 440px); min-height: 320px; }
+.tradingview-widget-container,
+.tradingview-widget-container__widget { height: 100%; width: 100%; }
+.chart-notice { padding: 14px 16px; font-size: 13px; color: var(--text-2); line-height: 1.5; border-top: 1px solid var(--line); }
+.link-btn { color: var(--text); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+.view-switch { box-shadow: none; background: var(--well); }
+.view-switch button.active { background: var(--card); box-shadow: var(--shadow); color: var(--text); }
+.view { display: grid; gap: 12px; }
+.guide { display: grid; gap: 12px; }
+.guide-now { border-radius: 16px; padding: 14px; background: var(--accent); color: var(--on-accent); }
+.guide-now small { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.7; margin-bottom: 4px; }
+.guide-now p { font-size: 15px; font-weight: 600; line-height: 1.45; }
+.guide-block small { display: block; color: var(--muted); font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+.guide-block p { font-size: 14px; line-height: 1.6; color: var(--text-2); margin-bottom: 8px; }
+.guide-block ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; line-height: 1.5; color: var(--text); }
+.guide-block ol li::marker { font-weight: 700; color: var(--muted); }
+.guide-tech { border-top: 1px solid var(--line); padding-top: 10px; }
+.guide-tech summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); }
+.guide-tech[open] summary { margin-bottom: 10px; }
+.guide-tech .analysis-item { margin-top: 8px; }
+
+.asset-list { display: grid; gap: 2px; margin-top: 12px; max-height: 60dvh; overflow-y: auto; }
+.asset-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+.asset-item > span:first-child { display: grid; gap: 2px; min-width: 0; }
+.asset-item b { font-size: 14px; }
+.asset-item small { color: var(--muted); font-size: 11.5px; }
+.asset-meta { display: grid; justify-items: end; gap: 2px; font-variant-numeric: tabular-nums; }
+.asset-meta b { font-size: 13px; }
+.asset-group { display: block; color: var(--muted); font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin: 14px 6px 4px; }
+
+.mt5-card { display: grid; gap: 12px; }
+.mt5-card .card-head { margin-bottom: 0; }
+.mt5-steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.mt5-steps a { font-weight: 700; color: var(--text); }
+.mt5-steps code,
+.mt5-key code { font-family: var(--mono); font-size: 11.5px; background: var(--well); padding: 2px 6px; border-radius: 6px; word-break: break-all; }
+.mt5-key { display: flex; align-items: center; gap: 10px; background: var(--well); border-radius: 14px; padding: 10px; }
+.mt5-key code { flex: 1; min-width: 0; background: transparent; padding: 0; }
+.mt5-key .btn { width: auto; flex: none; }
+.credits p { font-size: 12px; color: var(--muted); line-height: 1.5; margin-bottom: 6px; }
+
+.global-grid { display: grid; gap: 12px; }
+@media (min-width: 440px) { .global-grid { grid-template-columns: 1fr 1fr; } }
+.g-group > small { display: block; font-size: 9.5px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+.g-row { display: grid; grid-template-columns: 1fr 48px auto auto; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px solid var(--line); font-size: 11px; font-variant-numeric: tabular-nums; }
+.g-name { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-spark { height: 16px; color: var(--muted); }
+.g-spark svg { width: 48px; height: 16px; display: block; }
+.g-spark[data-sign="up"] { color: var(--up); }
+.g-spark[data-sign="down"] { color: var(--down); }
+.g-chg { min-width: 54px; text-align: right; }
+
+.calendar { display: grid; max-height: 300px; overflow-y: auto; }
+.cal-row { display: grid; grid-template-columns: 4px 64px 1fr; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 11px; align-items: start; }
+.cal-impact { align-self: stretch; border-radius: 2px; background: var(--well-2); }
+.cal-row[data-impact="High"] .cal-impact { background: var(--down); }
+.cal-row[data-impact="Medium"] .cal-impact { background: #d48a2c; }
+.cal-time { display: grid; gap: 2px; }
+.cal-time small { color: var(--muted); font-size: 9.5px; }
+.cal-main { display: grid; gap: 2px; color: var(--text-2); font-family: var(--font); font-size: 12px; }
+.cal-main b { font-family: var(--mono); font-size: 10px; color: var(--text); margin-right: 4px; }
+.cal-main small { font-family: var(--mono); font-size: 9.5px; color: var(--muted); }
+
+.fng { display: grid; gap: 10px; }
+.fng-gauge { height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--down), #d48a2c, var(--up)); position: relative; }
+.fng-gauge span { position: absolute; top: -4px; left: calc(var(--v) * 1%); width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; background: var(--text); }
+.fng-value { display: flex; align-items: baseline; gap: 10px; }
+.fng-value strong { font-size: 28px; }
+.fng-value span { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); }
+.fng-spark { height: 28px; color: var(--text-2); }
+.fng-spark svg { width: 100%; height: 28px; }
+.c-event { border-radius: 10px; background: var(--well); padding: 8px 10px; display: grid; gap: 2px; font-size: 10.5px; }
+.c-event small { color: var(--muted); font-size: 10px; }
+.c-event[data-sign="down"] { background: color-mix(in srgb, var(--down) 15%, var(--card)); color: var(--down); }

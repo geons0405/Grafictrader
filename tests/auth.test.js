@@ -16,8 +16,11 @@ test('cookie parsing and email validation', () => {
   assert.equal(validEmail('not-an-email'), false);
 });
 
-test('market query only accepts supported symbols and intervals', () => {
+test('market query accepts Binance USDT pairs and supported intervals only', () => {
   assert.deepEqual(parseMarketQuery({ symbol: 'ethusdt', interval: '1h' }), { symbol: 'ETHUSDT', interval: '1h' });
-  assert.equal(parseMarketQuery({ symbol: 'FOOUSDT', interval: '1h' }), null);
+  assert.deepEqual(parseMarketQuery({ symbol: 'PEPEUSDT', interval: '5m' }), { symbol: 'PEPEUSDT', interval: '5m' });
+  assert.equal(parseMarketQuery({ symbol: 'BTC-USD', interval: '1h' }), null);
+  assert.equal(parseMarketQuery({ symbol: 'BTCEUR', interval: '1h' }), null);
+  assert.equal(parseMarketQuery({ symbol: '../etc', interval: '1h' }), null);
   assert.equal(parseMarketQuery({ symbol: 'BTCUSDT', interval: '1d' }), null);
 });

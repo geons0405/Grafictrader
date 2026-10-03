@@ -1,6 +1,5 @@
 import { ASSETS, INTERVALS } from '../lib/store.js';
 
-const assetOptions = ASSETS.map(asset => `<option value="${asset.symbol}">${asset.short}/USDT</option>`).join('');
 
 const timeframeButtons = INTERVALS.map(item =>
   `<button type="button" data-interval="${item.value}">${item.label}</button>`
@@ -107,14 +106,21 @@ export const shellTemplate = `
   <!-- LIVE -->
   <section id="live" class="screen">
     <header class="live-head">
-      <label class="asset-pill"><span class="sr-only">Ativo</span><select id="assetSelect" aria-label="Ativo">${assetOptions}</select><i data-lucide="chevron-down"></i></label>
+      <button class="asset-pill" type="button" id="assetPicker" aria-label="Escolher ativo"><span id="assetLabel">BTC/USDT</span><i data-lucide="chevron-down"></i></button>
       <div class="live-quote"><strong id="price">—</strong><span class="delta" id="change">—</span></div>
       <button class="round-btn" type="button" data-open-menu aria-label="Menu"><i data-lucide="sliders-horizontal"></i></button>
     </header>
+    <div class="segmented source-switch" id="sources" role="tablist" aria-label="Fonte do gráfico">
+      <button type="button" data-source="tradingview">TradingView</button>
+      <button type="button" data-source="binance">Binance</button>
+      <button type="button" data-source="mt5">MetaTrader 5</button>
+    </div>
     <div class="segmented" id="timeframes" role="tablist" aria-label="Timeframe">${timeframeButtons}</div>
     <article class="card chart-card">
       <header class="card-head"><b><span class="dot" id="liveDot"></span><span id="connection">A ligar</span></b><small id="chartMeta">Binance · 5 minutos</small></header>
       <div id="chart" class="chart"></div>
+      <div id="tvChart" class="chart tv-chart" hidden></div>
+      <div id="chartNotice" class="chart-notice" hidden></div>
     </article>
 
     <article class="card instructor" id="instructor" aria-live="polite">
@@ -122,28 +128,44 @@ export const shellTemplate = `
         <b class="instructor-title"><i data-lucide="bot"></i>IA instrutora</b>
         <small id="instructorMode">a carregar…</small>
       </header>
-      <div class="position" id="positionBox">
-        <span class="badge" id="positionBadge">—</span>
-        <div class="position-main">
-          <b id="positionTitle">A preparar o instrutor…</b>
-          <small id="positionSub">A analisar o histórico de velas.</small>
+      <div class="segmented view-switch" role="tablist" aria-label="Vista da IA">
+        <button type="button" class="active" data-view="guide">Orientação</button>
+        <button type="button" data-view="results">Resultados</button>
+      </div>
+
+      <div class="view" data-pane="guide">
+        <div class="position" id="positionBox">
+          <span class="badge" id="positionBadge">—</span>
+          <div class="position-main">
+            <b id="positionTitle">A preparar a IA…</b>
+            <small id="positionSub">A analisar o mercado.</small>
+          </div>
+          <div class="position-pnl"><strong id="positionPnl"></strong><small id="positionPnlSub"></small></div>
         </div>
-        <div class="position-pnl"><strong id="positionPnl">—</strong><small id="positionPnlSub"></small></div>
+        <div class="levels levels-3" id="positionLevels" hidden>
+          <div><small>Entrar em</small><b id="lvEntry">—</b></div>
+          <div><small>Stop loss</small><b id="lvStop" class="neg">—</b></div>
+          <div><small>Take profit</small><b id="lvTarget" class="pos">—</b></div>
+        </div>
+        <div class="guide" id="guide">
+          <div class="guide-now"><small>O que fazer agora</small><p id="guideNow">—</p></div>
+          <div class="guide-block"><small>Porquê</small><div id="guideWhy"></div></div>
+          <div class="guide-block"><small>Passo a passo</small><ol id="guideSteps"></ol></div>
+          <details class="guide-tech"><summary>Detalhes técnicos</summary><ul class="reasons" id="instructorReasons"></ul></details>
+        </div>
       </div>
-      <div class="levels levels-3" id="positionLevels" hidden>
-        <div><small>Entrada</small><b id="lvEntry">—</b></div>
-        <div><small>Stop</small><b id="lvStop" class="neg">—</b></div>
-        <div><small>Alvo</small><b id="lvTarget" class="pos">—</b></div>
+
+      <div class="view" data-pane="results" hidden>
+        <div class="stat-row">
+          <div><small>Win rate</small><b id="stWin">—</b></div>
+          <div><small>Operações</small><b id="stTrades">—</b></div>
+          <div><small>Conta demo</small><b id="stPnl">—</b></div>
+        </div>
+        <div class="ops" id="recentOps"></div>
       </div>
-      <ul class="reasons" id="instructorReasons"></ul>
-      <div class="stat-row">
-        <div><small>Win rate</small><b id="stWin">—</b></div>
-        <div><small>Operações</small><b id="stTrades">—</b></div>
-        <div><small>Conta demo</small><b id="stPnl">—</b></div>
-      </div>
-      <div class="ops" id="recentOps"></div>
       <p class="fine-print left">Operações simuladas pela IA (conta demo de $1.000, risco 1% por operação). Copiar é por tua conta e risco; resultados passados não garantem resultados futuros.</p>
     </article>
+    <p class="fine-print">Gráficos <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView Lightweight Charts™</a> · dados Binance, MetaTrader 5 e TradingView.</p>
   </section>
 
   <!-- LIVE INTELIGENTE -->
@@ -159,6 +181,22 @@ export const shellTemplate = `
       <span><small>DESDE</small><b id="tUptime">—</b></span>
       <span><small>CICLO</small><b id="tCycle">#—</b></span>
       <span><small>ATIVO</small><b id="tSymbol">BTC/USDT</b></span>
+    </div>
+
+    <div class="term-box">
+      <div class="term-label"><span>// MERCADOS GLOBAIS</span><span id="gRisk">—</span></div>
+      <div class="global-grid" id="gMarkets"><p class="term-note">A carregar índices, câmbio, juros e matérias-primas…</p></div>
+    </div>
+
+    <div class="term-grid">
+      <div class="term-box">
+        <div class="term-label"><span>// CALENDÁRIO ECONÓMICO</span><span id="gCalMeta">—</span></div>
+        <div class="calendar" id="gCalendar"><p class="term-note">A carregar eventos…</p></div>
+      </div>
+      <div class="term-box">
+        <div class="term-label"><span>// SENTIMENTO CRIPTO</span><span>FEAR &amp; GREED</span></div>
+        <div class="fng" id="gFng"><p class="term-note">—</p></div>
+      </div>
     </div>
 
     <div class="term-tiles">
@@ -234,9 +272,27 @@ export const shellTemplate = `
       <header class="card-head"><b>Aparência</b></header>
       <div class="segmented" data-theme-group>${themeButtons}</div>
     </article>
+    <article class="card mt5-card">
+      <header class="card-head"><b>MetaTrader 5</b><small id="mt5Status">—</small></header>
+      <p class="reading-summary">Liga o teu MT5 para veres no app exatamente o mesmo gráfico da tua corretora, com a IA a analisar os mesmos preços.</p>
+      <ol class="mt5-steps">
+        <li><a href="/bridge/GrafictraderBridge.mq5" download>Descarrega o EA GrafictraderBridge</a> e copia-o para MQL5 &gt; Experts. Compila no MetaEditor (F7).</li>
+        <li>No MT5: Ferramentas &gt; Opções &gt; Expert Advisors &gt; ativa "Permitir WebRequest" e adiciona <code id="mt5Origin">—</code></li>
+        <li>Gera a tua chave abaixo e cola-a no EA, com o URL <code id="mt5Url">—</code></li>
+        <li>Arrasta o EA para o gráfico (M1, M5, M15, H1 ou H4). O EA só lê preços, não abre ordens.</li>
+      </ol>
+      <div class="mt5-key" id="mt5KeyBox" hidden><code id="mt5Key"></code><button class="btn btn-soft btn-sm" type="button" id="mt5Copy">Copiar</button></div>
+      <button class="btn btn-primary" type="button" id="mt5Generate">Gerar chave de ligação</button>
+      <div class="mt5-symbols" id="mt5Symbols"></div>
+    </article>
     <article class="card">
       <header class="card-head"><b>Sessão</b><small data-session-mode>—</small></header>
       <button class="btn btn-soft" type="button" id="logoutBtn"><i data-lucide="log-out"></i>Terminar sessão</button>
+    </article>
+    <article class="card credits">
+      <header class="card-head"><b>Créditos</b></header>
+      <p>TradingView Lightweight Charts™ · Copyright (c) 2025 TradingView, Inc. · <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">tradingview.com</a></p>
+      <p>Dados: Binance, TradingView, MetaTrader 5 (via EA), Yahoo Finance, ForexFactory, alternative.me, GDELT, Finnhub, Marketaux.</p>
     </article>
     <p class="fine-print">Grafictrader · análise e operações simuladas, sem execução de ordens reais.</p>
   </section>
@@ -246,6 +302,16 @@ export const shellTemplate = `
     <div class="menu" role="menu" aria-label="Menu">
       <button type="button" role="menuitem" data-route="intel"><span class="menu-icon"><i data-lucide="activity"></i></span><span><b>Live Inteligente</b><small>Informação e estatística em tempo real</small></span></button>
       <button type="button" role="menuitem" data-route="perfil"><span class="menu-icon"><i data-lucide="user"></i></span><span><b>Perfil</b><small>Conta, tema e sessão</small></span></button>
+    </div>
+  </div>
+
+  <!-- ASSET PICKER -->
+  <div class="sheet-backdrop" id="assetSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="assetSheetTitle">
+      <div class="sheet-grip"></div>
+      <header class="card-head"><b id="assetSheetTitle">Escolher ativo</b><button class="round-btn sm" type="button" data-close-sheet aria-label="Fechar"><i data-lucide="x"></i></button></header>
+      <label class="search"><i data-lucide="search"></i><input id="assetSearch" type="search" placeholder="Procurar (ex.: BTC, EURUSD, ouro)" autocomplete="off" aria-label="Procurar ativo"></label>
+      <div class="asset-list" id="assetList"></div>
     </div>
   </div>
 

@@ -7,6 +7,7 @@ import { shellTemplate } from './views/shell.js';
 import { initLive, activateLive, deactivateLive } from './views/live.js';
 import { initFoto, deactivateFoto } from './views/foto.js';
 import { initIntel, activateIntel, deactivateIntel } from './views/intel.js';
+import { initProfile, activateProfile } from './views/profile.js';
 import { initSheets, closeSheet } from './views/sheet.js';
 
 const PUBLIC_ROUTES = ['home', 'login', 'register'];
@@ -16,7 +17,8 @@ const TITLES = { home: 'Grafictrader', login: 'Entrar', register: 'Criar conta',
 const VIEWS = {
   live: { activate: activateLive, deactivate: deactivateLive },
   foto: { deactivate: deactivateFoto },
-  intel: { activate: activateIntel, deactivate: deactivateIntel }
+  intel: { activate: activateIntel, deactivate: deactivateIntel },
+  perfil: { activate: activateProfile }
 };
 
 let currentRoute = null;
@@ -179,6 +181,7 @@ async function boot() {
   initLive();
   initFoto();
   initIntel();
+  initProfile();
   wire();
   syncThemeControls();
   await loadSession();

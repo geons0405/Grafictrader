@@ -56,6 +56,7 @@ export function normalizeVision(raw = {}) {
     reasons: list(raw.motivos),
     risks: list(raw.riscos),
     summary: raw.resumo ? String(raw.resumo).slice(0, 300) : null,
+    plain: raw.explicacaoSimples ? String(raw.explicacaoSimples).slice(0, 900) : null,
     imageQuality: raw.qualidadeImagem ? String(raw.qualidadeImagem) : null
   };
 }

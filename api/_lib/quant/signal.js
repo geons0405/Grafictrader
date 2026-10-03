@@ -110,6 +110,14 @@ export function decide(snap, context = null) {
     reasons.push('Sem estrutura estatística clara (Hurst ' + (snap.hurst ?? 0).toFixed(2) + ', VR ' + (snap.varianceRatio ?? 1).toFixed(2) + ').');
   }
 
+  if (direction !== 0 && context?.eventRisk?.blocked) {
+    const e = context.eventRisk.event;
+    reasons.push(`Notícia de alto impacto agora (${e?.currency || ''} ${e?.title || ''}): entrada cancelada.`);
+    direction = 0;
+    setup = null;
+    strength = 0;
+  }
+
   if (direction !== 0 && context && Number.isFinite(context.score)) {
     if (context.score * direction < -0.35) {
       reasons.push('Contexto ao vivo contra o sinal (fluxo/book/notícias ' + Math.round(context.score * 100) + '%): entrada cancelada.');

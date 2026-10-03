@@ -167,6 +167,7 @@ export function summarize(state, livePrice = null) {
       side: p.side > 0 ? 'BUY' : 'SELL',
       entry: p.entry,
       stop: p.stop,
+      initialStop: p.initialStop,
       target: p.target,
       openedAt: p.openedAt,
       bars: p.bars,
