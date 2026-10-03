@@ -93,6 +93,18 @@ Notícias de alto impacto nas moedas do ativo, de 15 min antes a 30 min depois, 
 
 O win rate e o P&L mostrados são o histórico real destas operações simuladas. Não há ordens reais e o app não é aconselhamento financeiro.
 
+## App Android
+
+Descarregar: https://github.com/geons0405/Grafictrader/releases/download/android-latest/Grafictrader.apk
+
+- A app (Capacitor, pasta `android/`) abre https://grafictrader.vercel.app, por isso as mudanças na web chegam à app sem a reinstalar.
+- Em **LIVE › Minha corretora**, o botão "Analisar a corretora neste telemóvel" usa o plugin nativo `GrafictraderNative`:
+  captura o ecrã com MediaProjection (serviço em primeiro plano), envia um frame a `/api/watch` só quando o gráfico muda
+  e mostra COMPRAR / VENDER / NÃO OPERAR numa bolha flutuante por cima da corretora (toque para ver o que fazer, toque longo para abrir a app).
+- Pede as permissões "Mostrar por cima de outras apps" e "Começar a gravar ou transmitir".
+- O workflow `.github/workflows/android.yml` compila o APK e substitui a release `android-latest` a cada mudança em `android/`.
+- O APK é de teste (assinatura de debug): para atualizar, desinstala a versão anterior se o Android recusar a instalação.
+
 ## Contas
 
 Com `KV_REST_API_URL`/`KV_REST_API_TOKEN` configurados, as contas são reais:
