@@ -128,6 +128,22 @@ Sem Redis, o app funciona em **modo local**: o perfil (só o nome) fica no dispo
 ## Variáveis de ambiente
 
 Ver `.env.example`. Nunca colocar chaves de fornecedores no código do frontend.
+Na Vercel, cada variável tem de estar ativa em **Production** (e Preview), com o nome exato (`..._API_KEY`).
+
+| Variável | Para quê |
+| --- | --- |
+| `GEMINI_API_KEY` | Obrigatória para FOTO e Minha corretora (análise por IA) |
+| `KV_REST_API_URL` | `https://grafictrader-dados.floot.app/_api/kv` |
+| `KV_REST_API_TOKEN` | O mesmo token guardado no Floot (`GRAFICTRADER_KV_TOKEN`) |
+| `OPENAI_API_KEY`, `TWELVE_DATA_API_KEY`, `MARKETAUX_API_KEY`, `FINNHUB_API_KEY` | Opcionais |
+
+### Base de dados (Floot)
+
+Contas, sessões, limites de pedidos, estado da IA instrutora, biblioteca de padrões e dados do MT5 ficam
+no projeto Floot **Grafictrader Dados** (Postgres). O endpoint `POST /_api/kv` fala o mesmo protocolo REST
+do Upstash Redis (`GET`, `SET` com `EX`/`NX`, `DEL`, `INCR`, `EXPIRE`), por isso o código usa o mesmo
+cliente (`api/_lib/redis.js`). Para trocar o token: muda-o no Floot (Resources) e em `KV_REST_API_TOKEN`
+na Vercel ao mesmo tempo, e faz Redeploy.
 
 ## Desenvolvimento
 
