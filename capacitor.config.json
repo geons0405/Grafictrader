@@ -1,0 +1,13 @@
+{
+  "appId": "com.grafictrader.app",
+  "appName": "Grafictrader",
+  "webDir": "android-shell",
+  "server": {
+    "url": "https://grafictrader.vercel.app",
+    "androidScheme": "https",
+    "errorPath": "index.html"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

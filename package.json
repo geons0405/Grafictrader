@@ -10,10 +10,13 @@
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.2",
     "lightweight-charts": "^5.0.0",
     "lucide": "^0.468.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
     "vite": "^7.0.0"
   },
   "engines": {
