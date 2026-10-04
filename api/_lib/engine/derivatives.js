@@ -4,7 +4,8 @@ import { round } from './core.js';
 // Open interest and funding from public derivatives APIs (first that answers).
 // Used to tell new positions from short covering / long liquidations.
 
-const PERIOD = { '1m': '5m', '5m': '5m', '15m': '15m', '1h': '1H', '4h': '4H' };
+// OKX rubik statistics only offer 5m, 1H and 1D periods.
+const PERIOD = { '1m': '5m', '5m': '5m', '15m': '5m', '1h': '1H', '4h': '1H' };
 const BINANCE_PERIOD = { '1m': '5m', '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h' };
 
 async function okx(base, interval) {
