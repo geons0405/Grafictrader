@@ -116,6 +116,10 @@ Com `KV_REST_API_URL`/`KV_REST_API_TOKEN` configurados, as contas são reais:
 
 Sem Redis, o app funciona em **modo local**: o perfil (só o nome) fica no dispositivo e o ecrã de login avisa disso.
 
+## Comportamento das IAs
+
+As regras que todas as IAs seguem estão em [AI_BEHAVIOR.md](AI_BEHAVIOR.md): nada de valores inventados, AGUARDAR na dúvida, nenhuma promessa de lucro. Antes de analisar uma imagem, a IA confirma se é um gráfico, e o servidor volta a confirmar. Uma imagem que não é um gráfico nunca dá COMPRAR nem VENDER: a FOTO diz "Isto não parece um gráfico de preços" e a corretora mostra "SEM GRÁFICO".
+
 ## Proteções de custo e segurança
 
 - Limite de pedidos: 10 análises de foto e 20 interpretações mecânicas por 10 min, por utilizador ou IP. Partilhado via Redis quando existe; caso contrário, por instância.

@@ -232,7 +232,8 @@ function handleResult(data) {
   const decision = data.verdict.decision;
   const step = stabilizer.push(decision, { chartVisible: data.chartVisible });
   if (data.chartVisible) lastByDecision[decision] = data;
-  const shownData = step.shown ? lastByDecision[step.shown] || data : data;
+  // No chart now: show this reading (it explains what to do), not the last trade.
+  const shownData = !step.noChart && step.shown ? lastByDecision[step.shown] || data : data;
   current = shownData;
   render(shownData, step, data);
   if (step.changed) {
@@ -249,21 +250,23 @@ function render(data, step, latest) {
   const g = data.guidance || {};
   const v = data.verdict;
   const vis = data.vision;
-  const decision = step.shown || v.decision;
+  // Without a chart on screen nothing is shown as a trade, not even the last one.
+  const decision = step.noChart ? 'AGUARDAR' : step.shown || v.decision;
+  const badgeText = step.noChart ? 'SEM GRÁFICO' : LABEL[decision] || decision;
   const badge = $('#watchBadge');
-  badge.textContent = LABEL[decision] || decision;
+  badge.textContent = badgeText;
   badge.dataset.side = SIDE[decision] || '';
-  $('#watchOverlay').textContent = LABEL[decision] || decision;
+  $('#watchOverlay').textContent = badgeText;
   $('#watchOverlay').dataset.side = SIDE[decision] || '';
   $('#watchTitle').textContent = step.noChart ? 'Não vejo um gráfico no ecrã' : g.headline || v.headline;
   const bits = [vis.asset || 'ativo ?', vis.timeframe || 'timeframe ?', `confiança ${v.confidence}%`];
   if (latest.live) bits.push(v.agreement === 'confirma' ? 'mercado ao vivo confirma' : v.agreement === 'diverge' ? 'mercado ao vivo diverge' : 'mercado ao vivo sem sinal');
   $('#watchSub').textContent = bits.join(' · ');
-  $('#watchPending').hidden = !step.pending;
+  $('#watchPending').hidden = !step.pending || step.noChart;
   if (step.pending) $('#watchPending').textContent = `A IA começa a ver sinal de ${LABEL[step.pending]}. Vai confirmar na próxima leitura antes de mudar.`;
   // Exact engine levels when the market is tracked; otherwise what the AI read on screen.
   const levels = g.levels || { entry: vis.entry, stop: vis.stop, target: vis.targets?.join(' · ') };
-  const showLevels = decision !== 'AGUARDAR' && (levels.entry || levels.stop || levels.target);
+  const showLevels = !step.noChart && decision !== 'AGUARDAR' && Boolean(levels.entry || levels.stop || levels.target);
   $('#watchLevels').hidden = !showLevels;
   if (showLevels) {
     $('#wlEntry').textContent = levels.entry || '—';

@@ -49,6 +49,23 @@ test('a frame without a chart never produces a trade', async () => {
   assert.match(r.body.guidance.headline, /Não vejo um gráfico/);
 });
 
+test('a model that claims a chart but reads nothing from it gives no trade', async () => {
+  visionReply = { graficoVisivel: true, decisao: 'COMPRAR', confianca: 85, resumo: 'Um gato no sofá.', entrada: '100', stop: '90', alvos: ['120'] };
+  const r = await call({ image, previous: { decision: 'COMPRAR' } });
+  assert.equal(r.body.chartVisible, false);
+  assert.equal(r.body.verdict.decision, 'AGUARDAR');
+  assert.equal(r.body.verdict.confidence, 0);
+  assert.equal(r.body.guidance.levels, null);
+  assert.equal(r.body.live, null);
+});
+
+test('a reply without the chart flag and without chart details is not a chart', async () => {
+  visionReply = { decisao: 'VENDER', confianca: 70 };
+  const r = await call({ image });
+  assert.equal(r.body.chartVisible, false);
+  assert.equal(r.body.verdict.decision, 'AGUARDAR');
+});
+
 test('invalid images are rejected', async () => {
   const r = await call({ image: 'data:text/html;base64,AAAA' });
   assert.equal(r.status, 400);

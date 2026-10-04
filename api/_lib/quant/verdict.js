@@ -61,6 +61,48 @@ export function normalizeVision(raw = {}) {
   };
 }
 
+const TRENDS = ['alta', 'baixa', 'lateral'];
+
+/**
+ * Whether the model really read a price chart. The model's own flag is not
+ * enough: it must also have read at least two chart details (trend, price,
+ * asset, timeframe, structure, patterns or indicators), so a photo of anything
+ * else never turns into a trade.
+ */
+export function isChartVisible(raw = {}) {
+  const flag = raw.graficoVisivel;
+  if (flag === false || String(flag).toLowerCase() === 'false') return false;
+  const present = v => v != null && String(v).trim() !== '' && String(v).toLowerCase() !== 'null';
+  const evidence = [
+    TRENDS.includes(String(raw.tendencia || '').toLowerCase()),
+    present(raw.precoAtual) && Number.isFinite(Number(raw.precoAtual)),
+    present(raw.ativo),
+    present(raw.timeframe),
+    present(raw.estrutura),
+    Array.isArray(raw.padroes) && raw.padroes.some(present),
+    present(raw.indicadores)
+  ].filter(Boolean).length;
+  return evidence >= 2;
+}
+
+/** Neutral reading for an image that is not a chart: no side, no levels, no asset. */
+export function noChartVision(raw = {}) {
+  const base = normalizeVision({ resumo: raw.resumo, qualidadeImagem: raw.qualidadeImagem });
+  return { ...base, direction: 0, confidence: 0, trend: 'indefinida' };
+}
+
+/** Verdict shown when the image is not a chart. */
+export function noChartVerdict() {
+  return {
+    decision: 'AGUARDAR',
+    direction: 0,
+    confidence: 0,
+    agreement: 'sem dados ao vivo',
+    headline: 'Isto não parece um gráfico de preços',
+    reasons: ['A IA não encontrou um gráfico na imagem, por isso não dá nenhuma orientação de compra ou venda.']
+  };
+}
+
 /**
  * vision: normalizeVision() output. reading: marketReading() output or null.
  * Returns { decision, direction, confidence, agreement, headline, reasons }.
@@ -116,4 +158,22 @@ export function mergeVerdict(vision, reading) {
       ? 'Viés de venda: o gráfico tende a descer'
       : 'Mercado instável: melhor aguardar';
   return { decision, direction, confidence: direction === 0 ? Math.min(confidence, 40) : confidence, agreement, headline, reasons };
+}
+
+/** Plain guidance for an image that is not a chart. `source` is 'foto' or 'ecrã'. */
+export function noChartGuidance(vision = {}, source = 'foto') {
+  const saw = vision.summary ? `A IA vê: ${vision.summary}` : 'A IA não reconhece velas, barras ou linha de preço nesta imagem.';
+  return {
+    action: 'SEM GRÁFICO',
+    tone: 'wait',
+    headline: 'Isto não parece um gráfico de preços',
+    why: [saw, 'Sem um gráfico visível não há leitura de mercado, por isso a IA não dá sinal de compra nem de venda.'],
+    steps: source === 'ecrã'
+      ? ['Mostra o gráfico da corretora inteiro no ecrã partilhado ou na câmara.', 'Garante que se vêem as velas, o preço e o timeframe.']
+      : ['Fotografa ou carrega o ecrã com o gráfico da corretora.', 'Enquadra o gráfico inteiro: velas, eixo do preço e timeframe.', 'Evita reflexos e imagens tremidas.'],
+    now: source === 'ecrã'
+      ? 'Mostra o gráfico da corretora inteiro, bem enquadrado, para a IA conseguir analisar.'
+      : 'Tira uma foto ao gráfico da corretora para receberes a orientação.',
+    levels: null
+  };
 }

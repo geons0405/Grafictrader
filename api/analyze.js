@@ -2,13 +2,15 @@ import { requireUserIfConfigured } from './_lib/auth.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 import { clientIp, parseMarketQuery } from './_lib/validate.js';
 import { marketReading } from './_lib/quant/service.js';
-import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict } from './_lib/quant/verdict.js';
+import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance } from './_lib/quant/verdict.js';
+import { rulesBlock } from './_lib/ai-rules.js';
 import { photoGuidance } from './_lib/quant/explain.js';
 
 import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
 
-const ANALYSIS_PROMPT = `És um analista técnico experiente. Analisa a imagem de um gráfico de trading.
-Lê apenas o que é visível: ativo, timeframe, preço atual, estrutura (topos/fundos), suportes e resistências, padrões de velas e gráficos, indicadores visíveis, volume.
+const ANALYSIS_PROMPT = `És um analista técnico experiente. Recebes uma imagem que o utilizador diz ser um gráfico de trading.
+${rulesBlock({ chart: true })}
+Se for um gráfico, lê apenas o que é visível: ativo, timeframe, preço atual, estrutura (topos/fundos), suportes e resistências, padrões de velas e gráficos, indicadores visíveis, volume.
 Decide uma orientação para a próxima fase do gráfico:
 - "COMPRAR" se a estrutura e o momentum favorecem subida;
 - "VENDER" se favorecem descida;
@@ -16,6 +18,7 @@ Decide uma orientação para a próxima fase do gráfico:
 Não inventes valores que não estejam visíveis. Não prometas resultados. Responde em português de Angola.
 Responde APENAS com JSON válido neste formato:
 {
+  "graficoVisivel": true | false,
   "ativo": "ex.: BTC/USDT ou null",
   "timeframe": "ex.: 5m, 15m, 1h ou null",
   "precoAtual": número ou null,
@@ -58,7 +61,28 @@ export default async function handler(req, res) {
     return res.status(error.status || 502).json({ ok: false, setupRequired: Boolean(error.setupRequired), error: error.message });
   }
 
+  const chartVisible = isChartVisible(vision.raw);
+  if (!chartVisible) {
+    // Not a chart: never a trade, never mixed with a live market reading.
+    const normalized = noChartVision(vision.raw);
+    return res.status(200).json({
+      ok: true,
+      provider: vision.provider,
+      chartVisible: false,
+      vision: normalized,
+      verdict: noChartVerdict(),
+      guidance: noChartGuidance(normalized, 'foto'),
+      live: null,
+      disclaimer: 'Orientação educativa gerada por IA. Não é aconselhamento financeiro nem garantia de resultado.'
+    });
+  }
+
   const normalized = normalizeVision(vision.raw);
+  if (normalized.imageQuality === 'fraca') {
+    // A blurry or cut chart is read, but never traded on.
+    normalized.direction = 0;
+    normalized.confidence = Math.min(normalized.confidence, 30);
+  }
   // Cross-check with the live engine when the chart is a market we track.
   const hint = parseMarketQuery({ symbol: hintSymbol, interval: hintInterval });
   const symbol = mapAsset(normalized.asset) || null;
@@ -76,6 +100,7 @@ export default async function handler(req, res) {
   return res.status(200).json({
     ok: true,
     provider: vision.provider,
+    chartVisible: true,
     vision: normalized,
     verdict,
     guidance: photoGuidance(verdict, normalized, reading),
