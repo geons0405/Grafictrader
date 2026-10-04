@@ -4,7 +4,7 @@ import { fPValue, rng, mean } from '../api/_lib/engine/core.js';
 import { granger, leadLag, causalityLayer } from '../api/_lib/engine/causality.js';
 import { sampleEntropy, permutationEntropy, transferEntropy, shannon } from '../api/_lib/engine/entropy.js';
 import { fitHmm, changePoint, classifyRegime } from '../api/_lib/engine/regime.js';
-import { dfa, higuchi, fractalLayer } from '../api/_lib/engine/fractal.js';
+import { dfa, higuchi, generalizedHurst, fractalLayer } from '../api/_lib/engine/fractal.js';
 import { mra, haarDwt } from '../api/_lib/engine/wavelet.js';
 import { isolationForest, mahalanobis, robustZ, crossAsset } from '../api/_lib/engine/anomaly.js';
 import { orderFlow, liquiditySweep, volumeProfile } from '../api/_lib/engine/micro.js';
@@ -162,4 +162,10 @@ test('a flat market gives the fractal layer no confidence', () => {
   const layer = fractalLayer(flat);
   assert.equal(layer.confidence, 0);
   assert.equal(layer.score, 0);
+});
+
+test('Higuchi and generalized Hurst are unavailable on a flat path', () => {
+  const flat = new Array(300).fill(Math.log(100));
+  assert.equal(higuchi(flat), null);
+  assert.equal(generalizedHurst(flat, 2), null);
 });

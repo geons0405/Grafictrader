@@ -42,19 +42,22 @@ export function higuchi(x, kmax = 10) {
       for (let i = 1; i <= count; i++) len += Math.abs(x[m + i * k] - x[m + (i - 1) * k]);
       lens.push((len * (n - 1)) / (count * k * k));
     }
-    pts.push([Math.log(1 / k), Math.log(mean(lens))]);
+    // A flat path has zero length at every scale: log(0) would poison the fit.
+    if (lens.length && mean(lens) > 0) pts.push([Math.log(1 / k), Math.log(mean(lens))]);
   }
+  if (pts.length < 3) return null;
   return ols(pts.map(p => [p[0]]), pts.map(p => p[1]))?.beta[1] ?? null;
 }
 
 /** Generalized Hurst H(q) from q-th moments of increments of the log price. */
 export function generalizedHurst(logPrice, q) {
   const taus = [1, 2, 4, 8, 16].filter(t => t < logPrice.length / 4);
-  const pts = taus.map(t => {
+  const pts = [];
+  for (const t of taus) {
     const inc = [];
     for (let i = t; i < logPrice.length; i++) inc.push(Math.abs(logPrice[i] - logPrice[i - t]) ** q);
-    return [Math.log(t), Math.log(mean(inc)) / q];
-  });
+    if (mean(inc) > 0) pts.push([Math.log(t), Math.log(mean(inc)) / q]);
+  }
   if (pts.length < 3) return null;
   return ols(pts.map(p => [p[0]]), pts.map(p => p[1]))?.beta[1] ?? null;
 }
@@ -84,7 +87,7 @@ export function fractalLayer(candles) {
     : persistence < -0.03 ? -Math.tanh(drift * 5) * clamp(-persistence * 6, 0, 1) : 0;
   const notes = [
     `Hurst ${hurst?.toFixed(2)} e DFA α ${alpha?.toFixed(2)}: ${persistence > 0.03 ? 'comportamento persistente (tendência tende a continuar)' : persistence < -0.03 ? 'anti-persistente (tende a reverter)' : 'perto de passeio aleatório'}.`,
-    `Dimensão fractal ${fd?.toFixed(2)} (${fd != null && fd < 1.4 ? 'caminho limpo' : 'caminho rugoso'}); multifractalidade ΔH ${multifractal?.toFixed(2)}.`
+    `Dimensão fractal ${fd?.toFixed(2)} (${fd == null ? 'indisponível' : fd < 1.4 ? 'caminho limpo' : 'caminho rugoso'}); multifractalidade ΔH ${multifractal?.toFixed(2)}.`
   ];
   return {
     id: 'fractal', name: 'Estrutura fractal', score: round(clamp(score)), confidence: round(clamp(Math.abs(persistence) * 6, 0.15, 0.85)),
