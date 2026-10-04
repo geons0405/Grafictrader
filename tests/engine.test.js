@@ -4,7 +4,7 @@ import { fPValue, rng, mean } from '../api/_lib/engine/core.js';
 import { granger, leadLag, causalityLayer } from '../api/_lib/engine/causality.js';
 import { sampleEntropy, permutationEntropy, transferEntropy, shannon } from '../api/_lib/engine/entropy.js';
 import { fitHmm, changePoint, classifyRegime } from '../api/_lib/engine/regime.js';
-import { dfa, higuchi } from '../api/_lib/engine/fractal.js';
+import { dfa, higuchi, fractalLayer } from '../api/_lib/engine/fractal.js';
 import { mra, haarDwt } from '../api/_lib/engine/wavelet.js';
 import { isolationForest, mahalanobis, robustZ, crossAsset } from '../api/_lib/engine/anomaly.js';
 import { orderFlow, liquiditySweep, volumeProfile } from '../api/_lib/engine/micro.js';
@@ -155,4 +155,11 @@ test('order-flow buckets count price moves between buckets', () => {
   for (let i = 0; i < 100; i++) trades.push({ time: i, price: 100 + Math.floor(i / 10), quantity: 1, side: i % 2 ? 'buy' : 'sell' });
   const flow = orderFlow(trades, 10);
   assert.ok(flow.priceChange > 0);
+});
+
+test('a flat market gives the fractal layer no confidence', () => {
+  const flat = Array.from({ length: 300 }, (_, i) => ({ time: i, open: 100, high: 100, low: 100, close: 100, volume: 1 }));
+  const layer = fractalLayer(flat);
+  assert.equal(layer.confidence, 0);
+  assert.equal(layer.score, 0);
 });

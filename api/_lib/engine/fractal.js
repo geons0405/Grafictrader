@@ -73,7 +73,11 @@ export function fractalLayer(candles) {
   const multifractal = h1 != null && h3 != null ? h1 - h3 : null;
   const ac1 = autocorrelation(window, 1);
   const ac5 = autocorrelation(window, 5);
-  const persistence = mean([hurst, alpha].filter(v => v != null)) - 0.5; // > 0 persistent, < 0 mean-reverting
+  const estimates = [hurst, alpha].filter(v => v != null);
+  if (!estimates.length) {
+    return { id: 'fractal', name: 'Estrutura fractal', score: 0, confidence: 0, metrics: { hurst: null, dfa: null }, notes: ['Sem variação suficiente para medir a persistência.'] };
+  }
+  const persistence = mean(estimates) - 0.5; // > 0 persistent, < 0 mean-reverting
   const drift = mean(returns.slice(-30)) / (std(returns.slice(-120)) || 1);
   // Persistent: follow the drift. Anti-persistent: lean against a stretched drift.
   const score = persistence > 0.03 ? Math.tanh(drift * 5) * clamp(persistence * 8, 0, 1)
