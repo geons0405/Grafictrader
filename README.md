@@ -141,12 +141,34 @@ Na Vercel, cada variável tem de estar ativa em **Production** (e Preview), com 
 
 Estado dos serviços: `GET /api/health` (o que está configurado) e `GET /api/health?probe=1` (faz uma chamada real a cada serviço; limitado a 5 por 10 minutos).
 
+### Motor de Inteligência de Mercado
+
+`GET /api/intelligence?engine=1&symbol=BTCUSDT&interval=5m` (painel **Market Intelligence Engine** na Live Inteligente; também entra no conselho como analista "Estrutural").
+
+| Camada | Cálculos |
+| --- | --- |
+| 1. Microestrutura | CVD, desequilíbrio agressor e tendência do OFI, lambda de Kyle, absorção, icebergs, perfil de volume (POC, VAH, VAL, HVN, LVN), VWAP, varrimentos de liquidez, profundidade do livro a ±0,1/0,5/1% |
+| 2. Entropia e informação | Shannon, permutação (3 e 4), entropia amostral e aproximada, informação mútua, transfer entropy, tendência da entropia |
+| 3. Regimes | HMM gaussiano de 3 estados (Baum–Welch), ponto de mudança por razão de verosimilhança, regimes A–G |
+| 4. Volatilidade | Realizada, Parkinson, Garman–Klass, Rogers–Satchell, Yang–Zhang, clustering, vol-da-vol, compressão → expansão |
+| 5. Fractais | Hurst R/S, DFA, dimensão de Higuchi, Hurst generalizado H(1)–H(3) |
+| 6. Wavelets | Análise multirresolução de Haar (curto, swing, estrutural), energia por escala, coerência com outro ativo |
+| 7. Anomalias | Z robusto, Mahalanobis, Isolation Forest, resíduo face ao beta de outro ativo, divergência preço/fluxo |
+| 8. Causalidade | Granger (valor-p F), lead-lag, transfer entropy e grafo entre o ativo, BTC, ETH, SOL e DXY |
+
+**Fusão:** o peso de cada camada depende do regime e do seu IC (correlação com o retorno seguinte) numa validação walk-forward de ~40 pontos do histórico do próprio mercado. Resultado: viés estrutural (−100 a +100), confiança, probabilidade de subir e movimento esperado.
+**Alerta antecipado:** compressão, entropia a descer, Hurst a subir, fluxo e volume a crescer, liquidez desequilibrada → estado (pré-rompimento, expansão, exaustão) e probabilidade.
+**Intenção:** decompõe o último movimento em agressão, short covering ou liquidações (open interest da OKX), falta de liquidez, arrasto de outro ativo, varrimento de stops e ruído.
+
+Limites: sem dados de opções não há volatilidade implícita nem skew; autoencoders e modelos treinados ficam de fora por correrem em funções serverless.
+
 ### Conselho de analistas e juíza IA
 
 `GET /api/instructor?council=1&symbol=BTCUSDT&interval=5m` (separador **Conselho** no LIVE › Mercado):
 
 | Analista | O que calcula |
 | --- | --- |
+| Estrutural (motor) | Leitura fundida das 8 camadas do motor, alerta antecipado e intenção |
 | Noticiário | Tom das manchetes das últimas 12 h (mais peso às recentes) |
 | Matemático | MACD, ROC 10/30, RSI, inclinação da EMA 20 |
 | Estatístico | Regime: Hurst, razão de variância, entropia, VWAP z, Kalman |

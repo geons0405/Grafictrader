@@ -437,7 +437,7 @@ function renderEngine(d) {
   const causality = d.layers.find(l => l.id === 'causality');
   const edges = causality?.metrics?.edges || [];
   $('#eGraph').innerHTML = edges.length
-    ? edges.sort((a, b) => a.p - b.p).slice(0, 8).map(e => `<div class="edge"><b>${escapeHtml(e.from)}</b><span>→</span><b>${escapeHtml(e.to)}</b><small>p ${e.p} · ${e.sign > 0 ? 'mesma direção' : 'direção oposta'} · TE ${e.transferEntropy ?? '—'}${e.leadLag?.lag ? ` · lidera ${e.leadLag.lag} vela(s)` : ''}</small></div>`).join('')
+    ? edges.sort((a, b) => a.p - b.p).slice(0, 8).map(e => `<div class="edge"><b>${escapeHtml(e.from)}</b><span>→</span><b>${escapeHtml(e.to)}</b><small>${e.p < 0.001 ? 'p &lt; 0,001' : 'p ' + e.p} · ${e.sign > 0 ? 'mesma direção' : 'direção oposta'} · TE ${e.transferEntropy ?? '—'}${e.leadLag?.lag ? ` · lidera ${e.leadLag.lag} vela(s)` : ''}</small></div>`).join('')
     : '<p class="term-note">Sem relações de precedência significativas agora (p &lt; 0,05).</p>';
   const anomaly = d.layers.find(l => l.id === 'anomaly');
   $('#eAnomalyLevel').textContent = anomaly?.metrics?.level != null ? `nível ${Math.round(anomaly.metrics.level * 100)}%` : '—';

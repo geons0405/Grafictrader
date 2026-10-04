@@ -1248,7 +1248,7 @@ body.is-watching .tabbar button[data-tab="live"]::after {
   .e-row { grid-template-columns: 1fr 1fr 36px; }
   .e-row small { display: none; }
   .early-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .edge { grid-template-columns: auto auto auto; }
+  .edge { grid-template-columns: auto auto auto; justify-content: start; }
   .edge small { grid-column: 1 / -1; text-align: left; }
 }
 .intent-row .q-meter { grid-column: auto; height: 4px; }
