@@ -1,12 +1,52 @@
 import { apiKey } from './env.js';
-// Vision model helpers shared by photo analysis and live broker analysis.
+
+// AI models for Grafictrader. Every provider is reached the same way and models
+// are tried in a fixed order ("chain") per role:
+//   vision - reads a chart image (FOTO, Minha corretora, Android bubble)
+//   judge  - reads the analysts' results and gives the final verdict (text)
+// A model that fails is skipped; one that hits a rate limit is paused for a minute.
 
 export const MAX_IMAGE_CHARS = 4_000_000;
 export const IMAGE_PATTERN = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
+export const PROVIDERS = {
+  unorouter: { label: 'UnoRouter', env: 'UNOROUTER_API_KEY', base: 'https://api.unorouter.com/v1' },
+  groq: { label: 'Groq', env: 'GROQ_API_KEY', base: 'https://api.groq.com/openai/v1' },
+  nvidia: { label: 'NVIDIA', env: 'NVIDIA_API_KEY', base: 'https://integrate.api.nvidia.com/v1' },
+  gemini: { label: 'Gemini', env: 'GEMINI_API_KEY' },
+  openai: { label: 'OpenAI', env: 'OPENAI_API_KEY' }
+};
+
+// Order chosen from the chart benchmark in /api/health?compare=... (see README).
+const DEFAULT_CHAINS = {
+  vision: [
+    'groq:meta-llama/llama-4-maverick-17b-128e-instruct',
+    'groq:meta-llama/llama-4-scout-17b-16e-instruct',
+    'unorouter:gpt-4o:free',
+    'unorouter:qwen2.5-vl-7b-instruct-awq:free',
+    'nvidia:meta/llama-4-maverick-17b-128e-instruct',
+    'gemini:gemini-3.8-flash',
+    'openai:gpt-5.6-luna',
+    'unorouter:llama-4-maverick-17b-128e-instruct:free'
+  ],
+  judge: [
+    'groq:openai/gpt-oss-120b',
+    'groq:llama-3.3-70b-versatile',
+    'nvidia:meta/llama-3.3-70b-instruct',
+    'gemini:gemini-3.8-flash',
+    'unorouter:gpt-4o:free',
+    'openai:gpt-5.6-luna'
+  ]
+};
+
+const ENV_CHAINS = { vision: 'AI_VISION_MODELS', judge: 'AI_JUDGE_MODELS' };
+const STEP_TIMEOUT_MS = 20_000;
+const COOLDOWN_MS = 60_000;
+const cooldown = new Map();
+
 export function parseJson(text) {
   if (!text) return null;
-  const cleaned = text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  const cleaned = String(text).replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim();
   try { return JSON.parse(cleaned); } catch { /* fall through */ }
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (!match) return null;
@@ -20,7 +60,7 @@ async function postJson(url, headers, body, timeoutMs = 45_000) {
     const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body), signal: controller.signal });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = new Error(data?.error?.message || `HTTP ${response.status}`);
+      const error = new Error(data?.error?.message || data?.detail || data?.message || `HTTP ${response.status}`);
       error.status = response.status;
       throw error;
     }
@@ -30,144 +70,135 @@ async function postJson(url, headers, body, timeoutMs = 45_000) {
   }
 }
 
-export async function visionGemini(image, key, prompt, maxOutputTokens = 1800) {
-  const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-  const [, mime, data] = image.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s) || [];
+/** "provider:model" → { provider, model }. The model id may itself contain ":". */
+export function parseStep(spec) {
+  const index = String(spec).indexOf(':');
+  if (index < 1) return null;
+  const provider = spec.slice(0, index).trim();
+  const model = spec.slice(index + 1).trim();
+  return PROVIDERS[provider] && model ? { provider, model } : null;
+}
+
+/** Steps for a role that have a key configured, honouring AI_VISION_MODELS / AI_JUDGE_MODELS. */
+export function chainFor(role) {
+  const custom = (process.env[ENV_CHAINS[role]] || '').split(',').map(s => s.trim()).filter(Boolean);
+  const specs = [...new Set([...custom, ...(DEFAULT_CHAINS[role] || [])])];
+  return specs.map(parseStep).filter(step => step && apiKey(PROVIDERS[step.provider].env));
+}
+
+/** One OpenAI-style chat call (UnoRouter, Groq, NVIDIA). `content` is a string or content parts. */
+async function chatCompatible(provider, model, content, { maxTokens, temperature, json }) {
+  const { base, env } = PROVIDERS[provider];
+  const result = await postJson(`${base}/chat/completions`, { Authorization: `Bearer ${apiKey(env)}` }, {
+    model,
+    temperature,
+    max_tokens: maxTokens,
+    ...(json && provider === 'groq' && typeof content === 'string' ? { response_format: { type: 'json_object' } } : {}),
+    messages: [{ role: 'user', content }]
+  }, STEP_TIMEOUT_MS);
+  const message = result?.choices?.[0]?.message?.content;
+  return Array.isArray(message) ? message.map(p => p?.text || '').join('\n') : message;
+}
+
+async function chatGemini(model, text, image, { maxTokens, temperature, json }) {
+  const parts = [{ text }];
+  if (image) {
+    const [, mime, data] = image.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s) || [];
+    parts.push({ inline_data: { mime_type: mime, data } });
+  }
   const result = await postJson(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-    { 'x-goog-api-key': key },
-    {
-      contents: [{ role: 'user', parts: [{ text: prompt }, { inline_data: { mime_type: mime, data } }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens, responseMimeType: 'application/json' }
-    }
+    { 'x-goog-api-key': apiKey('GEMINI_API_KEY') },
+    { contents: [{ role: 'user', parts }], generationConfig: { temperature, maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) } },
+    STEP_TIMEOUT_MS
   );
-  const text = result?.candidates?.flatMap(c => c?.content?.parts?.map(p => p?.text).filter(Boolean) || []).join('\n');
-  const parsed = parseJson(text);
-  if (!parsed) throw new Error('Gemini não devolveu uma análise válida.');
-  return { raw: parsed, provider: 'Gemini' };
+  return result?.candidates?.flatMap(c => c?.content?.parts?.map(p => p?.text).filter(Boolean) || []).join('\n');
 }
 
-export async function visionOpenAI(image, key, prompt) {
-  const result = await postJson('https://api.openai.com/v1/responses', { Authorization: `Bearer ${key}` }, {
-    model: process.env.OPENAI_MODEL || 'gpt-5.6-luna',
-    input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }, { type: 'input_image', image_url: image }] }]
-  });
-  const text = result?.output_text || result?.output?.flatMap(item => item?.content?.filter(p => p?.type === 'output_text').map(p => p?.text) || []).join('\n');
-  const parsed = parseJson(text);
-  if (!parsed) throw new Error('OpenAI não devolveu uma análise válida.');
-  return { raw: parsed, provider: 'OpenAI' };
+async function chatOpenAI(model, text, image, { maxTokens }) {
+  const content = [{ type: 'input_text', text }];
+  if (image) content.push({ type: 'input_image', image_url: image });
+  const result = await postJson('https://api.openai.com/v1/responses', { Authorization: `Bearer ${apiKey('OPENAI_API_KEY')}` },
+    { model, max_output_tokens: maxTokens, input: [{ role: 'user', content }] }, STEP_TIMEOUT_MS);
+  return result?.output_text || result?.output?.flatMap(item => item?.content?.filter(p => p?.type === 'output_text').map(p => p?.text) || []).join('\n');
 }
 
-// UnoRouter: one key for many models behind an OpenAI-compatible API.
-const UNOROUTER_BASE = 'https://api.unorouter.com/v1';
-// Free models that read a test chart correctly come first; the others are only
-// tried after the Gemini key (free tiers often hit per-minute or capacity limits).
-const UNOROUTER_PRIMARY_MODELS = ['gpt-4o:free', 'qwen2.5-vl-7b-instruct-awq:free'];
-const UNOROUTER_SECONDARY_MODELS = ['llama-4-maverick-17b-128e-instruct:free', 'gemini-3.6-flash:free', 'gemini-3.5-flash'];
-const UNOROUTER_TIMEOUT_MS = 20_000;
-
-function configuredModels() {
-  return (process.env.UNOROUTER_MODEL || '').split(',').map(m => m.trim()).filter(Boolean);
+/** Runs one step: a prompt (and optional image) to one provider/model. Returns the text answer. */
+export async function runStep(step, text, image, { maxTokens = 1800, temperature = 0.2, json = true } = {}) {
+  const opts = { maxTokens, temperature, json };
+  if (step.provider === 'gemini') return chatGemini(step.model, text, image, opts);
+  if (step.provider === 'openai') return chatOpenAI(step.model, text, image, opts);
+  const content = image ? [{ type: 'text', text }, { type: 'image_url', image_url: { url: image } }] : text;
+  return chatCompatible(step.provider, step.model, content, opts);
 }
 
-function unoRouterModels(group = 'all') {
-  const primary = [...new Set([...configuredModels(), ...UNOROUTER_PRIMARY_MODELS])];
-  if (group === 'primary') return primary;
-  if (group === 'secondary') return UNOROUTER_SECONDARY_MODELS.filter(m => !primary.includes(m));
-  return [...new Set([...primary, ...UNOROUTER_SECONDARY_MODELS])];
-}
+const label = step => `${PROVIDERS[step.provider].label} (${step.model})`;
 
-/** Model ids visible to the key, with pricing when the API reports it (free ones first). */
-export async function listUnoRouterModels(key) {
-  const base = (process.env.UNOROUTER_BASE_URL || UNOROUTER_BASE).replace(/\/$/, '');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
-  try {
-    const response = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` }, signal: controller.signal });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
-    const models = (data?.data || []).map(m => ({
-      id: m.id,
-      free: /free/i.test(m.id) || Number(m?.pricing?.prompt) === 0 || m?.is_free === true,
-      vision: /image|vision/i.test(JSON.stringify(m?.architecture || m?.modalities || m?.capabilities || '')) || undefined,
-      pricing: m?.pricing || undefined
-    }));
-    return { total: models.length, free: models.filter(m => m.free), sample: models.slice(0, 40).map(m => m.id) };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-// Worth trying the next model: model missing, no balance for a paid model, a busy
-// free model, or a model that does not take images.
-const isModelError = error => [402, 404, 429, 503].includes(error?.status) || error?.name === 'AbortError'
-  || (error?.status === 400 && /model|image|vision|multimodal/i.test(error.message || ''))
-  || /balance|credit|billing|quota/i.test(error?.message || '');
-
-/** Chat completion through UnoRouter, trying the next model when one is unavailable. */
-export async function chatUnoRouter(key, content, { maxTokens = 1800, temperature = 0.2, accept = () => true, models } = {}) {
-  const base = (process.env.UNOROUTER_BASE_URL || UNOROUTER_BASE).replace(/\/$/, '');
-  let lastError = null;
-  for (const model of models || unoRouterModels()) {
-    try {
-      const result = await postJson(`${base}/chat/completions`, { Authorization: `Bearer ${key}` }, {
-        model,
-        temperature,
-        max_tokens: maxTokens,
-        messages: [{ role: 'user', content }]
-      }, UNOROUTER_TIMEOUT_MS);
-      const message = result?.choices?.[0]?.message?.content;
-      const text = Array.isArray(message) ? message.map(p => p?.text || '').join('\n') : message;
-      if (text && accept(text)) return { text, model };
-      // Empty or unusable answer (e.g. not JSON): try the next model.
-      lastError = new Error(text ? `UnoRouter (${model}) devolveu uma resposta inválida.` : 'UnoRouter devolveu uma resposta vazia.');
-    } catch (error) {
-      lastError = error;
-      if (!isModelError(error)) throw error;
-    }
-  }
-  throw lastError || new Error('Nenhum modelo do UnoRouter respondeu.');
-}
-
-export async function visionUnoRouter(image, key, prompt, maxOutputTokens = 1800, group = 'all') {
-  const { text, model } = await chatUnoRouter(key, [
-    { type: 'text', text: prompt },
-    { type: 'image_url', image_url: { url: image } }
-  ], { maxTokens: maxOutputTokens, accept: answer => Boolean(parseJson(answer)), models: unoRouterModels(group) });
-  const parsed = parseJson(text);
-  if (!parsed) throw new Error('UnoRouter não devolveu uma análise válida.');
-  return { raw: parsed, provider: `UnoRouter (${model})` };
-}
-
-/** Runs the configured vision providers in order: UnoRouter, then Gemini, then OpenAI. */
-export async function runVision(image, prompt, { maxOutputTokens } = {}) {
-  const unoKey = apiKey('UNOROUTER_API_KEY');
-  const geminiKey = apiKey('GEMINI_API_KEY');
-  const openAIKey = apiKey('OPENAI_API_KEY');
-  if (!unoKey && !geminiKey && !openAIKey) {
-    const error = new Error('Nenhuma IA de análise está configurada (UNOROUTER_API_KEY, GEMINI_API_KEY ou OPENAI_API_KEY).');
+/**
+ * Tries the role's chain until a model returns a usable answer.
+ * `accept(text)` decides if an answer is usable (default: valid JSON).
+ */
+export async function runChain(role, text, image, { accept = t => Boolean(parseJson(t)), steps, ...opts } = {}) {
+  const chain = steps || chainFor(role);
+  if (!chain.length) {
+    const error = new Error('Nenhuma IA está configurada (UNOROUTER_API_KEY, GROQ_API_KEY, NVIDIA_API_KEY, GEMINI_API_KEY ou OPENAI_API_KEY).');
     error.status = 503;
     error.setupRequired = true;
     throw error;
   }
-  let lastError = null;
-  const providers = [
-    [unoKey, (img, k) => visionUnoRouter(img, k, prompt, maxOutputTokens, 'primary')],
-    [geminiKey, (img, k) => visionGemini(img, k, prompt, maxOutputTokens)],
-    [openAIKey, (img, k) => visionOpenAI(img, k, prompt)],
-    [unoKey, (img, k) => visionUnoRouter(img, k, prompt, maxOutputTokens, 'secondary')]
-  ];
-  for (const [key, run] of providers) {
-    if (!key) continue;
+  const errors = [];
+  for (const step of chain) {
+    const id = `${step.provider}:${step.model}`;
+    if ((cooldown.get(id) || 0) > Date.now()) continue;
     try {
-      return await run(image, key);
+      const answer = await runStep(step, text, image, opts);
+      if (answer && accept(answer)) return { text: answer, provider: label(step), step };
+      errors.push(`${id}: resposta inválida`);
     } catch (error) {
-      lastError = error;
-      console.error('[Vision]', error?.message || error);
+      errors.push(`${id}: ${error?.message || error}`);
+      if (error?.status === 429 || /rate|too many|capacity|quota|high demand/i.test(error?.message || '')) cooldown.set(id, Date.now() + COOLDOWN_MS);
+      console.error('[AI]', id, error?.message || error);
     }
   }
-  const error = new Error('A IA não conseguiu analisar a imagem. Tenta uma imagem mais nítida.');
+  const error = new Error('Nenhum modelo de IA conseguiu responder agora. Tenta novamente dentro de instantes.');
   error.status = 502;
-  error.cause = lastError;
+  error.details = errors.slice(-6);
   throw error;
+}
+
+/** Chart image → parsed JSON from the first vision model that answers well. */
+export async function runVision(image, prompt, { maxOutputTokens = 1800 } = {}) {
+  try {
+    const { text, provider } = await runChain('vision', prompt, image, { maxTokens: maxOutputTokens });
+    return { raw: parseJson(text), provider };
+  } catch (error) {
+    if (error.setupRequired) throw error;
+    const wrapped = new Error('A IA não conseguiu analisar a imagem. Tenta uma imagem mais nítida ou espera um minuto.');
+    wrapped.status = 502;
+    wrapped.cause = error;
+    throw wrapped;
+  }
+}
+
+/** Text prompt → answer from the judge chain. */
+export async function runText(prompt, { json = false, maxTokens = 900, temperature = 0.15 } = {}) {
+  return runChain('judge', prompt, null, { json, maxTokens, temperature, accept: json ? undefined : t => Boolean(String(t).trim()) });
+}
+
+/** Model ids a provider exposes to the configured key. */
+export async function listModels(provider) {
+  const config = PROVIDERS[provider];
+  if (!config?.base) throw new Error('Este provedor não tem lista de modelos.');
+  const key = apiKey(config.env);
+  if (!key) throw new Error(`${config.env} não configurada`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(`${config.base}/models`, { headers: { Authorization: `Bearer ${key}` }, signal: controller.signal });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+    return (data?.data || []).map(m => m.id).filter(Boolean).sort();
+  } finally {
+    clearTimeout(timer);
+  }
 }

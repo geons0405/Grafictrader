@@ -12,3 +12,11 @@ test('apiKey reads the correct name and the misspelled _KAY name', () => {
   delete process.env.GEMINI_API_KAY;
   assert.equal(apiKey('GEMINI_API_KEY'), undefined);
 });
+
+test('apiKey also accepts the _PAI_KEY spelling', () => {
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KAY;
+  process.env.GEMINI_PAI_KEY = 'pai';
+  assert.equal(apiKey('GEMINI_API_KEY'), 'pai');
+  delete process.env.GEMINI_PAI_KEY;
+});

@@ -1,68 +1,67 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runVision } from '../api/_lib/vision.js';
+import { runVision, runText, chainFor, parseStep } from '../api/_lib/vision.js';
 
 const IMAGE = 'data:image/png;base64,iVBORw0KGgo=';
+const AI_KEYS = ['UNOROUTER_API_KEY', 'GROQ_API_KEY', 'NVIDIA_API_KEY', 'GEMINI_API_KEY', 'GEMINI_API_KAY', 'GEMINI_PAI_KEY', 'OPENAI_API_KEY', 'AI_VISION_MODELS', 'AI_JUDGE_MODELS'];
 
-test('UnoRouter is used first and falls back to the next model when one is missing', async () => {
-  const original = globalThis.fetch;
-  const saved = { ...process.env };
-  process.env.UNOROUTER_API_KEY = 'test-key';
-  delete process.env.GEMINI_API_KEY;
-  delete process.env.GEMINI_API_KAY;
-  delete process.env.OPENAI_API_KEY;
-  delete process.env.UNOROUTER_MODEL;
+function withEnv(env, fn) {
+  return async () => {
+    const saved = { ...process.env };
+    const original = globalThis.fetch;
+    for (const k of AI_KEYS) delete process.env[k];
+    Object.assign(process.env, env);
+    try {
+      await fn();
+    } finally {
+      globalThis.fetch = original;
+      process.env = saved;
+    }
+  };
+}
+
+test('parseStep keeps model ids that contain ":"', () => {
+  assert.deepEqual(parseStep('unorouter:gpt-4o:free'), { provider: 'unorouter', model: 'gpt-4o:free' });
+  assert.equal(parseStep('nope:model'), null);
+});
+
+test('chains only include providers with a key, custom models first', withEnv({ GROQ_API_KEY: 'g', AI_VISION_MODELS: 'groq:my-model' }, async () => {
+  const chain = chainFor('vision');
+  assert.ok(chain.length > 0);
+  assert.ok(chain.every(s => s.provider === 'groq'));
+  assert.equal(chain[0].model, 'my-model');
+}));
+
+test('vision falls through failing and invalid models to the next provider', withEnv({ GROQ_API_KEY: 'g', UNOROUTER_API_KEY: 'u' }, async () => {
   const calls = [];
   globalThis.fetch = async (url, init) => {
     const body = JSON.parse(init.body);
-    calls.push({ url, model: body.model, auth: init.headers.Authorization, content: body.messages[0].content });
-    if (body.model === 'gpt-4o:free') {
-      return new Response(JSON.stringify({ error: { message: 'model not found' } }), { status: 404 });
-    }
-    if (body.model === 'qwen2.5-vl-7b-instruct-awq:free') {
-      return new Response(JSON.stringify({ error: { message: 'Your balance is empty, so this paid model cannot run.' } }), { status: 403 });
-    }
+    calls.push({ url, model: body.model, auth: init.headers.Authorization });
+    if (url.includes('groq')) return new Response(JSON.stringify({ error: { message: 'model decommissioned' } }), { status: 404 });
+    if (body.model === 'gpt-4o:free') return new Response(JSON.stringify({ choices: [{ message: { content: 'Não consigo ver.' } }] }), { status: 200 });
     return new Response(JSON.stringify({ choices: [{ message: { content: '```json\n{"decisao":"COMPRAR"}\n```' } }] }), { status: 200 });
   };
-  try {
-    const result = await runVision(IMAGE, 'analisa');
-    assert.equal(result.raw.decisao, 'COMPRAR');
-    assert.equal(result.provider, 'UnoRouter (llama-4-maverick-17b-128e-instruct:free)');
-    assert.equal(calls[0].url, 'https://api.unorouter.com/v1/chat/completions');
-    assert.equal(calls[0].auth, 'Bearer test-key');
-    assert.equal(calls[2].content[1].image_url.url, IMAGE);
-  } finally {
-    globalThis.fetch = original;
-    process.env = saved;
-  }
-});
+  const result = await runVision(IMAGE, 'analisa');
+  assert.equal(result.raw.decisao, 'COMPRAR');
+  assert.equal(result.provider, 'UnoRouter (qwen2.5-vl-7b-instruct-awq:free)');
+  assert.ok(calls[0].url.startsWith('https://api.groq.com/openai/v1/chat/completions'));
+  assert.equal(calls[0].auth, 'Bearer g');
+}));
 
-test('without any AI key the vision call reports setup required', async () => {
-  const saved = { ...process.env };
-  for (const k of ['UNOROUTER_API_KEY', 'GEMINI_API_KEY', 'GEMINI_API_KAY', 'OPENAI_API_KEY']) delete process.env[k];
-  try {
-    await assert.rejects(runVision(IMAGE, 'x'), e => e.setupRequired === true && e.status === 503);
-  } finally {
-    process.env = saved;
-  }
-});
-
-test('a model that answers with non-JSON text is skipped for the next one', async () => {
-  const original = globalThis.fetch;
-  const saved = { ...process.env };
-  process.env.UNOROUTER_API_KEY = 'test-key';
-  delete process.env.UNOROUTER_MODEL;
+test('a rate-limited model is paused and skipped on the next call', withEnv({ NVIDIA_API_KEY: 'n', AI_JUDGE_MODELS: 'nvidia:limited-model,nvidia:good-model' }, async () => {
+  const seen = [];
   globalThis.fetch = async (url, init) => {
     const { model } = JSON.parse(init.body);
-    const content = model === 'gpt-4o:free' ? 'Desculpa, não consigo.' : '{"tendencia":"alta"}';
-    return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    seen.push(model);
+    if (model === 'limited-model') return new Response(JSON.stringify({ error: { message: 'Too many requests' } }), { status: 429 });
+    return new Response(JSON.stringify({ choices: [{ message: { content: 'veredito' } }] }), { status: 200 });
   };
-  try {
-    const result = await runVision(IMAGE, 'x');
-    assert.equal(result.raw.tendencia, 'alta');
-    assert.equal(result.provider, 'UnoRouter (qwen2.5-vl-7b-instruct-awq:free)');
-  } finally {
-    globalThis.fetch = original;
-    process.env = saved;
-  }
-});
+  assert.equal((await runText('x')).text, 'veredito');
+  seen.length = 0;
+  await runText('y');
+  assert.ok(!seen.includes('limited-model'));
+}));
+
+test('without any AI key the vision call reports setup required', withEnv({}, async () => {
+  await assert.rejects(runVision(IMAGE, 'x'), e => e.setupRequired === true && e.status === 503);
+}));
