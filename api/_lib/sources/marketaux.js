@@ -1,7 +1,8 @@
+import { apiKey } from '../env.js';
 const SYMBOLS = { BTCUSDT: 'BTC', ETHUSDT: 'ETH', BNBUSDT: 'BNB', SOLUSDT: 'SOL', XRPUSDT: 'XRP', ADAUSDT: 'ADA', DOGEUSDT: 'DOGE' };
 
 export async function getMarketauxEvents(symbol = 'BTCUSDT') {
-  const key = process.env.MARKETAUX_API_KEY;
+  const key = apiKey('MARKETAUX_API_KEY');
   if (!key) {
     console.warn('[Marketaux] MARKETAUX_API_KEY não configurada; fonte ignorada.');
     return [];

@@ -2,6 +2,7 @@ import { getBinanceMarketEvents } from './sources/binance.js';
 import { getGdeltEvents } from './sources/gdelt.js';
 import { getMarketauxEvents } from './sources/marketaux.js';
 import { getFinnhubEvents } from './sources/finnhub.js';
+import { apiKey } from './env.js';
 
 export async function getAllIntelligence(symbol = 'BTCUSDT') {
   const tasks = [
@@ -17,7 +18,7 @@ export async function getAllIntelligence(symbol = 'BTCUSDT') {
 
   settled.forEach((result, index) => {
     const name = tasks[index][0];
-    const optionalKey = name === 'Marketaux' ? process.env.MARKETAUX_API_KEY : name === 'Finnhub' ? process.env.FINNHUB_API_KEY : 'public';
+    const optionalKey = name === 'Marketaux' ? apiKey('MARKETAUX_API_KEY') : name === 'Finnhub' ? apiKey('FINNHUB_API_KEY') : 'public';
     if (result.status === 'fulfilled') {
       if (optionalKey) activeSources.push(name);
       else failedSources.push({ source: name, code: 'not_configured', error: name === 'Marketaux' ? 'MARKETAUX_API_KEY não configurada' : 'FINNHUB_API_KEY não configurada' });

@@ -1,3 +1,4 @@
+import { apiKey as readApiKey } from '../env.js';
 const TWELVE_DATA_BASE = 'https://api.twelvedata.com';
 
 const SYMBOL_MAP = {
@@ -19,7 +20,7 @@ const INTERVAL_MAP = {
 };
 
 async function twelveJson(path, timeout = 9000) {
-  const apiKey = process.env.TWELVE_DATA_API_KEY;
+  const apiKey = readApiKey('TWELVE_DATA_API_KEY');
   if (!apiKey) {
     console.warn('[Twelve Data] TWELVE_DATA_API_KEY não configurada; fonte ignorada.');
     return null;
@@ -52,7 +53,7 @@ function toNumber(value) {
 }
 
 export async function getTwelveDataTicker(pairs = ['BTC/USD', 'ETH/USD']) {
-  if (!process.env.TWELVE_DATA_API_KEY) {
+  if (!readApiKey('TWELVE_DATA_API_KEY')) {
     console.warn('[Twelve Data] TWELVE_DATA_API_KEY não configurada; ticker fallback ignorado.');
     return [];
   }
@@ -61,7 +62,7 @@ export async function getTwelveDataTicker(pairs = ['BTC/USD', 'ETH/USD']) {
     try {
       const data = await twelveJson('/quote?' + new URLSearchParams({
         symbol: pair,
-        apikey: process.env.TWELVE_DATA_API_KEY
+        apikey: readApiKey('TWELVE_DATA_API_KEY')
       }));
       if (!data) return null;
       const symbol = Object.keys(SYMBOL_MAP).find(key => SYMBOL_MAP[key] === pair) || pair.replace('/', '');
@@ -90,7 +91,7 @@ export async function getTwelveDataTicker(pairs = ['BTC/USD', 'ETH/USD']) {
 }
 
 export async function getTwelveDataSparkline(symbol = 'BTCUSDT', interval = '15min', limit = 20) {
-  if (!process.env.TWELVE_DATA_API_KEY) {
+  if (!readApiKey('TWELVE_DATA_API_KEY')) {
     console.warn('[Twelve Data] TWELVE_DATA_API_KEY não configurada; sparkline fallback ignorado.');
     return [];
   }
@@ -103,7 +104,7 @@ export async function getTwelveDataSparkline(symbol = 'BTCUSDT', interval = '15m
       interval: tdInterval,
       outputsize: String(Math.min(Number(limit) || 20, 5000)),
       order: 'ASC',
-      apikey: process.env.TWELVE_DATA_API_KEY
+      apikey: readApiKey('TWELVE_DATA_API_KEY')
     }));
     if (!data?.values) return [];
     return data.values.map(row => toNumber(row.close)).filter(Number.isFinite);
@@ -114,7 +115,7 @@ export async function getTwelveDataSparkline(symbol = 'BTCUSDT', interval = '15m
 }
 
 export async function getTwelveDataCandles(symbol = 'BTCUSDT', interval = '5m', limit = 120) {
-  if (!process.env.TWELVE_DATA_API_KEY) {
+  if (!readApiKey('TWELVE_DATA_API_KEY')) {
     console.warn('[Twelve Data] TWELVE_DATA_API_KEY não configurada; candles fallback ignorados.');
     return [];
   }
@@ -127,7 +128,7 @@ export async function getTwelveDataCandles(symbol = 'BTCUSDT', interval = '5m', 
       interval: tdInterval,
       outputsize: String(Math.min(Number(limit) || 120, 5000)),
       order: 'ASC',
-      apikey: process.env.TWELVE_DATA_API_KEY
+      apikey: readApiKey('TWELVE_DATA_API_KEY')
     }));
     if (!data?.values) return [];
     return data.values.map(row => ({

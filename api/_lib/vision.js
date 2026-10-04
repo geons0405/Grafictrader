@@ -1,3 +1,4 @@
+import { apiKey } from './env.js';
 // Vision model helpers shared by photo analysis and live broker analysis.
 
 export const MAX_IMAGE_CHARS = 4_000_000;
@@ -60,8 +61,8 @@ export async function visionOpenAI(image, key, prompt) {
 
 /** Runs the configured vision providers in order (Gemini first, OpenAI as fallback). */
 export async function runVision(image, prompt, { maxOutputTokens } = {}) {
-  const geminiKey = process.env.GEMINI_API_KEY;
-  const openAIKey = process.env.OPENAI_API_KEY;
+  const geminiKey = apiKey('GEMINI_API_KEY');
+  const openAIKey = apiKey('OPENAI_API_KEY');
   if (!geminiKey && !openAIKey) {
     const error = new Error('Nenhuma IA de análise está configurada (GEMINI_API_KEY ou OPENAI_API_KEY).');
     error.status = 503;

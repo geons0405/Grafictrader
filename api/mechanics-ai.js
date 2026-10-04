@@ -2,6 +2,7 @@ import { buildMechanicsSnapshot } from './_lib/mechanics/snapshot.js';
 import { parseMarketQuery, clientIp } from './_lib/validate.js';
 import { requireUserIfConfigured } from './_lib/auth.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
+import { apiKey } from './_lib/env.js';
 
 const SYSTEM_PROMPT = `És o motor de interpretação do Grafictrader.
 Recebes métricas calculadas pelo código a partir de OHLCV, trades e/ou order book.
@@ -106,7 +107,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
   res.setHeader('Cache-Control', 'no-store');
 
-  const key = process.env.GEMINI_API_KEY;
+  const key = apiKey('GEMINI_API_KEY');
   if (!key) return res.status(503).json({ ok: false, error: 'GEMINI_API_KEY não configurada.', setupRequired: true });
 
   // The client only names the market; the metrics are recomputed here so the
