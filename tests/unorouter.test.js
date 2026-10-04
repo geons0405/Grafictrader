@@ -46,3 +46,23 @@ test('without any AI key the vision call reports setup required', async () => {
     process.env = saved;
   }
 });
+
+test('a model that answers with non-JSON text is skipped for the next one', async () => {
+  const original = globalThis.fetch;
+  const saved = { ...process.env };
+  process.env.UNOROUTER_API_KEY = 'test-key';
+  delete process.env.UNOROUTER_MODEL;
+  globalThis.fetch = async (url, init) => {
+    const { model } = JSON.parse(init.body);
+    const content = model === 'gemini-3.6-flash:free' ? 'Desculpa, não consigo.' : '{"tendencia":"alta"}';
+    return new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+  };
+  try {
+    const result = await runVision(IMAGE, 'x');
+    assert.equal(result.raw.tendencia, 'alta');
+    assert.equal(result.provider, 'UnoRouter (gpt-4o:free)');
+  } finally {
+    globalThis.fetch = original;
+    process.env = saved;
+  }
+});

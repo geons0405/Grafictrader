@@ -45,7 +45,7 @@ export default async function handler(req, res) {
   const [database, unorouter, unorouterModels, gemini, vision, twelveData, marketaux, rss, yahoo] = await Promise.all([
     redisConfigured() ? check(async () => ({ reply: await redis(['PING']) })) : { ok: false, error: 'não configurada' },
     unoKey ? check(async () => {
-      const { text, model } = await chatUnoRouter(unoKey, 'Responde só com a palavra OK.', { maxTokens: 5, temperature: 0 });
+      const { text, model } = await chatUnoRouter(unoKey, 'Responde só com a palavra OK.', { maxTokens: 200, temperature: 0 });
       return { model, reply: String(text).trim().slice(0, 20) };
     }) : { ok: false, error: 'não configurada' },
     unoKey ? check(async () => {
@@ -57,14 +57,14 @@ export default async function handler(req, res) {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Responde só com a palavra OK.' }] }], generationConfig: { maxOutputTokens: 5 } })
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Responde só com a palavra OK.' }] }], generationConfig: { maxOutputTokens: 200 } })
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
       return { model, reply: (data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().slice(0, 20) };
     }) : { ok: false, error: 'não configurada' },
     check(async () => {
-      const result = await runVision(PROBE_IMAGE, 'Este é um gráfico de velas. Responde APENAS com JSON: {"tendencia": "alta" | "baixa" | "lateral"}', { maxOutputTokens: 60 });
+      const result = await runVision(PROBE_IMAGE, 'Este é um gráfico de velas. Responde APENAS com JSON: {"tendencia": "alta" | "baixa" | "lateral"}', { maxOutputTokens: 1000 });
       return { provider: result.provider, answer: result.raw };
     }),
     apiKey('TWELVE_DATA_API_KEY') ? check(async () => {

@@ -99,7 +99,7 @@ const isModelError = error => [402, 404, 429, 503].includes(error?.status)
   || /balance|credit|billing|quota/i.test(error?.message || '');
 
 /** Chat completion through UnoRouter, trying the next model when one is unavailable. */
-export async function chatUnoRouter(key, content, { maxTokens = 1800, temperature = 0.2 } = {}) {
+export async function chatUnoRouter(key, content, { maxTokens = 1800, temperature = 0.2, accept = () => true } = {}) {
   const base = (process.env.UNOROUTER_BASE_URL || UNOROUTER_BASE).replace(/\/$/, '');
   let lastError = null;
   for (const model of unoRouterModels()) {
@@ -112,8 +112,9 @@ export async function chatUnoRouter(key, content, { maxTokens = 1800, temperatur
       });
       const message = result?.choices?.[0]?.message?.content;
       const text = Array.isArray(message) ? message.map(p => p?.text || '').join('\n') : message;
-      if (text) return { text, model };
-      lastError = new Error('UnoRouter devolveu uma resposta vazia.');
+      if (text && accept(text)) return { text, model };
+      // Empty or unusable answer (e.g. not JSON): try the next model.
+      lastError = new Error(text ? `UnoRouter (${model}) devolveu uma resposta inválida.` : 'UnoRouter devolveu uma resposta vazia.');
     } catch (error) {
       lastError = error;
       if (!isModelError(error)) throw error;
@@ -126,7 +127,7 @@ export async function visionUnoRouter(image, key, prompt, maxOutputTokens = 1800
   const { text, model } = await chatUnoRouter(key, [
     { type: 'text', text: prompt },
     { type: 'image_url', image_url: { url: image } }
-  ], { maxTokens: maxOutputTokens });
+  ], { maxTokens: maxOutputTokens, accept: answer => Boolean(parseJson(answer)) });
   const parsed = parseJson(text);
   if (!parsed) throw new Error('UnoRouter não devolveu uma análise válida.');
   return { raw: parsed, provider: `UnoRouter (${model})` };
