@@ -309,7 +309,7 @@ async function openPip() {
   const css = getComputedStyle(document.documentElement);
   const v = name => css.getPropertyValue(name).trim();
   pipWindow.document.body.innerHTML = `<style>
-    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: ${v('--card')}; color: ${v('--text')}; }
+    body { margin: 0; font-family: Geist, system-ui, sans-serif; background: ${v('--card')}; color: ${v('--text')}; }
     #pip { padding: 14px; display: grid; gap: 8px; }
     .pip-badge { font-size: 26px; font-weight: 800; letter-spacing: .04em; padding: 10px 12px; border-radius: 12px; text-align: center; background: ${v('--well')}; }
     .pip-badge[data-side="up"] { background: ${v('--up')}; color: #fff; }
