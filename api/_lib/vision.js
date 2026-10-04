@@ -60,10 +60,11 @@ export async function visionOpenAI(image, key, prompt) {
 
 // UnoRouter: one key for many models behind an OpenAI-compatible API.
 const UNOROUTER_BASE = 'https://api.unorouter.com/v1';
-// Free models first (no balance needed), then paid ones.
+// Free models first (no balance needed), ordered by how well they read a test
+// chart; then a paid one, used only if the account has credit.
 const UNOROUTER_VISION_MODELS = [
-  'gemini-3.6-flash:free', 'gpt-4o:free', 'gemini-3.5-flash-lite:free', 'llama-4-maverick-17b-128e-instruct:free',
-  'qwen2.5-vl-7b-instruct-awq:free', 'llama-3.2-11b-vision:free', 'gemini-3.5-flash'
+  'gpt-4o:free', 'qwen2.5-vl-7b-instruct-awq:free', 'llama-4-maverick-17b-128e-instruct:free',
+  'gemini-3.6-flash:free', 'gemini-3.5-flash'
 ];
 
 function unoRouterModels() {
