@@ -66,6 +66,13 @@ test('a reply without the chart flag and without chart details is not a chart', 
   assert.equal(r.body.verdict.decision, 'AGUARDAR');
 });
 
+test('a blurry live frame is read but not traded on', async () => {
+  visionReply = { graficoVisivel: true, ativo: 'EUR/USD', timeframe: 'M5', tendencia: 'baixa', decisao: 'VENDER', confianca: 80, qualidadeImagem: 'fraca' };
+  const r = await call({ image });
+  assert.equal(r.body.chartVisible, true);
+  assert.equal(r.body.verdict.decision, 'AGUARDAR');
+});
+
 test('invalid images are rejected', async () => {
   const r = await call({ image: 'data:text/html;base64,AAAA' });
   assert.equal(r.status, 400);

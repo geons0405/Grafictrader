@@ -309,8 +309,10 @@ function announce(data) {
 
 function pipMarkup() {
   if (!current) return '<p class="pip-wait">À espera da primeira análise…</p>';
-  const d = stabilizer.shown || current.verdict.decision;
-  return `<div class="pip-badge" data-side="${SIDE[d] || ''}">${LABEL[d] || d}</div>
+  // The current frame has no chart: show that, never the last stabilised trade.
+  const noChart = current.chartVisible === false;
+  const d = noChart ? 'AGUARDAR' : stabilizer.shown || current.verdict.decision;
+  return `<div class="pip-badge" data-side="${SIDE[d] || ''}">${noChart ? 'SEM GRÁFICO' : LABEL[d] || d}</div>
     <p class="pip-asset">${escapeHtml(current.vision.asset || '')} ${escapeHtml(current.vision.timeframe || '')} · ${current.verdict.confidence}%</p>
     <p class="pip-now">${escapeHtml(current.guidance?.now || '')}</p>`;
 }

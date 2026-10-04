@@ -33,3 +33,12 @@ test('chart check: the model flag alone is not enough', () => {
   assert.equal(isChartVisible({ graficoVisivel: true, ativo: 'BTC/USDT', tendencia: 'baixa' }), true);
   assert.equal(isChartVisible({ timeframe: 'M5', estrutura: 'topos mais baixos' }), true);
 });
+
+test('chart check treats model output as untrusted', () => {
+  assert.equal(isChartVisible({ graficoVisivel: ' false ', ativo: 'BTC', timeframe: '15m' }), false);
+  assert.equal(isChartVisible({ graficoVisivel: 'Não', ativo: 'BTC', timeframe: '15m' }), false);
+  assert.equal(isChartVisible({ graficoVisivel: true, ativo: {}, indicadores: {} }), false);
+  assert.equal(isChartVisible({ graficoVisivel: true, ativo: ['BTC'], timeframe: [] }), false);
+  assert.equal(isChartVisible({ graficoVisivel: true, tendencia: 'Alta ', timeframe: 'M5' }), true);
+});
+

@@ -57,7 +57,7 @@ export function normalizeVision(raw = {}) {
     risks: list(raw.riscos),
     summary: raw.resumo ? String(raw.resumo).slice(0, 300) : null,
     plain: raw.explicacaoSimples ? String(raw.explicacaoSimples).slice(0, 900) : null,
-    imageQuality: raw.qualidadeImagem ? String(raw.qualidadeImagem) : null
+    imageQuality: typeof raw.qualidadeImagem === 'string' && raw.qualidadeImagem.trim() ? raw.qualidadeImagem.trim().toLowerCase() : null
   };
 }
 
@@ -70,11 +70,12 @@ const TRENDS = ['alta', 'baixa', 'lateral'];
  * else never turns into a trade.
  */
 export function isChartVisible(raw = {}) {
-  const flag = raw.graficoVisivel;
-  if (flag === false || String(flag).toLowerCase() === 'false') return false;
-  const present = v => v != null && String(v).trim() !== '' && String(v).toLowerCase() !== 'null';
+  // Model output is untrusted: normalise the flag and count only readable scalar values.
+  const flag = typeof raw.graficoVisivel === 'string' ? raw.graficoVisivel.trim().toLowerCase() : raw.graficoVisivel;
+  if (flag === false || flag === 0 || ['false', 'não', 'nao', 'no', '0'].includes(flag)) return false;
+  const present = v => (typeof v === 'string' || typeof v === 'number') && String(v).trim() !== '' && String(v).trim().toLowerCase() !== 'null';
   const evidence = [
-    TRENDS.includes(String(raw.tendencia || '').toLowerCase()),
+    TRENDS.includes(String(typeof raw.tendencia === 'string' ? raw.tendencia : '').trim().toLowerCase()),
     present(raw.precoAtual) && Number.isFinite(Number(raw.precoAtual)),
     present(raw.ativo),
     present(raw.timeframe),
@@ -83,6 +84,15 @@ export function isChartVisible(raw = {}) {
     present(raw.indicadores)
   ].filter(Boolean).length;
   return evidence >= 2;
+}
+
+/** A blurry or cut chart is read but never traded on. Mutates and returns the reading. */
+export function guardImageQuality(vision) {
+  if (vision.imageQuality === 'fraca') {
+    vision.direction = 0;
+    vision.confidence = Math.min(vision.confidence, 30);
+  }
+  return vision;
 }
 
 /** Neutral reading for an image that is not a chart: no side, no levels, no asset. */

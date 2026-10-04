@@ -53,6 +53,12 @@ test('a blurry chart is read but not traded on', async () => {
   assert.equal(r.body.verdict.decision, 'AGUARDAR');
 });
 
+test('image quality is compared without case or spaces', async () => {
+  visionReply = { graficoVisivel: true, ativo: 'EUR/USD', timeframe: 'M15', tendencia: 'alta', decisao: 'COMPRAR', confianca: 80, qualidadeImagem: ' Fraca ' };
+  const r = await call({ image });
+  assert.equal(r.body.verdict.decision, 'AGUARDAR');
+});
+
 test('a clear chart still gets a reading', async () => {
   visionReply = { graficoVisivel: true, ativo: 'EUR/USD', timeframe: 'M15', tendencia: 'alta', precoAtual: 1.085, decisao: 'COMPRAR', confianca: 75, entrada: '1.0850', stop: '1.0830', alvos: ['1.0890'], qualidadeImagem: 'boa' };
   const r = await call({ image });

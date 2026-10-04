@@ -3,7 +3,7 @@ import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 import { clientIp } from './_lib/validate.js';
 import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
 import { marketReading } from './_lib/quant/service.js';
-import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance } from './_lib/quant/verdict.js';
+import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance, guardImageQuality } from './_lib/quant/verdict.js';
 import { rulesBlock } from './_lib/ai-rules.js';
 import { photoGuidance } from './_lib/quant/explain.js';
 
@@ -40,7 +40,8 @@ Responde APENAS com JSON válido:
   "riscos": ["até 2 riscos"],
   "mudanca": "o que mudou desde a leitura anterior, numa frase",
   "resumo": "uma frase",
-  "explicacaoSimples": "2 a 4 frases informais para quem nunca operou: o que fazer agora e porquê"
+  "explicacaoSimples": "2 a 4 frases informais para quem nunca operou: o que fazer agora e porquê",
+  "qualidadeImagem": "boa" | "média" | "fraca"
 }`;
 
 // Engine readings are shared between frames of the same market for a few seconds.
@@ -90,7 +91,7 @@ export default async function handler(req, res) {
   }
 
   const chartVisible = isChartVisible(vision.raw);
-  const normalized = chartVisible ? normalizeVision(vision.raw) : noChartVision(vision.raw);
+  const normalized = chartVisible ? guardImageQuality(normalizeVision(vision.raw)) : noChartVision(vision.raw);
   const symbol = chartVisible ? mapAsset(normalized.asset) : null;
   const interval = mapTimeframe(normalized.timeframe) || '5m';
   let reading = null;

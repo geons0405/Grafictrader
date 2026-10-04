@@ -2,7 +2,7 @@ import { requireUserIfConfigured } from './_lib/auth.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 import { clientIp, parseMarketQuery } from './_lib/validate.js';
 import { marketReading } from './_lib/quant/service.js';
-import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance } from './_lib/quant/verdict.js';
+import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance, guardImageQuality } from './_lib/quant/verdict.js';
 import { rulesBlock } from './_lib/ai-rules.js';
 import { photoGuidance } from './_lib/quant/explain.js';
 
@@ -77,12 +77,7 @@ export default async function handler(req, res) {
     });
   }
 
-  const normalized = normalizeVision(vision.raw);
-  if (normalized.imageQuality === 'fraca') {
-    // A blurry or cut chart is read, but never traded on.
-    normalized.direction = 0;
-    normalized.confidence = Math.min(normalized.confidence, 30);
-  }
+  const normalized = guardImageQuality(normalizeVision(vision.raw));
   // Cross-check with the live engine when the chart is a market we track.
   const hint = parseMarketQuery({ symbol: hintSymbol, interval: hintInterval });
   const symbol = mapAsset(normalized.asset) || null;
