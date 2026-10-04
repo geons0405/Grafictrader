@@ -9,6 +9,7 @@ import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.provider.Settings;
 import androidx.activity.result.ActivityResult;
 import androidx.core.app.ActivityCompat;
@@ -53,6 +54,26 @@ public class GrafictraderNativePlugin extends Plugin {
         WatchService.setListener(null);
     }
 
+    /**
+     * Battery savers close background apps, and the bubble with them. Asks once
+     * to run unrestricted; returns true when the system dialog was shown.
+     */
+    private boolean askBatteryOnce() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
+        PowerManager power = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+        if (power == null || power.isIgnoringBatteryOptimizations(getContext().getPackageName())) return false;
+        android.content.SharedPreferences prefs = getContext().getSharedPreferences("watch", Context.MODE_PRIVATE);
+        if (prefs.getBoolean("askedBattery", false)) return false;
+        prefs.edit().putBoolean("askedBattery", true).apply();
+        try {
+            Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getContext().getPackageName()));
+            getActivity().startActivity(intent);
+            return true;
+        } catch (Exception error) {
+            return false;
+        }
+    }
+
     private boolean canDrawOverlays() {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(getContext());
     }
@@ -63,6 +84,7 @@ public class GrafictraderNativePlugin extends Plugin {
         result.put("available", true);
         result.put("running", WatchService.isRunning());
         result.put("overlay", canDrawOverlays());
+        result.put("lastStop", WatchService.takeLastStop(getContext()));
         call.resolve(result);
     }
 
@@ -81,6 +103,10 @@ public class GrafictraderNativePlugin extends Plugin {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(getActivity(), new String[] {Manifest.permission.POST_NOTIFICATIONS}, 41);
+        }
+        if (askBatteryOnce()) {
+            call.reject("Permite que o Grafictrader funcione em segundo plano e volta a tocar no botão. Assim o telemóvel não fecha a bolha quando abres a corretora.", "BATTERY");
+            return;
         }
         MediaProjectionManager manager = (MediaProjectionManager) getContext().getSystemService(Context.MEDIA_PROJECTION_SERVICE);
         // The bubble reads whatever app is in front, so ask for the whole screen:

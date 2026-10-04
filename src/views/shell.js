@@ -139,7 +139,7 @@ export const shellTemplate = `
         </div>
         <div class="watch-controls" id="watchStarts">
           <button class="btn btn-primary" type="button" id="watchNative" hidden><i data-lucide="smartphone"></i>Analisar a corretora neste telemóvel</button>
-          <p class="fine-print left" id="watchNativeHint" hidden>Abre depois a tua corretora: a IA vê o ecrã e mostra COMPRAR, VENDER ou NÃO OPERAR numa bolha por cima dela. Toca na bolha para ver o que fazer.</p>
+          <p class="fine-print left" id="watchNativeHint" hidden>Quando o telemóvel perguntar, escolhe partilhar o «Ecrã inteiro». Abre depois a tua corretora: a IA vê o ecrã e mostra COMPRAR, VENDER ou NÃO OPERAR numa bolha por cima dela. Toca na bolha para ver o que fazer.</p>
           <button class="btn btn-primary" type="button" id="watchShare"><i data-lucide="monitor"></i>Partilhar ecrã</button>
           <button class="btn btn-soft" type="button" id="watchCamera"><i data-lucide="camera"></i>Usar câmara</button>
           <label class="btn btn-ghost"><i data-lucide="upload"></i>Carregar vídeo<input type="file" id="watchFile" accept="video/*" hidden></label>

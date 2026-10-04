@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.ComponentCallbacks;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -89,6 +90,24 @@ public class WatchService extends Service {
         listener = value;
     }
 
+    private static final String PREFS = "watch";
+    static final String KILLED = "O telemóvel fechou o Grafictrader em segundo plano. Em Definições › Apps › Grafictrader › Bateria, escolhe «Sem restrições» e liga a análise de novo.";
+
+    /**
+     * Why the last session ended, once, or null. A session still marked active
+     * while nothing runs means the system killed the app without telling it.
+     */
+    static String takeLastStop(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String reason = running ? null : prefs.getBoolean("active", false) ? KILLED : prefs.getString("reason", null);
+        if (!running) prefs.edit().putBoolean("active", false).remove("reason").apply();
+        return reason;
+    }
+
+    private void remember(boolean active, String reason) {
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("active", active).putString("reason", reason).apply();
+    }
+
     static boolean isRunning() {
         return running;
     }
@@ -154,6 +173,7 @@ public class WatchService extends Service {
             return START_NOT_STICKY;
         }
         running = true;
+        remember(true, null);
         startedAt = System.currentTimeMillis();
         projection.registerCallback(new MediaProjection.Callback() {
             @Override
@@ -348,6 +368,18 @@ public class WatchService extends Service {
         if (!running) return;
         capture.postDelayed(this::tick, TICK_MS);
         if (inflight) return;
+        try {
+            step();
+        } catch (Throwable error) {
+            // A bad frame (or low memory) skips this tick instead of crashing the app.
+            inflight = false;
+            main.post(() -> {
+                if (bubble != null) bubble.setHidden(false);
+            });
+        }
+    }
+
+    private void step() {
         long now = System.currentTimeMillis();
         if (now - startedAt > SESSION_LIMIT_MS) {
             main.post(() -> finish("Sessão terminada ao fim de 45 minutos para poupar análises."));
@@ -610,6 +642,7 @@ public class WatchService extends Service {
     private void finish(String message) {
         boolean wasRunning = running;
         running = false;
+        if (wasRunning) remember(false, message);
         if (bubble != null) bubble.remove();
         bubble = null;
         if (tts != null) tts.shutdown();

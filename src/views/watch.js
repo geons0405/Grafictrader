@@ -366,7 +366,10 @@ function initNative() {
     if (kind === 'native') { kind = null; stop(message || undefined); }
   });
   // The capture keeps running when the app is reopened.
-  Native.status().then(s => { if (s?.running && kind !== 'native') begin(null, 'native'); }).catch(() => {});
+  Native.status().then(s => {
+    if (s?.running && kind !== 'native') begin(null, 'native');
+    else if (s?.lastStop) setStatus('A análise parou: ' + s.lastStop);
+  }).catch(() => {});
 }
 
 export function initWatch() {
