@@ -1,4 +1,4 @@
-import { clamp, mean, median, mad, solve, ols, std, rng, round, last } from './core.js';
+import { clamp, mean, median, mad, solve, ols, std, rng, round, last, alignPair } from './core.js';
 
 // Layer 7 — Anomalies: statistically unusual candles, volume, behaviour, and
 // assets that stop moving the way they usually move together.
@@ -52,7 +52,8 @@ function features(candles) {
 }
 
 /** Residual of the asset against its usual beta to a reference asset (e.g. ETH vs BTC). */
-export function crossAsset(target, reference, window = 200, recent = 6) {
+export function crossAsset(targetRaw, referenceRaw, window = 200, recent = 6) {
+  const [target, reference] = alignPair(targetRaw, referenceRaw);
   const n = Math.min(target.length, reference.length);
   if (n < window + recent + 1) return null;
   const tr = target.slice(-n).map((c, i, a) => (i ? Math.log(c.close / a[i - 1].close) : 0)).slice(1);

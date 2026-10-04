@@ -1,4 +1,4 @@
-import { clamp, correlation, round, sum } from './core.js';
+import { clamp, correlation, round, sum, alignPair } from './core.js';
 
 // Layer 6 — Wavelets: the move split into frequency bands (Haar multiresolution
 // analysis), so a short-term dip inside a long-term rise is visible as such.
@@ -68,10 +68,11 @@ export function waveletLayer(candles, peer = null, intervalLabel = '') {
   const score = clamp(t(structural) * 0.55 + t(swing) * 0.3 + t(short) * 0.15);
   const word = v => (v > 0.15 ? 'compradora' : v < -0.15 ? 'vendedora' : 'neutra');
   let coherence = null;
-  if (peer && peer.length >= N) {
-    const peerLog = peer.slice(-N).map(c => Math.log(c.close));
+  const [mine, theirs] = peer ? alignPair(candles, peer) : [[], []];
+  if (theirs.length >= N) {
+    const peerLog = theirs.slice(-N).map(c => Math.log(c.close));
     const pd = haarDwt(peerLog, levels).details;
-    const md = haarDwt(logP, levels).details;
+    const md = haarDwt(mine.slice(-N).map(c => Math.log(c.close)), levels).details;
     coherence = md.map((d, l) => round(correlation(d, pd[l]), 2));
   }
   const notes = [

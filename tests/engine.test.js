@@ -102,6 +102,10 @@ test('cross-asset residual catches a decoupled move', () => {
   const c = crossAsset(candlesFrom(tgt), candlesFrom(ref));
   assert.ok(c.z > 3);
   assert.ok(Math.abs(c.beta - 1.2) < 0.1);
+  // Regression: the reference has one extra (still open) bar; alignment is by timestamp.
+  const extra = candlesFrom([...ref, 0.02]);
+  const shifted = crossAsset(candlesFrom(tgt), extra);
+  assert.ok(Math.abs(shifted.beta - 1.2) < 0.1, `beta ${shifted.beta}`);
 });
 
 test('order flow detects buying absorbed by a flat price', () => {

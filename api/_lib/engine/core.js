@@ -166,3 +166,14 @@ export function rng(seed = 1) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/** Candles of two series matched on identical timestamps (oldest first). */
+export function alignPair(a = [], b = []) {
+  const mb = new Map(b.map(c => [c.time, c]));
+  const left = [], right = [];
+  for (const c of a) {
+    const o = mb.get(c.time);
+    if (o) { left.push(c); right.push(o); }
+  }
+  return [left, right];
+}
