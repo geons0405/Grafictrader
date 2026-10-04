@@ -67,6 +67,27 @@ function unoRouterModels() {
   return [...new Set([...configured, ...UNOROUTER_VISION_MODELS])];
 }
 
+/** Model ids visible to the key, with pricing when the API reports it (free ones first). */
+export async function listUnoRouterModels(key) {
+  const base = (process.env.UNOROUTER_BASE_URL || UNOROUTER_BASE).replace(/\/$/, '');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const response = await fetch(`${base}/models`, { headers: { Authorization: `Bearer ${key}` }, signal: controller.signal });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+    const models = (data?.data || []).map(m => ({
+      id: m.id,
+      free: /free/i.test(m.id) || Number(m?.pricing?.prompt) === 0 || m?.is_free === true,
+      vision: /image|vision/i.test(JSON.stringify(m?.architecture || m?.modalities || m?.capabilities || '')) || undefined,
+      pricing: m?.pricing || undefined
+    }));
+    return { total: models.length, free: models.filter(m => m.free), sample: models.slice(0, 40).map(m => m.id) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const isModelError = error => error?.status === 404 || (error?.status === 400 && /model/i.test(error.message || ''));
 
 /** Chat completion through UnoRouter, trying the next model when one is unavailable. */
