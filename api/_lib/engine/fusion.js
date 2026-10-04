@@ -2,7 +2,6 @@ import { clamp, mean, correlation, sigmoid, round, std } from './core.js';
 import { entropyLayer } from './entropy.js';
 import { fractalLayer } from './fractal.js';
 import { waveletLayer } from './wavelet.js';
-import { regimeLayer } from './regime.js';
 
 // Signal fusion: each layer's weight depends on the regime AND on how well that
 // layer actually predicted this market out of sample (walk-forward).
@@ -31,17 +30,17 @@ export function walkForward(candles, { horizon = 6, window = 300, points = 40 } 
   const end = n - horizon - 1;
   if (end - start < 60) return { validated: false, layers: {} };
   const step = Math.max(1, Math.floor((end - start) / points));
-  const scores = { entropy: [], fractal: [], wavelet: [], regime: [] };
+  // The regime layer needs live features (volatility state, volume, CVD) that cannot be
+  // rebuilt for past windows, so it is not walk-forward scored and keeps its prior weight.
+  const scores = { entropy: [], fractal: [], wavelet: [] };
   const forward = [];
   for (let t = start; t <= end; t += step) {
     const slice = candles.slice(t - window, t);
     const closes = slice.map(c => c.close);
     const returns = closes.slice(1).map((c, i) => Math.log(c / closes[i]));
-    const trendDirection = Math.sign(closes[closes.length - 1] - closes[closes.length - 30]);
     scores.entropy.push(entropyLayer(returns).score);
     scores.fractal.push(fractalLayer(slice).score);
     scores.wavelet.push(waveletLayer(slice).score);
-    scores.regime.push(regimeLayer(returns, { trendStrength: 1, trendDirection, hurst: 0.55, recentMove: 1 }).score);
     forward.push(Math.log(candles[t - 1 + horizon].close / candles[t - 1].close));
   }
   const layers = {};

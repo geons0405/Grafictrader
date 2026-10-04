@@ -66,7 +66,7 @@ export function crossAsset(targetRaw, referenceRaw, window = 200, recent = 6) {
   const residuals = fitT.map((v, i) => v - (alpha + beta * fitR[i]));
   const sd = std(residuals) * Math.sqrt(recent);
   const actual = tr.slice(-recent).reduce((s, v) => s + v, 0);
-  const implied = rr.slice(-recent).reduce((s, v) => s + v, 0) * beta;
+  const implied = recent * alpha + rr.slice(-recent).reduce((s, v) => s + v, 0) * beta;
   const z = sd > 0 ? (actual - implied) / sd : 0;
   return { beta: round(beta, 3), actualPct: round(actual * 100, 3), impliedPct: round(implied * 100, 3), z: round(z, 2) };
 }

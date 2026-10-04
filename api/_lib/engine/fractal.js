@@ -21,7 +21,8 @@ export function dfa(returns) {
       const [a, b] = fit.beta;
       f.push(mean(seg.map((v, i) => (v - (a + b * i)) ** 2)));
     }
-    if (f.length) pts.push([Math.log(s), Math.log(Math.sqrt(mean(f)))]);
+    // A flat window has no fluctuation: log(0) would poison the fit, so skip that scale.
+    if (f.length && mean(f) > 0) pts.push([Math.log(s), Math.log(Math.sqrt(mean(f)))]);
   }
   if (pts.length < 3) return null;
   return ols(pts.map(p => [p[0]]), pts.map(p => p[1]))?.beta[1] ?? null;

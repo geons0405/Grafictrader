@@ -54,7 +54,8 @@ function setStatus(text) {
 /** Full-screen stage while the AI watches; the card returns to normal size to read the analysis. */
 function setExpanded(on) {
   $('.watch-card').classList.toggle('expanded', on);
-  document.body.classList.toggle('stage-open', on);
+  // The FOTO camera may also be open full screen: keep the page locked while either is.
+  document.body.classList.toggle('stage-open', Boolean(document.querySelector('.camera-card.expanded, .watch-card.expanded')));
 }
 
 function isRunning() {

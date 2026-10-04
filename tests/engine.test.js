@@ -138,3 +138,21 @@ test('volatility estimators and compression detection', () => {
   assert.equal(layer.score, 0);
   assert.ok(mean([1, 2, 3]) === 2);
 });
+
+test('DFA skips flat windows instead of returning NaN', () => {
+  assert.equal(dfa(new Array(300).fill(0)), null);
+});
+
+test('cross-asset residual includes the fitted drift (alpha)', () => {
+  const ref = noise(400, 0.01);
+  const target = ref.map(v => 0.002 + 1.2 * v + gaussian() * 0.0005);
+  const res = crossAsset(candlesFrom(target), candlesFrom(ref));
+  assert.ok(Math.abs(res.z) < 2.5, `z ${res.z} should be normal when the target follows alpha + beta`);
+});
+
+test('order-flow buckets count price moves between buckets', () => {
+  const trades = [];
+  for (let i = 0; i < 100; i++) trades.push({ time: i, price: 100 + Math.floor(i / 10), quantity: 1, side: i % 2 ? 'buy' : 'sell' });
+  const flow = orderFlow(trades, 10);
+  assert.ok(flow.priceChange > 0);
+});

@@ -37,7 +37,7 @@ test('the whole engine runs on market-shaped data and returns a full reading', a
     assert.ok(r.fusion.structuralBias >= -100 && r.fusion.structuralBias <= 100);
     assert.ok(r.fusion.probabilityUp > 0 && r.fusion.probabilityUp < 1);
     assert.ok(r.validation.validated);
-    assert.ok(Object.keys(r.validation.layers).length === 4);
+    assert.deepEqual(Object.keys(r.validation.layers).sort(), ['entropy', 'fractal', 'wavelet']);
     assert.ok(r.earlyWarning.state);
     assert.ok(r.intent.shares.length > 0);
     assert.equal(r.intent.shares.reduce((s, x) => s + x.pct, 0) >= 98, true);

@@ -116,14 +116,18 @@ async function analyze(image) {
   }
 }
 
+// Bumped on every stop so a camera that opens after the user left is discarded.
+let cameraRequest = 0;
+
 function stopCamera() {
+  cameraRequest += 1;
   stream?.getTracks().forEach(track => track.stop());
   stream = null;
   $('#video').srcObject = null;
   $('#snap').disabled = true;
   $('#camera').classList.remove('active');
   $('.camera-card').classList.remove('expanded');
-  document.body.classList.remove('stage-open');
+  document.body.classList.toggle('stage-open', Boolean(document.querySelector('.watch-card.expanded')));
   $('#cameraStatus').textContent = 'Câmara desligada';
 }
 
@@ -131,7 +135,13 @@ export function initFoto() {
   $('#startCam').onclick = async () => {
     try {
       stopCamera();
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } } });
+      const request = cameraRequest;
+      const opened = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } } });
+      if (request !== cameraRequest) {
+        opened.getTracks().forEach(track => track.stop());
+        return;
+      }
+      stream = opened;
       $('#video').srcObject = stream;
       $('#snap').disabled = false;
       $('#camera').classList.add('active');

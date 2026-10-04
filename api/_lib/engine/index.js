@@ -170,6 +170,9 @@ async function compute(symbol, interval) {
 
 export function runEngine(symbol, interval) {
   const key = symbol + ':' + interval;
+  const now = Date.now();
+  // Drop expired entries so pairs nobody asks for again do not stay in memory.
+  for (const [k, v] of cache) if (now - v.at >= CACHE_MS) cache.delete(k);
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.promise;
   const promise = compute(symbol, interval);

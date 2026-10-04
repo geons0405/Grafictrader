@@ -15,11 +15,14 @@ export function orderFlow(trades = [], buckets = 10) {
   const total = buyVol + sellVol;
   const size = Math.ceil(rows.length / buckets);
   const groups = [];
+  // Each bucket's return runs from the previous bucket's close, so moves between buckets count.
+  let previousPrice = rows[0].price;
   for (let i = 0; i < rows.length; i += size) {
     const g = rows.slice(i, i + size);
     const buy = sum(g.filter(t => t.side === 'buy').map(t => t.quantity));
     const sell = sum(g.filter(t => t.side === 'sell').map(t => t.quantity));
-    const ret = Math.log(last(g).price / g[0].price);
+    const ret = Math.log(last(g).price / previousPrice);
+    previousPrice = last(g).price;
     groups.push({ ofi: (buy - sell) / Math.max(buy + sell, 1e-12), net: buy - sell, volume: buy + sell, ret });
   }
   // Kyle's lambda: price move per unit of net aggressive volume.
@@ -85,7 +88,9 @@ export function icebergs(trades = [], book = {}, tick = null) {
   }
   const resting = new Map();
   for (const r of [...(book.bids || []), ...(book.asks || [])]) {
-    resting.set((Math.round(r.price / step) * step).toFixed(8), r.quantity);
+    // Bins can span several ticks: add up every resting level in the bin, as trades are.
+    const key = (Math.round(r.price / step) * step).toFixed(8);
+    resting.set(key, (resting.get(key) || 0) + r.quantity);
   }
   const avgTraded = mean([...traded.values()].map(e => e.buy + e.sell));
   return [...traded.entries()]

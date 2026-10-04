@@ -448,13 +448,19 @@ function renderEngine(d) {
 }
 
 async function loadEngine() {
+  let stale = false;
   await guarded('engine', async () => {
+    const { symbol, interval } = market;
     try {
-      renderEngine(await api(`/api/intelligence?engine=1&symbol=${market.symbol}&interval=${market.interval}`));
+      const data = await api(`/api/intelligence?engine=1&symbol=${symbol}&interval=${interval}`);
+      // The asset or timeframe changed while this request ran: load the new one now.
+      if (symbol !== market.symbol || interval !== market.interval) { stale = true; return; }
+      renderEngine(data);
     } catch (error) {
       $('#eHead').innerHTML = `<p class="term-note">Motor indisponível: ${escapeHtml(error.message)}</p>`;
     }
   });
+  if (stale) return loadEngine();
   schedule('engine', loadEngine, ENGINE_MS);
 }
 
