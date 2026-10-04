@@ -36,8 +36,8 @@ let active = false;
 let loadToken = 0;
 
 const semantic = () => (resolvedTheme() === 'dark'
-  ? { up: '#4ade80', down: '#f87171', neutral: '#d1d1d6' }
-  : { up: '#15803d', down: '#dc2626', neutral: '#3a3a3d' });
+  ? { up: '#3dd68c', down: '#ff6b72', neutral: '#d4d4da' }
+  : { up: '#0e7c4a', down: '#b42a32', neutral: '#3a3a42' });
 
 const normalizeName = s => String(s || '').toUpperCase().replace(/^[A-Z0-9_]+:/, '').replace(/[^A-Z0-9]/g, '');
 

@@ -181,8 +181,20 @@ export function macroAnalyst(context = {}, isRiskAsset = true) {
   return result('macro', 'Macro e risco', score, confidence, reasons.length ? reasons : ['Sem sinais macro relevantes.'], { veto });
 }
 
+/** Structure: the Market Intelligence Engine's fused reading (8 quantitative layers). */
+export function structureAnalyst(engine) {
+  if (!engine?.fusion) return result('estrutural', 'Estrutural (motor)', 0, 0, ['Motor de inteligência indisponível.']);
+  const f = engine.fusion;
+  const ew = engine.earlyWarning;
+  return result('estrutural', 'Estrutural (motor)', f.structuralBias / 100 * 1.5, f.confidence / 100, [
+    `Viés estrutural ${f.structuralBias > 0 ? '+' : ''}${f.structuralBias} · regime ${engine.regime.code} (${engine.regime.label}) · P(subir) ${Math.round(f.probabilityUp * 100)}%.`,
+    ew && ew.state !== 'NEUTRO' ? `Alerta antecipado: ${ew.state} (${Math.round(ew.probability * 100)}%, direção ${ew.direction}).` : null,
+    engine.intent?.shares?.[0] ? `Movimento recente: ${engine.intent.shares[0].pct}% ${engine.intent.shares[0].name.toLowerCase()}.` : null
+  ]);
+}
+
 // How much each analyst counts in the numeric consensus.
-export const WEIGHTS = { algoritmico: 0.2, tendencial: 0.2, estatistico: 0.15, matematico: 0.15, comportamental: 0.12, noticiario: 0.1, macro: 0.08 };
+export const WEIGHTS = { estrutural: 0.22, algoritmico: 0.14, tendencial: 0.16, estatistico: 0.1, matematico: 0.12, comportamental: 0.1, noticiario: 0.09, macro: 0.07 };
 
 /** Weighted consensus of the analysts, with vetoes. */
 export function consensus(analysts) {

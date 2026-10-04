@@ -48,6 +48,14 @@ function savePrefs() {
 
 function setStatus(text) {
   $('#watchStatus').textContent = text;
+  $('#watchHudStatus').textContent = text;
+}
+
+/** Full-screen stage while the AI watches; the card returns to normal size to read the analysis. */
+function setExpanded(on) {
+  $('.watch-card').classList.toggle('expanded', on);
+  // The FOTO camera may also be open full screen: keep the page locked while either is.
+  document.body.classList.toggle('stage-open', Boolean(document.querySelector('.camera-card.expanded, .watch-card.expanded')));
 }
 
 function isRunning() {
@@ -174,6 +182,9 @@ async function begin(newStream, newKind, { keepSource = false } = {}) {
   current = null;
   stabilizer.reset();
   $('#watchStage').classList.add('active');
+  $('#watchStage').dataset.kind = kind;
+  $('#watchHudNow').textContent = 'A preparar a primeira análise…';
+  setExpanded(kind !== 'native');
   $('#watchEmpty').hidden = true;
   $('#watchStop').hidden = false;
   $('#watchStarts').hidden = true;
@@ -201,6 +212,7 @@ export function stop(message) {
   if (fileUrl) URL.revokeObjectURL(fileUrl);
   fileUrl = null;
   kind = null;
+  setExpanded(false);
   $('#watchStage').classList.remove('active');
   $('#watchStop').hidden = true;
   $('#watchStarts').hidden = false;
@@ -259,6 +271,7 @@ function render(data, step, latest) {
     $('#wlTarget').textContent = levels.target || '—';
   }
   $('#watchNow').textContent = step.noChart ? 'Enquadra o gráfico da corretora inteiro no ecrã partilhado ou na câmara.' : g.now || '—';
+  $('#watchHudNow').textContent = $('#watchNow').textContent;
   $('#watchWhy').innerHTML = (g.why || []).map(p => `<p>${escapeHtml(p)}</p>`).join('');
   $('#watchSteps').innerHTML = (g.steps || []).map(p => `<li>${escapeHtml(p)}</li>`).join('');
   $('#watchChange').textContent = latest.change || '';
@@ -309,7 +322,7 @@ async function openPip() {
   const css = getComputedStyle(document.documentElement);
   const v = name => css.getPropertyValue(name).trim();
   pipWindow.document.body.innerHTML = `<style>
-    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: ${v('--card')}; color: ${v('--text')}; }
+    body { margin: 0; font-family: Geist, system-ui, sans-serif; background: ${v('--card')}; color: ${v('--text')}; }
     #pip { padding: 14px; display: grid; gap: 8px; }
     .pip-badge { font-size: 26px; font-weight: 800; letter-spacing: .04em; padding: 10px 12px; border-radius: 12px; text-align: center; background: ${v('--well')}; }
     .pip-badge[data-side="up"] { background: ${v('--up')}; color: #fff; }
@@ -389,6 +402,12 @@ export function initWatch() {
     await begin(null, 'file', { keepSource: true });
   };
   $('#watchStop').onclick = () => stop();
+  $('#watchHudStop').onclick = () => stop();
+  $('#watchMin').onclick = () => setExpanded(false);
+  $('#watchExpand').onclick = () => setExpanded(true);
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && $('.watch-card').classList.contains('expanded')) setExpanded(false);
+  });
   $('#watchPip').onclick = () => openPip().catch(() => setStatus('Não foi possível abrir a janela flutuante.'));
   $('#watchVoice').onclick = () => { prefs.voice = !prefs.voice; savePrefs(); syncToggles(); };
   $('#watchAlerts').onclick = async () => {

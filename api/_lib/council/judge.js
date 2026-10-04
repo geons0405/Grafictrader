@@ -6,11 +6,15 @@ import { runText, parseJson } from '../vision.js';
 
 const DECISIONS = ['COMPRAR', 'VENDER', 'AGUARDAR'];
 
-export function judgePrompt({ symbol, interval, price, analysts, consensus }) {
+export function judgePrompt({ symbol, interval, price, analysts, consensus, engine = null }) {
   const compact = analysts.map(a => ({ analista: a.name, pontuacao: a.score, confianca: a.confidence, inclina: a.lean, motivos: a.reasons }));
+  const structure = engine ? `
+Motor de inteligência (8 camadas quantitativas): regime ${engine.regime.code} (${engine.regime.label}); viés estrutural ${engine.fusion.structuralBias}; probabilidade de subir ${Math.round(engine.fusion.probabilityUp * 100)}%; movimento esperado ${engine.fusion.expectedMove ? engine.fusion.expectedMove.centerPct + '% ± ' + engine.fusion.expectedMove.rangePct + '%' : '—'}.
+Alerta antecipado: ${engine.earlyWarning.state} (${Math.round(engine.earlyWarning.probability * 100)}%, direção ${engine.earlyWarning.direction}).
+Intenção do último movimento: ${(engine.intent.shares || []).slice(0, 3).map(x => x.pct + '% ' + x.name).join('; ')}. ${(engine.intent.risks || []).join(' ')}` : '';
   return `És o juiz final do Grafictrader, uma mesa de análise de trading.
-Ativo ${symbol}, tempo gráfico ${interval}, preço ${price}.
-Sete analistas independentes calcularam o mercado. Pontuação de -1 (vender) a +1 (comprar); confiança de 0 a 1.
+Ativo ${symbol}, tempo gráfico ${interval}, preço ${price}.${structure}
+Oito analistas independentes calcularam o mercado. Pontuação de -1 (vender) a +1 (comprar); confiança de 0 a 1.
 ${JSON.stringify(compact)}
 Consenso numérico: pontuação ${consensus.score}, concordância ${Math.round(consensus.agreement * 100)}%, sugestão do motor ${consensus.decision}.
 Vetos ativos: ${consensus.vetoes.length ? consensus.vetoes.join(' | ') : 'nenhum'}.

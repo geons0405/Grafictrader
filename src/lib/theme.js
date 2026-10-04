@@ -23,7 +23,7 @@ export function applyTheme(preference = getThemePreference()) {
   } catch { /* storage unavailable: theme still applies for this visit */ }
   const theme = resolvedTheme(preference);
   document.documentElement.dataset.theme = theme;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0e0e0f' : '#efefef');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0b0b0d' : '#efeeea');
   listeners.forEach(fn => fn(theme, preference));
   return theme;
 }
@@ -41,11 +41,12 @@ media.addEventListener('change', () => {
   if (getThemePreference() === 'system') applyTheme('system');
 });
 
-/** Monochrome chart palette matching the CSS tokens of each theme. */
+/** Chart palette matching the CSS tokens of each theme. The background is
+ *  transparent so the chart sits on the card's frosted glass. */
 export function chartPalette(theme = resolvedTheme()) {
   return theme === 'dark'
-    ? { background: '#1c1c1e', text: '#8e8e93', grid: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.08)', up: '#f5f5f7', down: '#5c5c61', crosshair: '#48484d' }
-    : { background: '#ffffff', text: '#8a8a8e', grid: 'rgba(0,0,0,0.045)', border: 'rgba(0,0,0,0.07)', up: '#111113', down: '#b4b4b9', crosshair: '#c7c7cc' };
+    ? { background: 'transparent', text: '#9a9aa3', grid: 'rgba(255,255,255,0.05)', border: 'rgba(255,255,255,0.08)', up: '#3dd68c', down: '#ff6b72', crosshair: 'rgba(255,255,255,0.28)', label: '#f4f4f6' }
+    : { background: 'transparent', text: '#6b6b74', grid: 'rgba(20,20,26,0.05)', border: 'rgba(20,20,26,0.08)', up: '#0e7c4a', down: '#c8323a', crosshair: 'rgba(20,20,26,0.25)', label: '#111114' };
 }
 
 export function chartOptions(theme) {
@@ -54,14 +55,14 @@ export function chartOptions(theme) {
     // Explicit locale: some runtimes report tags like "en-US@posix" that
     // Intl rejects, which made the chart throw on every price label.
     localization: { locale: 'pt-PT' },
-    layout: { background: { type: 'solid', color: p.background }, textColor: p.text, fontFamily: 'Inter, system-ui, sans-serif', attributionLogo: true },
+    layout: { background: { type: 'solid', color: p.background }, textColor: p.text, fontFamily: 'Geist, system-ui, sans-serif', attributionLogo: true },
     grid: { vertLines: { color: p.grid }, horzLines: { color: p.grid } },
     rightPriceScale: { borderColor: p.border },
     timeScale: { borderColor: p.border, timeVisible: true, secondsVisible: false },
     crosshair: {
       mode: 1,
-      vertLine: { color: p.crosshair, width: 1, labelBackgroundColor: p.up },
-      horzLine: { color: p.crosshair, width: 1, labelBackgroundColor: p.up }
+      vertLine: { color: p.crosshair, width: 1, labelBackgroundColor: p.label },
+      horzLine: { color: p.crosshair, width: 1, labelBackgroundColor: p.label }
     }
   };
 }
