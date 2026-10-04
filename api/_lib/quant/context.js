@@ -1,6 +1,7 @@
 import { calculateTradeFlow, calculateOrderBookDynamics } from '../mechanics/microstructure.js';
 import { getGdeltEvents } from '../sources/gdelt.js';
 import { getFinnhubEvents } from '../sources/finnhub.js';
+import { getRssNews } from '../sources/news-feeds.js';
 import { clamp } from './stats.js';
 
 const NEWS_TTL_MS = 120_000;
@@ -10,7 +11,7 @@ let newsCache = { at: 0, events: [] };
 /** Crypto-wide news, cached per instance so many requests share one fetch. */
 export async function recentNews() {
   if (Date.now() - newsCache.at < NEWS_TTL_MS) return newsCache.events;
-  const settled = await Promise.allSettled([getGdeltEvents('BTCUSDT'), getFinnhubEvents('BTCUSDT')]);
+  const settled = await Promise.allSettled([getGdeltEvents('BTCUSDT'), getFinnhubEvents('BTCUSDT'), getRssNews('BTCUSDT')]);
   const events = settled.flatMap(r => (r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []));
   newsCache = { at: Date.now(), events };
   return events;

@@ -1,0 +1,73 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main, claude/app-inspection-analysis-mqt9rz]
+    paths:
+      - 'android/**'
+      - 'android-shell/**'
+      - 'capacitor.config.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Collect APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk Grafictrader.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Grafictrader-apk
+          path: Grafictrader.apk
+
+      # Same download link every time: the "android-latest" release is replaced on each build.
+      - name: Publish download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --yes --cleanup-tag || true
+          gh release create android-latest Grafictrader.apk \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Grafictrader para Android" \
+            --notes "APK de teste gerado automaticamente a partir de ${GITHUB_SHA::7} (${GITHUB_REF_NAME}).
+
+          Instalar: abre o ficheiro Grafictrader.apk no telemóvel e permite instalar apps de origem desconhecida.
+          A app abre https://grafictrader.vercel.app e, em Minha corretora, analisa o ecrã da tua corretora com uma bolha por cima.
+
+          Operações e orientações são educativas e não são aconselhamento financeiro."

@@ -1,12 +1,12 @@
 import {
   createIcons, Home, Camera, ChartPie, User, Search, SlidersHorizontal, Upload, Sun, Moon, Monitor,
   LogOut, ArrowLeft, ArrowRight, LogIn, UserPlus, TrendingUp, TrendingDown, RefreshCw, X, Radio,
-  Sparkles, Image, Activity, Mail, Lock, Bot, Flame, ChevronDown, Pause, Play
+  Sparkles, Image, Activity, Mail, Lock, Bot, Flame, ChevronDown, Pause, Play, Smartphone
 } from 'lucide';
 
 const icons = {
   Home, Camera, ChartPie, User, Search, SlidersHorizontal, Upload, Sun, Moon, Monitor, LogOut,
-  ArrowLeft, ArrowRight, LogIn, UserPlus, TrendingUp, TrendingDown, RefreshCw, X, Radio, Sparkles, Image, Activity, Mail, Lock, Bot, Flame, ChevronDown, Pause, Play
+  ArrowLeft, ArrowRight, LogIn, UserPlus, TrendingUp, TrendingDown, RefreshCw, X, Radio, Sparkles, Image, Activity, Mail, Lock, Bot, Flame, ChevronDown, Pause, Play, Smartphone
 };
 
 /** Replaces every pending <i data-lucide> placeholder in the document. */

@@ -1,6 +1,7 @@
 import { $, $$, api, escapeHtml, fmtTime } from '../lib/dom.js';
 import { renderIcons } from '../lib/icons.js';
 import { frameSignature, frameDiff, shouldSend, createStabilizer } from '../lib/watch-core.js';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 
 // "Minha corretora": the AI watches the user's own broker (shared screen on a
 // computer, camera on a phone, or a recorded video) and keeps its advice up
@@ -13,9 +14,11 @@ const SESSION_LIMIT_MS = 45 * 60 * 1000;
 const PREFS_KEY = 'grafictrader.watchPrefs';
 const LABEL = { COMPRAR: 'COMPRAR', VENDER: 'VENDER', AGUARDAR: 'NÃO OPERAR' };
 const SIDE = { COMPRAR: 'up', VENDER: 'down', AGUARDAR: '' };
+// Android app: native screen capture of the broker app with a floating bubble.
+const Native = Capacitor.isNativePlatform() ? registerPlugin('GrafictraderNative') : null;
 
 let stream = null;
-let kind = null; // 'screen' | 'camera' | 'file'
+let kind = null; // 'screen' | 'camera' | 'file' | 'native'
 let fileUrl = null;
 let imageCapture = null;
 let ticker = null;
@@ -48,7 +51,7 @@ function setStatus(text) {
 }
 
 function isRunning() {
-  return Boolean(stream || kind === 'file');
+  return Boolean(stream || kind === 'file' || kind === 'native');
 }
 
 /* ---------- capture ---------- */
@@ -161,7 +164,7 @@ async function begin(newStream, newKind, { keepSource = false } = {}) {
     imageCapture = 'ImageCapture' in window && track ? new window.ImageCapture(track) : null;
     track?.addEventListener('ended', () => stop('A partilha terminou.'));
   }
-  await video.play().catch(() => {});
+  if (kind !== 'native') await video.play().catch(() => {});
   startedAt = Date.now();
   analyses = 0;
   lastSig = null;
@@ -177,10 +180,16 @@ async function begin(newStream, newKind, { keepSource = false } = {}) {
   document.body.classList.add('is-watching');
   setStatus('A preparar a primeira análise…');
   renderHistory();
-  startTicker();
+  if (kind === 'native') {
+    $('#watchStage').classList.remove('active');
+    setStatus('A IA está a ver o ecrã. Abre a tua corretora: a orientação aparece na bolha por cima dela.');
+  } else {
+    startTicker();
+  }
 }
 
 export function stop(message) {
+  if (kind === 'native') Native?.stopWatch().catch(() => {});
   stopTicker();
   stream?.getTracks().forEach(t => t.stop());
   stream = null;
@@ -203,6 +212,11 @@ export function stop(message) {
 /* ---------- results ---------- */
 
 function handleResult(data) {
+  if (kind === 'native') {
+    analyses += 1;
+    lastSentAt = Date.now();
+    setStatus(`Ao vivo no telemóvel · ${analyses} análise(s) · a bolha mostra a orientação por cima da corretora`);
+  }
   const decision = data.verdict.decision;
   const step = stabilizer.push(decision, { chartVisible: data.chartVisible });
   if (data.chartVisible) lastByDecision[decision] = data;
@@ -213,7 +227,8 @@ function handleResult(data) {
     history.unshift({ at: data.at, decision: step.shown, asset: shownData.vision.asset, timeframe: shownData.vision.timeframe, confidence: shownData.verdict.confidence });
     history = history.slice(0, 30);
     renderHistory();
-    announce(shownData);
+    // The Android app vibrates and speaks itself.
+    if (kind !== 'native') announce(shownData);
   }
   updatePip();
 }
@@ -312,11 +327,36 @@ function syncToggles() {
   $('#watchAlerts').classList.toggle('active', prefs.alerts);
 }
 
+function initNative() {
+  $('#watchNative').hidden = false;
+  $('#watchNativeHint').hidden = false;
+  $('#watchShare').hidden = true;
+  $('#watchShareHint').hidden = true;
+  $('#watchNative').onclick = async () => {
+    try {
+      await Native.startWatch({ serverUrl: location.origin, voice: prefs.voice });
+      await begin(null, 'native');
+    } catch (error) {
+      setStatus(error?.message || 'Não foi possível começar a captura do ecrã.');
+    }
+  };
+  Native.addListener('watchResult', data => {
+    if (kind !== 'native') return;
+    try { handleResult(data); } catch { /* malformed result */ }
+  });
+  Native.addListener('watchStopped', ({ message } = {}) => {
+    if (kind === 'native') { kind = null; stop(message || undefined); }
+  });
+  // The capture keeps running when the app is reopened.
+  Native.status().then(s => { if (s?.running && kind !== 'native') begin(null, 'native'); }).catch(() => {});
+}
+
 export function initWatch() {
   loadPrefs();
   const canShare = Boolean(navigator.mediaDevices?.getDisplayMedia);
   $('#watchShare').hidden = !canShare;
   $('#watchShareHint').hidden = canShare;
+  if (Native) initNative();
   $('#watchPip').hidden = !('documentPictureInPicture' in window);
 
   $('#watchShare').onclick = async () => {

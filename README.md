@@ -93,6 +93,18 @@ Notícias de alto impacto nas moedas do ativo, de 15 min antes a 30 min depois, 
 
 O win rate e o P&L mostrados são o histórico real destas operações simuladas. Não há ordens reais e o app não é aconselhamento financeiro.
 
+## App Android
+
+Descarregar: https://github.com/geons0405/Grafictrader/releases/download/android-latest/Grafictrader.apk
+
+- A app (Capacitor, pasta `android/`) abre https://grafictrader.vercel.app, por isso as mudanças na web chegam à app sem a reinstalar.
+- Em **LIVE › Minha corretora**, o botão "Analisar a corretora neste telemóvel" usa o plugin nativo `GrafictraderNative`:
+  captura o ecrã com MediaProjection (serviço em primeiro plano), envia um frame a `/api/watch` só quando o gráfico muda
+  e mostra COMPRAR / VENDER / NÃO OPERAR numa bolha flutuante por cima da corretora (toque para ver o que fazer, toque longo para abrir a app).
+- Pede as permissões "Mostrar por cima de outras apps" e "Começar a gravar ou transmitir".
+- O workflow `.github/workflows/android.yml` compila o APK e substitui a release `android-latest` a cada mudança em `android/`.
+- O APK é de teste (assinatura de debug): para atualizar, desinstala a versão anterior se o Android recusar a instalação.
+
 ## Contas
 
 Com `KV_REST_API_URL`/`KV_REST_API_TOKEN` configurados, as contas são reais:
@@ -116,6 +128,55 @@ Sem Redis, o app funciona em **modo local**: o perfil (só o nome) fica no dispo
 ## Variáveis de ambiente
 
 Ver `.env.example`. Nunca colocar chaves de fornecedores no código do frontend.
+Na Vercel, cada variável tem de estar ativa em **Production** (e Preview), com o nome exato (`..._API_KEY`).
+
+| Variável | Para quê |
+| --- | --- |
+| `GROQ_API_KEY` | IA principal: lê gráficos (qwen3.8-27b) e é a juíza do conselho (gpt-oss-120b) |
+| `NVIDIA_API_KEY`, `GEMINI_API_KEY`, `UNOROUTER_API_KEY` | IAs de reserva, usadas por ordem quando a anterior falha ou atinge o limite |
+| `AI_VISION_MODELS`, `AI_JUDGE_MODELS` | Opcionais: `provedor:modelo,...` para pôr modelos à frente (ex.: `nvidia:meta/llama-3.2-90b-vision-instruct`) |
+| `KV_REST_API_URL` | `https://grafictrader-dados.floot.app/_api/kv` |
+| `KV_REST_API_TOKEN` | O mesmo token guardado no Floot (`GRAFICTRADER_KV_TOKEN`) |
+| `OPENAI_API_KEY`, `TWELVE_DATA_API_KEY`, `MARKETAUX_API_KEY`, `FINNHUB_API_KEY` | Opcionais |
+
+Estado dos serviços: `GET /api/health` (o que está configurado) e `GET /api/health?probe=1` (faz uma chamada real a cada serviço; limitado a 5 por 10 minutos).
+
+### Conselho de analistas e juíza IA
+
+`GET /api/instructor?council=1&symbol=BTCUSDT&interval=5m` (separador **Conselho** no LIVE › Mercado):
+
+| Analista | O que calcula |
+| --- | --- |
+| Noticiário | Tom das manchetes das últimas 12 h (mais peso às recentes) |
+| Matemático | MACD, ROC 10/30, RSI, inclinação da EMA 20 |
+| Estatístico | Regime: Hurst, razão de variância, entropia, VWAP z, Kalman |
+| Comportamental | Medo e Ganância (contrário nos extremos), fluxo agressor, livro, VPIN |
+| Tendencial | EMA 20/50 no tempo gráfico e em dois superiores |
+| Algorítmico | Sinal do motor quant, pesado pelo historial de acertos |
+| Macro e risco | Apetite ao risco global; notícia de alto impacto veta qualquer entrada |
+
+O consenso ponderado e os motivos vão para a juíza IA, que dá o veredito final. O código mantém as regras duras: com veto a decisão é AGUARDAR, e a juíza não pode inverter um consenso forte. Sem IA, decide o consenso numérico.
+
+### Escolha dos modelos (teste de 4/10/2026)
+
+`/api/health?compare=provedor:modelo,...&chart=up|down|side` e `&task=reasoning`:
+
+- Gráficos (alta, queda, lateral): Groq qwen3.8-27b acertou os três em menos de 1 s; NVIDIA Llama 3.2 Vision 90B e Gemini 3.8 Flash também acertaram, mais lentos ou muitas vezes ocupados.
+- Raciocínio (subida forte com notícia forte daqui a 10 min → AGUARDAR): Groq gpt-oss-120b e qwen3.8-27b acertaram em 0,5 s; os modelos grandes da NVIDIA estavam sobrecarregados.
+
+### Notícias em tempo real sem chave
+
+- [rss-parser](https://github.com/rbren/rss-parser): CoinDesk, Cointelegraph, Investing.com, Yahoo Finance e pesquisa do Google News por ativo.
+- [yahoo-finance2](https://github.com/gadicc/node-yahoo-finance2): notícias do Yahoo Finance por ativo.
+- [sentiment](https://github.com/thisandagain/sentiment): tom de cada manchete (positivo, negativo, neutro), usado no contexto da IA instrutora.
+
+### Base de dados (Floot)
+
+Contas, sessões, limites de pedidos, estado da IA instrutora, biblioteca de padrões e dados do MT5 ficam
+no projeto Floot **Grafictrader Dados** (Postgres). O endpoint `POST /_api/kv` fala o mesmo protocolo REST
+do Upstash Redis (`GET`, `SET` com `EX`/`NX`, `DEL`, `INCR`, `EXPIRE`), por isso o código usa o mesmo
+cliente (`api/_lib/redis.js`). Para trocar o token: muda-o no Floot (Resources) e em `KV_REST_API_TOKEN`
+na Vercel ao mesmo tempo, e faz Redeploy.
 
 ## Desenvolvimento
 

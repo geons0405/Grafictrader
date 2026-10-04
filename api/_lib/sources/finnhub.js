@@ -1,5 +1,6 @@
+import { apiKey } from '../env.js';
 export async function getFinnhubEvents(symbol = 'BTCUSDT') {
-  const key = process.env.FINNHUB_API_KEY;
+  const key = apiKey('FINNHUB_API_KEY');
   if (!key) {
     console.warn('[Finnhub] FINNHUB_API_KEY não configurada; fonte ignorada.');
     return [];

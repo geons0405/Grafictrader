@@ -128,6 +128,8 @@ export const shellTemplate = `
           </div>
         </div>
         <div class="watch-controls" id="watchStarts">
+          <button class="btn btn-primary" type="button" id="watchNative" hidden><i data-lucide="smartphone"></i>Analisar a corretora neste telemóvel</button>
+          <p class="fine-print left" id="watchNativeHint" hidden>Abre depois a tua corretora: a IA vê o ecrã e mostra COMPRAR, VENDER ou NÃO OPERAR numa bolha por cima dela. Toca na bolha para ver o que fazer.</p>
           <button class="btn btn-primary" type="button" id="watchShare"><i data-lucide="monitor"></i>Partilhar ecrã</button>
           <button class="btn btn-soft" type="button" id="watchCamera"><i data-lucide="camera"></i>Usar câmara</button>
           <label class="btn btn-ghost"><i data-lucide="upload"></i>Carregar vídeo<input type="file" id="watchFile" accept="video/*" hidden></label>
@@ -190,6 +192,7 @@ export const shellTemplate = `
       </header>
       <div class="segmented view-switch" role="tablist" aria-label="Vista da IA">
         <button type="button" class="active" data-view="guide">Orientação</button>
+        <button type="button" data-view="council">Conselho</button>
         <button type="button" data-view="results">Resultados</button>
       </div>
 
@@ -212,6 +215,26 @@ export const shellTemplate = `
           <div class="guide-block"><small>Porquê</small><div id="guideWhy"></div></div>
           <div class="guide-block"><small>Passo a passo</small><ol id="guideSteps"></ol></div>
           <details class="guide-tech"><summary>Detalhes técnicos</summary><ul class="reasons" id="instructorReasons"></ul></details>
+        </div>
+      </div>
+
+      <div class="view" data-pane="council" hidden>
+        <div class="position">
+          <span class="badge" id="councilBadge">—</span>
+          <div class="position-main">
+            <b id="councilTitle">O conselho ainda não reuniu</b>
+            <small id="councilSub">7 analistas calculam; uma IA juíza decide.</small>
+          </div>
+        </div>
+        <div class="levels levels-3" id="councilLevels" hidden>
+          <div><small>Entrar em</small><b id="clEntry">—</b></div>
+          <div><small>Stop loss</small><b id="clStop" class="neg">—</b></div>
+          <div><small>Take profit</small><b id="clTarget" class="pos">—</b></div>
+        </div>
+        <div class="guide">
+          <div class="guide-block"><small>Porque a juíza decidiu assim</small><div id="councilWhy"></div></div>
+          <div class="guide-block"><small>Analistas</small><div class="council-list" id="councilAnalysts"></div></div>
+          <p class="muted-line" id="councilMeta"></p>
         </div>
       </div>
 

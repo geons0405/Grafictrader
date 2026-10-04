@@ -1184,3 +1184,26 @@ body.is-watching .tabbar button[data-tab="live"]::after {
 }
 #watchLevels b { white-space: normal; font-size: 12.5px; }
 .guide-block .op small { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: 11px; margin: 0; }
+
+/* Council: analysts with a centred buy/sell meter */
+.council-list { display: grid; gap: 2px; }
+.council-row { border-bottom: 1px solid var(--line); }
+.council-row:last-child { border-bottom: 0; }
+.council-row summary {
+  display: grid; grid-template-columns: minmax(96px, 1.1fr) 1.4fr 70px 34px; align-items: center; gap: 10px;
+  padding: 9px 0; cursor: pointer; list-style: none; font-size: 13px;
+}
+.council-row summary::-webkit-details-marker { display: none; }
+.council-row summary small { color: var(--muted); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+.council-row .op-side { width: auto; }
+.council-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.council-meter { position: relative; height: 6px; border-radius: 999px; background: var(--ring-track); overflow: hidden; }
+.council-meter::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--muted); opacity: 0.5; }
+.council-meter i { position: absolute; top: 0; bottom: 0; background: var(--muted); border-radius: 999px; }
+.council-meter i[data-side="up"] { background: var(--up); }
+.council-meter i[data-side="down"] { background: var(--down); }
+.council-row .reasons { padding: 0 0 10px 18px; }
+@media (max-width: 380px) {
+  .council-row summary { grid-template-columns: 1fr 1fr 64px; }
+  .council-row summary small { display: none; }
+}

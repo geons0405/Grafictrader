@@ -2,6 +2,7 @@ import { buildMechanicsSnapshot } from './_lib/mechanics/snapshot.js';
 import { parseMarketQuery, clientIp } from './_lib/validate.js';
 import { requireUserIfConfigured } from './_lib/auth.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
+import { runText, chainFor } from './_lib/vision.js';
 
 const SYSTEM_PROMPT = `És o motor de interpretação do Grafictrader.
 Recebes métricas calculadas pelo código a partir de OHLCV, trades e/ou order book.
@@ -28,40 +29,6 @@ CONFLITO: ...
 IMPLICAÇÃO: ...
 LIMITAÇÃO: ...
 CONFIANÇA: baixa/média/alta.`;
-
-function extractText(data) {
-  return data?.candidates?.flatMap(c => c?.content?.parts?.map(p => p?.text).filter(Boolean) || []).join('\n').trim() || '';
-}
-
-const CACHE_MS = 60_000;
-const cache = new Map();
-
-async function askGemini(payload, key) {
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25_000);
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-        signal: controller.signal,
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: SYSTEM_PROMPT + '\n\nDADOS DO MERCADO:\n' + JSON.stringify(payload) }] }],
-          generationConfig: { temperature: 0.15, maxOutputTokens: 700 }
-        })
-      }
-    );
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.error?.message || 'Falha no Gemini.');
-    const text = extractText(data);
-    if (!text) throw new Error('Gemini não devolveu interpretação.');
-    return text;
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 function compactPayload(snapshot) {
   const { memory = {}, patternLibrary = {} } = snapshot;
@@ -106,8 +73,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
   res.setHeader('Cache-Control', 'no-store');
 
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return res.status(503).json({ ok: false, error: 'GEMINI_API_KEY não configurada.', setupRequired: true });
+  if (!chainFor('judge').length) return res.status(503).json({ ok: false, error: 'Nenhuma IA configurada.', setupRequired: true });
 
   // The client only names the market; the metrics are recomputed here so the
   // prompt never carries client-controlled text.
@@ -126,10 +92,13 @@ export default async function handler(req, res) {
 
   try {
     const snapshot = await buildMechanicsSnapshot(market.symbol, market.interval);
-    const interpretation = await askGemini(compactPayload(snapshot), key);
+    const payload = compactPayload(snapshot);
+    const answer = await runText(SYSTEM_PROMPT + '\n\nDADOS DO MERCADO:\n' + JSON.stringify(payload), { maxTokens: 700, temperature: 0.15 });
+    const interpretation = answer.text;
+    const provider = answer.provider;
     const body = {
       ok: true,
-      provider: 'Gemini',
+      provider,
       symbol: market.symbol,
       interval: market.interval,
       state: snapshot.state,

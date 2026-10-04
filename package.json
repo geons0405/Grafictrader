@@ -10,10 +10,16 @@
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.2",
     "lightweight-charts": "^5.0.0",
-    "lucide": "^0.468.0"
+    "lucide": "^0.468.0",
+    "rss-parser": "^3.13.0",
+    "sentiment": "^5.0.2",
+    "yahoo-finance2": "^4.0.2"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
     "vite": "^7.0.0"
   },
   "engines": {
