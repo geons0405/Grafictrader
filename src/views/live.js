@@ -7,6 +7,7 @@ import { openSheet, closeSheet } from './sheet.js';
 const POLL_MS = 5000;
 const MT5_POLL_MS = 3000;
 const INSTRUCTOR_MS = 15000;
+const COUNCIL_MS = 60000;
 const WS_BASE = 'wss://data-stream.binance.vision/ws/';
 const TV_INTERVAL = { '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240' };
 const MT5_TF = { '1m': 'M1', '5m': 'M5', '15m': 'M15', '1h': 'H1', '4h': 'H4' };
@@ -29,6 +30,8 @@ let wsRetry = 0;
 let reconnectTimer = null;
 let pollTimer = null;
 let instructorTimer = null;
+let councilTimer = null;
+let councilView = false;
 let active = false;
 let loadToken = 0;
 
@@ -332,6 +335,64 @@ async function loadInstructor() {
   if (active) instructorTimer = setTimeout(loadInstructor, INSTRUCTOR_MS);
 }
 
+/* ---------- Council: 7 analysts + AI judge ---------- */
+
+const LEAN = { COMPRAR: 'up', VENDER: 'down', AGUARDAR: '' };
+const LEAN_LABEL = { COMPRAR: 'COMPRAR', VENDER: 'VENDER', AGUARDAR: 'NÃO OPERAR' };
+
+function renderCouncil(data) {
+  const v = data.verdict;
+  const badge = $('#councilBadge');
+  badge.textContent = LEAN_LABEL[v.decision] || v.decision;
+  badge.dataset.side = LEAN[v.decision] || '';
+  $('#councilTitle').textContent = v.summary || (v.decision === 'AGUARDAR' ? 'Agora não é hora de entrar' : `Veredito: ${LEAN_LABEL[v.decision]}`);
+  const c = data.consensus;
+  $('#councilSub').textContent = `${v.confidence ? 'confiança ' + v.confidence + '% · ' : ''}concordância ${Math.round(c.agreement * 100)}% · juíza: ${v.judge}`;
+  const lv = data.plan;
+  $('#councilLevels').hidden = !lv;
+  if (lv) {
+    $('#clEntry').textContent = fmtLevel(lv.entry);
+    $('#clStop').textContent = fmtLevel(lv.initialStop ?? lv.stop);
+    $('#clTarget').textContent = fmtLevel(lv.target);
+  }
+  const why = [...(v.why || []), ...(c.vetoes || []).map(x => 'Veto: ' + x), ...(v.risks || []).map(x => 'Risco: ' + x), ...(v.notes || [])];
+  $('#councilWhy').innerHTML = why.map(p => `<p>${escapeHtml(p)}</p>`).join('') || '<p>—</p>';
+  $('#councilAnalysts').innerHTML = data.analysts.map(a => {
+    const pctScore = Math.round(Math.abs(a.score) * 50);
+    const side = a.score > 0 ? 'up' : a.score < 0 ? 'down' : '';
+    return `<details class="council-row">
+      <summary>
+        <span class="council-name">${escapeHtml(a.name)}</span>
+        <span class="council-meter" aria-hidden="true"><i data-side="${side}" style="${a.score >= 0 ? 'left:50%' : 'right:50%'};width:${pctScore}%"></i></span>
+        <span class="op-side" data-side="${LEAN[a.lean] || ''}">${a.lean === 'AGUARDAR' ? 'NEUTRO' : a.lean}</span>
+        <small>${Math.round(a.confidence * 100)}%</small>
+      </summary>
+      <ul class="reasons">${a.reasons.map(r => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
+    </details>`;
+  }).join('');
+  $('#councilMeta').textContent = `Atualizado ${fmtTime(data.updatedAt)} · o conselho reúne no máximo uma vez por minuto.`;
+}
+
+async function loadCouncil() {
+  clearTimeout(councilTimer);
+  if (!active || !councilView) return;
+  if (plan?.feed !== 'binance') {
+    $('#councilTitle').textContent = 'O conselho analisa mercados Binance';
+    $('#councilSub').textContent = 'Escolhe a fonte Binance para ver os 7 analistas e o veredito.';
+    return;
+  }
+  const token = loadToken;
+  $('#councilSub').textContent = 'O conselho está a reunir…';
+  try {
+    const data = await api(`/api/instructor?council=1&symbol=${plan.symbol}&interval=${market.interval}`);
+    if (token !== loadToken) return;
+    renderCouncil(data);
+  } catch (error) {
+    if (token === loadToken) $('#councilSub').textContent = 'Conselho indisponível · ' + error.message;
+  }
+  if (active && councilView) councilTimer = setTimeout(loadCouncil, COUNCIL_MS);
+}
+
 /* ---------- Binance feed ---------- */
 
 function closeSocket() {
@@ -404,6 +465,7 @@ async function startBinance(token) {
   connectSocket();
   scheduleBinancePoll();
   loadInstructor();
+  loadCouncil();
 }
 
 /* ---------- MetaTrader 5 feed ---------- */
@@ -472,6 +534,7 @@ async function load() {
   closeSocket();
   clearTimeout(pollTimer);
   clearTimeout(instructorTimer);
+  clearTimeout(councilTimer);
   candles = [];
   instructor = null;
   mt5Meta = null;
@@ -582,6 +645,8 @@ export function initLive() {
     $$('#instructor [data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === name));
     $$('#instructor [data-pane]').forEach(p => { p.hidden = p.dataset.pane !== name; });
     try { localStorage.setItem(VIEW_KEY, name); } catch { /* ignore */ }
+    councilView = name === 'council';
+    if (councilView) loadCouncil(); else clearTimeout(councilTimer);
   };
   $$('#instructor [data-view]').forEach(btn => { btn.onclick = () => setView(btn.dataset.view); });
   setView(view === 'results' ? 'results' : 'guide');

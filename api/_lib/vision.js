@@ -17,23 +17,28 @@ export const PROVIDERS = {
   openai: { label: 'OpenAI', env: 'OPENAI_API_KEY' }
 };
 
-// Order chosen from the chart benchmark in /api/health?compare=... (see README).
+// Order chosen from the benchmark of 4 Oct 2026 (/api/health?compare=...):
+//   charts - up, down and sideways test charts; reasoning - a "strong rally but
+//   high-impact news in 10 minutes" case where the right call is to wait.
+// Groq qwen3.8-27b read all three charts right in under 1 s; Llama 3.2 Vision 90B
+// (NVIDIA) and Gemini 3.8 Flash also got them right but slower or often busy.
+// Groq gpt-oss-120b and qwen3.8-27b reasoned correctly in about 0.5 s.
 const DEFAULT_CHAINS = {
   vision: [
-    'groq:meta-llama/llama-4-maverick-17b-128e-instruct',
-    'groq:meta-llama/llama-4-scout-17b-16e-instruct',
-    'unorouter:gpt-4o:free',
-    'unorouter:qwen2.5-vl-7b-instruct-awq:free',
-    'nvidia:meta/llama-4-maverick-17b-128e-instruct',
+    'groq:qwen/qwen3.8-27b',
+    'nvidia:meta/llama-3.2-90b-vision-instruct',
     'gemini:gemini-3.8-flash',
+    'unorouter:gpt-4o:free',
     'openai:gpt-5.6-luna',
-    'unorouter:llama-4-maverick-17b-128e-instruct:free'
+    'nvidia:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+    'unorouter:qwen2.5-vl-7b-instruct-awq:free'
   ],
   judge: [
     'groq:openai/gpt-oss-120b',
-    'groq:llama-3.3-70b-versatile',
-    'nvidia:meta/llama-3.3-70b-instruct',
+    'groq:qwen/qwen3.8-27b',
     'gemini:gemini-3.8-flash',
+    'nvidia:nvidia/nemotron-3-super-120b-a12b',
+    'groq:openai/gpt-oss-20b',
     'unorouter:gpt-4o:free',
     'openai:gpt-5.6-luna'
   ]
