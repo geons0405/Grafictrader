@@ -25,8 +25,9 @@ export function quantSnapshot(candles) {
   const ac1 = autocorrelation(returns.slice(-100), 1);
   const range = atr(rows, 14);
   const last = rows.at(-1);
-  // What a person sees on the chart: the recent box the price moves in and the last hour's move.
-  const recent = rows.slice(-20);
+  // What a person sees on the chart: the box of the 20 candles before the current one (so the
+  // current close can break out of it) and the last hour's move.
+  const recent = rows.slice(-21, -1);
   const rangeHigh = Math.max(...recent.map(c => c.high));
   const rangeLow = Math.min(...recent.map(c => c.low));
   const hourAgo = rows.at(-Math.min(rows.length, 61));

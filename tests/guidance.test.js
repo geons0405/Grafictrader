@@ -84,3 +84,12 @@ test('the move line never contradicts its own percentage', async () => {
   assert.doesNotMatch(text, /a subir com força/);
   assert.match(text, /aos saltos entre/);
 });
+
+test('the range box leaves out the current candle, so a breakout can show', async () => {
+  const { quantSnapshot } = await import('../api/_lib/quant/signal.js');
+  const rows = Array.from({ length: 200 }, (_, i) => ({ time: i * 60, open: 100, high: 101, low: 99, close: 100, volume: 10 }));
+  rows[199] = { time: 199 * 60, open: 100, high: 106, low: 100, close: 105, volume: 30 };
+  const snap = quantSnapshot(rows);
+  assert.equal(snap.rangeHigh, 101);
+  assert.ok(snap.price > snap.rangeHigh);
+});

@@ -79,7 +79,7 @@ function whyNoise(snap) {
       : `O preço vem a descer com força (${move.toFixed(2)}% nas últimas 60 velas), por isso o gráfico parece ter direção.`);
   }
   if (Number.isFinite(snap?.rangeHigh) && Number.isFinite(snap?.rangeLow) && snap.rangeHigh > snap.rangeLow) {
-    lines.push(`Mas nas últimas 20 velas anda aos saltos entre ${money(snap.rangeLow)} e ${money(snap.rangeHigh)}, com velas grandes para os dois lados.`);
+    lines.push(`Mas nas 20 velas anteriores andou aos saltos entre ${money(snap.rangeLow)} e ${money(snap.rangeHigh)}, com velas grandes para os dois lados.`);
   }
   lines.push(lines.length
     ? 'Os cálculos não encontram "memória" neste movimento: subidas e descidas assim desfazem-se tão depressa como aparecem, e quem entra no meio é apanhado num desses saltos.'
