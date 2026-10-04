@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="pt" data-terms-version="2026-10-05">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Termos de Uso e Aviso de Risco · Grafictrader</title>
+  <meta name="description" content="Termos de Uso e Aviso de Risco do Grafictrader: o que a app faz, os riscos de operar nos mercados e as responsabilidades do utilizador." />
+  <meta name="theme-color" content="#efeeea" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    // Same theme choice as the app (Perfil › Aparência).
+    try {
+      const t = localStorage.getItem('grafictrader.theme');
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch { /* private mode */ }
+  </script>
+  <style>
+    :root {
+      --bg: #efeeea;
+      --card: rgba(255, 255, 255, 0.78);
+      --card-border: rgba(255, 255, 255, 0.9);
+      --text: #111114;
+      --text-2: #3a3a42;
+      --muted: #6b6b74;
+      --line: rgba(20, 20, 26, 0.08);
+      --warn-bg: #fff4e5;
+      --warn-border: #f0c48a;
+      --warn-text: #6b3d00;
+      --accent: #111114;
+      --on-accent: #ffffff;
+      --shadow: 0 1px 2px rgba(20, 20, 26, 0.04), 0 8px 24px -8px rgba(20, 20, 26, 0.10);
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0b0b0d;
+        --card: rgba(30, 30, 36, 0.8);
+        --card-border: rgba(255, 255, 255, 0.07);
+        --text: #f4f4f6;
+        --text-2: #d4d4da;
+        --muted: #9a9aa3;
+        --line: rgba(255, 255, 255, 0.08);
+        --warn-bg: #2a1d0c;
+        --warn-border: #6b4a1c;
+        --warn-text: #ffd59a;
+        --accent: #f4f4f6;
+        --on-accent: #111114;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 24px 48px -18px rgba(0, 0, 0, 0.7);
+        color-scheme: dark;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #0b0b0d;
+      --card: rgba(30, 30, 36, 0.8);
+      --card-border: rgba(255, 255, 255, 0.07);
+      --text: #f4f4f6;
+      --text-2: #d4d4da;
+      --muted: #9a9aa3;
+      --line: rgba(255, 255, 255, 0.08);
+      --warn-bg: #2a1d0c;
+      --warn-border: #6b4a1c;
+      --warn-text: #ffd59a;
+      --accent: #f4f4f6;
+      --on-accent: #111114;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 24px 48px -18px rgba(0, 0, 0, 0.7);
+      color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text-2);
+      font: 16px/1.65 Geist, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: max(16px, env(safe-area-inset-top)) 16px 64px; }
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0 20px; }
+    .back {
+      display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 999px;
+      background: var(--accent); color: var(--on-accent); text-decoration: none; font-weight: 600; font-size: 14px;
+    }
+    .brand { font-weight: 700; color: var(--text); letter-spacing: -0.01em; }
+    h1 { color: var(--text); font-size: clamp(28px, 6vw, 40px); line-height: 1.12; letter-spacing: -0.025em; margin: 8px 0 8px; }
+    .meta { color: var(--muted); font-size: 14px; margin: 0 0 24px; }
+    h2 { color: var(--text); font-size: 20px; line-height: 1.3; letter-spacing: -0.01em; margin: 40px 0 10px; scroll-margin-top: 16px; }
+    h3 { color: var(--text); font-size: 16px; margin: 22px 0 6px; }
+    p, li { margin: 0 0 10px; }
+    ul, ol { padding-left: 22px; margin: 0 0 12px; }
+    strong { color: var(--text); }
+    a { color: inherit; text-underline-offset: 3px; }
+    .card {
+      background: var(--card); border: 1px solid var(--card-border); border-radius: 20px;
+      padding: 18px 20px; box-shadow: var(--shadow); margin: 16px 0;
+    }
+    .warn { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text); }
+    .warn strong, .warn h2 { color: var(--warn-text); }
+    .warn h2 { margin-top: 0; }
+    .toc ol { columns: 2 240px; column-gap: 24px; margin: 0; }
+    .toc li { break-inside: avoid; margin-bottom: 4px; font-size: 15px; }
+    .caps { text-transform: uppercase; letter-spacing: 0.02em; font-size: 15px; }
+    .fill { background: rgba(255, 200, 0, 0.25); border-radius: 4px; padding: 0 4px; }
+    footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <span class="brand">Grafictrader</span>
+    <a class="back" href="/#perfil">← Voltar à app</a>
+  </div>
+
+  <h1>Termos de Uso e Aviso de Risco</h1>
+  <p class="meta">Versão 2026-10-05 · Em vigor desde 5 de outubro de 2026</p>
+
+  <section class="card warn" aria-labelledby="aviso">
+    <h2 id="aviso">Aviso de risco — lê antes de usar</h2>
+    <p><strong>Operar nos mercados financeiros (forex, CFDs, criptomoedas, ações, índices, matérias-primas e opções binárias ou de tempo fixo) tem risco elevado e pode levar à perda de todo o dinheiro que investires.</strong> A maioria das pessoas que opera nestes mercados perde dinheiro.</p>
+    <p>O Grafictrader é uma <strong>ferramenta de apoio</strong>: faz análises com inteligência artificial (IA) e cálculos matemáticos para ajudar-te a pensar na tua operação. <strong>Não é aconselhamento financeiro, não é uma recomendação de investimento e não garante lucro.</strong></p>
+    <p><strong>A decisão de seguir ou não uma análise da IA ou da app, e de a pôr em prática, é tua e só tua. Os resultados das tuas operações, sejam positivos ou negativos, são da tua exclusiva responsabilidade, e não do Grafictrader.</strong></p>
+    <p>Opera apenas com dinheiro que podes perder sem afetar a tua vida, as tuas contas e a tua família.</p>
+  </section>
+
+  <section class="card" aria-labelledby="resumo">
+    <h2 id="resumo" style="margin-top:0">Em poucas palavras</h2>
+    <ul>
+      <li>A app <strong>analisa</strong> gráficos e mercados e mostra orientações como COMPRAR, VENDER ou NÃO OPERAR. <strong>Não opera por ti</strong> e não mexe no teu dinheiro.</li>
+      <li>A IA e os cálculos <strong>podem errar</strong>. Nenhuma análise é certeza.</li>
+      <li><strong>Tu decides</strong> se operas, quanto arriscas e quando sais. As perdas e os ganhos são teus.</li>
+      <li>Resultados passados e simulados <strong>não garantem</strong> resultados futuros.</li>
+      <li>Tens de ter <strong>18 anos ou mais</strong> e respeitar as leis do teu país.</li>
+      <li>Ao criar conta ou usar a app, <strong>aceitas</strong> estes termos.</li>
+    </ul>
+    <p style="margin:0">Este resumo ajuda a ler, mas não substitui o texto completo abaixo.</p>
+  </section>
+
+  <nav class="card toc" aria-label="Índice">
+    <ol>
+      <li><a href="#t1">Quem somos e âmbito</a></li>
+      <li><a href="#t2">Aceitação</a></li>
+      <li><a href="#t3">Definições</a></li>
+      <li><a href="#t4">O que a app é e não é</a></li>
+      <li><a href="#t5">Responsabilidade do utilizador</a></li>
+      <li><a href="#t6">Riscos dos mercados</a></li>
+      <li><a href="#t7">Limites da IA e dos cálculos</a></li>
+      <li><a href="#t8">Resultados simulados</a></li>
+      <li><a href="#t9">Corretoras e terceiros</a></li>
+      <li><a href="#t10">Ecrã, câmara e imagens</a></li>
+      <li><a href="#t11">Conta e segurança</a></li>
+      <li><a href="#t12">Quem pode usar</a></li>
+      <li><a href="#t13">Uso proibido</a></li>
+      <li><a href="#t14">Planos pagos</a></li>
+      <li><a href="#t15">Disponibilidade do serviço</a></li>
+      <li><a href="#t16">Propriedade intelectual</a></li>
+      <li><a href="#t17">Limitação de responsabilidade</a></li>
+      <li><a href="#t18">Indemnização</a></li>
+      <li><a href="#t19">Privacidade e dados</a></li>
+      <li><a href="#t20">Comunicações</a></li>
+      <li><a href="#t21">Alterações aos termos</a></li>
+      <li><a href="#t22">Lei aplicável e litígios</a></li>
+      <li><a href="#t23">Disposições finais</a></li>
+      <li><a href="#t24">Contacto</a></li>
+    </ol>
+  </nav>
+
+  <h2 id="t1">1. Quem somos e âmbito</h2>
+  <p>O Grafictrader (“Grafictrader”, “app”, “nós”) é um serviço de análise de mercados disponível no site grafictrader.vercel.app, na app Android e nas ferramentas associadas, incluindo a ponte para MetaTrader 5 (“Serviço”).</p>
+  <p>O Serviço é disponibilizado por <span class="fill">[nome completo do titular ou da empresa]</span>, <span class="fill">[NIF]</span>, com contacto em <span class="fill">[email de contacto]</span> (“Responsável”).</p>
+  <p>Estes Termos de Uso e Aviso de Risco (“Termos”) regulam o acesso e o uso de todo o Serviço, grátis ou pago.</p>
+
+  <h2 id="t2">2. Aceitação</h2>
+  <p>Ao criar uma conta, ao marcar a caixa de aceitação ou ao usar o Serviço de qualquer forma, declaras que leste, compreendeste e aceitas estes Termos na totalidade, incluindo o Aviso de Risco.</p>
+  <p>Se não concordares com alguma parte, não deves usar o Serviço.</p>
+  <p>Guardamos a versão dos Termos que aceitaste e a data da aceitação. Quando os Termos mudarem de forma relevante, pedimos que voltes a aceitar antes de continuares a usar as análises.</p>
+
+  <h2 id="t3">3. Definições</h2>
+  <ul>
+    <li><strong>Análise</strong>: qualquer leitura, orientação, sinal, nível de preço, explicação, estatística ou texto produzido pela app, pela IA ou pelos cálculos. Inclui as decisões COMPRAR, VENDER, NÃO OPERAR e SEM GRÁFICO, níveis de entrada, stop loss e alvo, percentagens de confiança e a bolha flutuante do Android.</li>
+    <li><strong>IA</strong>: os modelos de inteligência artificial, de fornecedores terceiros, que leem imagens e textos e produzem parte das Análises.</li>
+    <li><strong>Motor</strong>: os cálculos estatísticos e matemáticos da app (regimes de mercado, indicadores, fluxo, simulações, conselho de analistas).</li>
+    <li><strong>Operação</strong>: qualquer compra, venda ou aposta em instrumentos financeiros que faças numa corretora ou plataforma, real ou de demonstração.</li>
+    <li><strong>Corretora</strong>: a empresa ou plataforma onde operas (por exemplo Pocket Option, Quotex, IQ Option, MetaTrader 5 com o teu corretor, Binance ou outras).</li>
+    <li><strong>Utilizador</strong> ou <strong>tu</strong>: a pessoa que usa o Serviço.</li>
+  </ul>
+
+  <h2 id="t4">4. O que a app é e o que não é</h2>
+  <h3>4.1 O que é</h3>
+  <p>O Grafictrader é uma ferramenta educativa e de apoio à decisão. Serve apenas para <strong>auxiliar</strong> o Utilizador na sua operação, através de análises feitas pela IA e de cálculos sobre dados de mercado e imagens de gráficos.</p>
+  <h3>4.2 O que não é</h3>
+  <ul>
+    <li><strong>Não é</strong> uma corretora, um banco, uma bolsa nem uma entidade de pagamentos.</li>
+    <li><strong>Não é</strong> consultor de investimento, gestor de patrimónios nem intermediário financeiro, e não está registado como tal junto da Comissão do Mercado de Capitais (CMC), do Banco Nacional de Angola (BNA) ou de outro regulador.</li>
+    <li><strong>Não dá</strong> aconselhamento financeiro, fiscal ou jurídico personalizado. As Análises não consideram a tua situação financeira, os teus objetivos nem a tua tolerância ao risco.</li>
+    <li><strong>Não executa</strong> ordens na tua conta, não acede ao teu dinheiro e não guarda fundos de ninguém. A ponte para MetaTrader 5 só lê velas e não opera.</li>
+    <li><strong>Não promete</strong> nem garante lucro, rendimento, taxa de acerto ou recuperação de perdas.</li>
+  </ul>
+  <p>Qualquer palavra da app como “COMPRAR”, “VENDER”, “sinal”, “entrada” ou “alvo” é uma <strong>orientação educativa</strong> baseada numa leitura automática. Não é uma ordem nem uma recomendação personalizada.</p>
+
+  <h2 id="t5">5. Responsabilidade exclusiva do utilizador</h2>
+  <div class="card">
+    <p class="caps"><strong>Ao usar o Grafictrader, reconheces e aceitas expressamente que:</strong></p>
+    <ol>
+      <li><strong>A IA e a app servem apenas para auxiliar</strong> na operação, através de análises e cálculos. Não decidem por ti.</li>
+      <li><strong>A decisão de seguir as análises da IA e da app, e de as pôr em prática, é da tua extrema e exclusiva responsabilidade</strong>, e não do Grafictrader nem do Responsável.</li>
+      <li><strong>Os resultados das tuas operações, sejam negativos ou positivos, são da tua exclusiva responsabilidade.</strong> O Grafictrader não responde por perdas e não tem direito a ganhos.</li>
+      <li>És tu quem escolhe a corretora, o ativo, o valor, o tempo da operação, o stop loss e o momento de entrar e de sair.</li>
+      <li>Antes de operar, deves confirmar tu mesmo a informação (preço, ativo, horário e notícias) e fazer a tua própria análise.</li>
+      <li>Deves usar sempre stop loss e arriscar apenas uma pequena parte da tua conta em cada operação. Como referência educativa, a app sugere no máximo 1% por operação.</li>
+      <li>Se tiveres dúvidas sobre se operar é adequado para ti, deves falar com um profissional licenciado e independente antes de arriscar dinheiro.</li>
+    </ol>
+  </div>
+
+  <h2 id="t6">6. Riscos dos mercados</h2>
+  <p>Ao operar, aceitas, entre outros, os seguintes riscos:</p>
+  <ul>
+    <li><strong>Perda de capital</strong>: podes perder parte ou todo o dinheiro investido, e em produtos com alavancagem podes perder mais do que depositaste.</li>
+    <li><strong>Alavancagem</strong>: multiplica os ganhos e também as perdas. Pequenos movimentos de preço podem fechar a tua posição com perda.</li>
+    <li><strong>Opções binárias, de tempo fixo e mercados “OTC”</strong>: são produtos de risco muito elevado, proibidos ou restringidos para investidores particulares em vários países. Nos mercados “OTC” de algumas corretoras o preço é gerado pela própria corretora e pode não corresponder ao mercado real. A Análise da app sobre esses gráficos não muda essa natureza.</li>
+    <li><strong>Criptomoedas</strong>: são muito voláteis, funcionam 24 horas e podem cair muito em minutos.</li>
+    <li><strong>Volatilidade, saltos de preço (“gaps”) e notícias</strong>: anúncios económicos, decisões de bancos centrais e acontecimentos inesperados mudam o preço de forma brusca.</li>
+    <li><strong>Liquidez e execução</strong>: a ordem pode ser executada a um preço diferente do esperado (“slippage”), com atraso ou não ser executada.</li>
+    <li><strong>Risco da corretora</strong>: a corretora pode falhar, bloquear contas, recusar levantamentos, mudar regras ou deixar de operar. O Grafictrader não tem qualquer controlo sobre isso.</li>
+    <li><strong>Timeframes curtos</strong>: em gráficos de 1 minuto ou poucos minutos o movimento é dominado por ruído, os custos pesam mais e o acerto tende a ser baixo.</li>
+    <li><strong>Risco emocional</strong>: medo, ganância, tentar recuperar perdas e operar em excesso aumentam muito as perdas.</li>
+    <li><strong>Ninguém prevê o mercado com certeza</strong>: nem pessoas, nem programas, nem inteligência artificial.</li>
+  </ul>
+
+  <h2 id="t7">7. Limites da IA e dos cálculos</h2>
+  <ul>
+    <li>A IA pode <strong>ler mal</strong> uma imagem: confundir o ativo, o timeframe, o preço ou a direção das velas, sobretudo com imagens tremidas, cortadas, escuras ou com outros elementos no ecrã.</li>
+    <li>A IA pode <strong>inventar</strong> informação que parece certa mas é falsa. A app tem verificações para reduzir isto (por exemplo recusa dar sinal sem gráfico visível), mas não o consegue eliminar.</li>
+    <li>Os dados de mercado vêm de fornecedores terceiros e podem chegar <strong>com atraso, incompletos ou errados</strong>.</li>
+    <li>As análises ao vivo dependem da internet, do telemóvel e de fornecedores de IA. Podem <strong>demorar, falhar ou parar</strong> sem aviso, inclusive a meio de uma operação.</li>
+    <li>Os modelos de IA e os seus fornecedores <strong>mudam com o tempo</strong>. A mesma imagem pode ter leituras diferentes em momentos diferentes.</li>
+    <li>Percentagens de “confiança” são medidas internas da app. <strong>Não são probabilidades de ganhar</strong>.</li>
+    <li>O Grafictrader não garante que uma Análise esteja certa, completa, atualizada ou adequada a ti.</li>
+  </ul>
+
+  <h2 id="t8">8. Resultados simulados e estatísticas</h2>
+  <p>A app mostra resultados de um robô de demonstração, testes históricos (“backtests”), testes por janelas (“walk-forward”) e outras estatísticas. Esses resultados:</p>
+  <ul>
+    <li>são <strong>simulados</strong>, com dinheiro fictício, e não correspondem a operações reais;</li>
+    <li>podem não incluir custos reais como spreads, comissões, swaps, atrasos e slippage;</li>
+    <li>não refletem o efeito das emoções em quem opera;</li>
+    <li>podem ser bons num período e maus noutro.</li>
+  </ul>
+  <p><strong>Resultados passados, reais ou simulados, não garantem resultados futuros.</strong> Nenhum resultado mostrado na app é uma promessa do que vais ganhar.</p>
+
+  <h2 id="t9">9. Corretoras, plataformas e serviços de terceiros</h2>
+  <ul>
+    <li>O Grafictrader <strong>não tem ligação, parceria nem patrocínio</strong> com corretoras como Pocket Option, Quotex, IQ Option, MetaQuotes (MetaTrader), Binance, TradingView ou outras. Os nomes e marcas pertencem aos seus donos e são usados só para identificar compatibilidade.</li>
+    <li>A tua relação com a corretora rege-se pelos termos dela. Antes de abrires conta, confirma se a corretora é autorizada no teu país.</li>
+    <li>Algumas corretoras podem proibir ferramentas de terceiros, gravação do ecrã ou automação. Cabe-te verificar e cumprir as regras da tua corretora.</li>
+    <li>O Serviço usa fornecedores externos de dados de mercado, notícias, calendário económico e IA. Não somos responsáveis pelas falhas, alterações ou interrupções desses fornecedores.</li>
+  </ul>
+
+  <h2 id="t10">10. Ecrã, câmara e imagens</h2>
+  <ul>
+    <li>Na FOTO, em “Minha corretora” e na bolha do Android, a app capta imagens do ecrã ou da câmara <strong>apenas quando ativas</strong> essa função. Podes parar quando quiseres.</li>
+    <li>Na bolha do Android, a app vê <strong>todo o ecrã</strong> enquanto a análise estiver ligada, incluindo notificações e outras apps que abras. Não abras conversas, dados bancários, senhas ou outra informação pessoal enquanto a análise estiver ligada.</li>
+    <li>As imagens são enviadas de forma cifrada para o nosso servidor e para os fornecedores de IA, só para produzir a Análise. Não as guardamos depois de responder, mas os fornecedores de IA tratam-nas segundo as suas próprias políticas.</li>
+    <li>Só deves enviar imagens que tens direito de usar.</li>
+  </ul>
+
+  <h2 id="t11">11. Conta e segurança</h2>
+  <ul>
+    <li>Deves dar informação verdadeira ao criar conta e manter a tua palavra-passe secreta.</li>
+    <li>És responsável por tudo o que for feito com a tua conta. Se suspeitares de uso indevido, termina a sessão e muda a palavra-passe.</li>
+    <li>A chave da ponte MetaTrader 5 é pessoal: não a partilhes nem a mostres em capturas de ecrã. Se alguém a vir, gera uma nova no Perfil.</li>
+    <li>Uma conta é para uma pessoa. Não podes vender, emprestar nem partilhar a tua conta.</li>
+  </ul>
+
+  <h2 id="t12">12. Quem pode usar</h2>
+  <ul>
+    <li>Tens de ter <strong>18 anos ou mais</strong> e capacidade legal para aceitar estes Termos.</li>
+    <li>Não podes usar o Serviço se operar nos mercados, ou usar este tipo de ferramenta, for proibido no teu país ou para ti.</li>
+    <li>És responsável por cumprir as leis do teu país, incluindo as regras sobre impostos dos teus ganhos.</li>
+  </ul>
+
+  <h2 id="t13">13. Uso proibido</h2>
+  <p>Não podes:</p>
+  <ul>
+    <li>usar o Serviço para atividades ilegais, fraude, manipulação de mercado ou branqueamento de capitais;</li>
+    <li>revender, redistribuir ou publicar as Análises como serviço de sinais pago, ou dizer que és o Grafictrader ou que falas em nome dele;</li>
+    <li>usar as Análises para prometer lucros a outras pessoas ou para angariar dinheiro de terceiros;</li>
+    <li>tentar contornar limites de uso, planos ou medidas de segurança, ou automatizar pedidos em massa;</li>
+    <li>copiar, descompilar ou fazer engenharia inversa da app, salvo quando a lei o permitir;</li>
+    <li>enviar conteúdo ilegal, ofensivo, com vírus, ou que viole direitos de outras pessoas.</li>
+  </ul>
+
+  <h2 id="t14">14. Planos pagos</h2>
+  <p>O Grafictrader pode ter funcionalidades grátis e planos pagos. Quando existirem planos pagos:</p>
+  <ul>
+    <li>o preço, a duração, a forma de renovação e os limites de uso (por exemplo o número de análises ou o tempo de bolha) são mostrados <strong>antes</strong> do pagamento;</li>
+    <li>as subscrições renovam no fim de cada período, salvo se cancelares antes. Podes cancelar a qualquer momento, e o plano mantém-se até ao fim do período já pago;</li>
+    <li>os pedidos de reembolso seguem a lei aplicável e a política mostrada na compra;</li>
+    <li><strong>pagar um plano não muda nada neste Aviso de Risco</strong>: o plano dá acesso a ferramentas, não a lucros. Perdas nas tuas operações não dão direito a reembolso do plano;</li>
+    <li>podemos mudar preços com aviso prévio. A mudança aplica-se a partir da renovação seguinte, e podes cancelar antes dela.</li>
+  </ul>
+  <p>Nada nestes Termos afasta os direitos que a lei de defesa do consumidor te garante.</p>
+
+  <h2 id="t15">15. Disponibilidade do serviço</h2>
+  <ul>
+    <li>O Serviço é fornecido “tal como está” e “conforme disponível”. Não garantimos que funcione sem interrupções, sem atrasos ou sem erros.</li>
+    <li>Podemos mudar, suspender ou terminar funcionalidades, fornecedores de IA ou fontes de dados, para manutenção, segurança, custos ou melhoria.</li>
+    <li>Podemos suspender ou fechar uma conta que viole estes Termos. Podes deixar de usar o Serviço e pedir que a tua conta seja apagada a qualquer momento.</li>
+  </ul>
+
+  <h2 id="t16">16. Propriedade intelectual</h2>
+  <p>O software, o design, a marca Grafictrader, os textos e os métodos de análise pertencem ao Responsável ou aos seus licenciantes. Recebes uma licença pessoal, limitada, não exclusiva e revogável para usar o Serviço de acordo com estes Termos. Não te é transferido nenhum outro direito.</p>
+
+  <h2 id="t17">17. Limitação de responsabilidade</h2>
+  <p>Na máxima medida permitida pela lei aplicável:</p>
+  <ul>
+    <li>O Grafictrader e o Responsável <strong>não são responsáveis por perdas financeiras</strong> resultantes de operações que faças, sigas ou não sigas as Análises, nem por lucros que deixes de ganhar.</li>
+    <li>Não são responsáveis por danos indiretos, consequenciais ou especiais, nem por falhas de corretoras, plataformas, fornecedores de IA ou de dados, internet ou dispositivos.</li>
+    <li>Não são responsáveis por decisões tomadas com base em Análises erradas, incompletas, atrasadas ou indisponíveis.</li>
+    <li>Se, ainda assim, alguma responsabilidade for reconhecida, fica limitada ao valor que pagaste ao Grafictrader nos 3 meses anteriores ao facto, ou a zero se usaste só a versão grátis.</li>
+  </ul>
+  <p>Estas limitações não se aplicam a danos causados com dolo ou culpa grave, nem a outros casos em que a lei não permita limitar a responsabilidade.</p>
+
+  <h2 id="t18">18. Indemnização</h2>
+  <p>Aceitas indemnizar o Responsável por prejuízos, custos e reclamações de terceiros causados pelo teu uso do Serviço em violação destes Termos ou da lei. Inclui, por exemplo, revender Análises ou prometer lucros a outras pessoas com base na app.</p>
+
+  <h2 id="t19">19. Privacidade e dados</h2>
+  <ul>
+    <li><strong>Dados que tratamos</strong>: nome, email, palavra-passe (guardada só como código irreversível, nunca em texto), data de criação da conta, aceitação destes Termos, preferências, chave da ponte MT5 (também guardada só como código irreversível) e as imagens e pedidos enviados para análise.</li>
+    <li><strong>Para quê</strong>: criar e proteger a tua conta, produzir as Análises, limitar abusos, melhorar o Serviço e, se existirem planos pagos, gerir pagamentos.</li>
+    <li><strong>Com quem</strong>: com prestadores que fazem o Serviço funcionar (alojamento, base de dados, fornecedores de IA, de dados de mercado e de pagamentos), só no necessário. Não vendemos os teus dados.</li>
+    <li><strong>Os teus direitos</strong>: podes pedir acesso, correção ou eliminação dos teus dados pelo contacto da secção 24, nos termos da Lei da Protecção de Dados Pessoais (Lei n.º 22/11, de 17 de Junho) e de outra legislação aplicável.</li>
+  </ul>
+
+  <h2 id="t20">20. Comunicações</h2>
+  <p>Podemos enviar-te avisos sobre a tua conta, a segurança, os planos e alterações destes Termos, na app ou por email. Avisos promocionais só serão enviados se o permitires, e podes deixar de os receber a qualquer momento.</p>
+
+  <h2 id="t21">21. Alterações aos termos</h2>
+  <p>Podemos atualizar estes Termos para refletir mudanças no Serviço, na lei ou nos riscos. A versão e a data em vigor aparecem no topo desta página. Se a alteração for relevante, avisamos na app e pedimos nova aceitação. Se não aceitares a nova versão, deves deixar de usar o Serviço.</p>
+
+  <h2 id="t22">22. Lei aplicável e litígios</h2>
+  <p>Estes Termos regem-se pela lei da República de Angola, sem prejuízo das normas imperativas de proteção do consumidor do país onde resides, incluindo a Lei de Defesa do Consumidor (Lei n.º 15/03, de 22 de Julho).</p>
+  <p>Antes de qualquer ação, as partes procuram resolver o conflito de boa-fé pelo contacto da secção 24. Não havendo acordo, é competente o tribunal da comarca de Luanda, salvo se a lei determinar outro tribunal.</p>
+
+  <h2 id="t23">23. Disposições finais</h2>
+  <ul>
+    <li>Se uma cláusula destes Termos for considerada inválida, as restantes continuam em vigor.</li>
+    <li>Se não exercermos um direito num caso, isso não significa que renunciamos a ele.</li>
+    <li>Estes Termos, com as condições mostradas na compra de um plano, são o acordo completo entre ti e o Responsável sobre o Serviço.</li>
+    <li>Estes Termos estão escritos em português. Uma tradução, se existir, serve só para ajudar a ler.</li>
+  </ul>
+
+  <h2 id="t24">24. Contacto</h2>
+  <p>Para dúvidas sobre estes Termos, pedidos sobre os teus dados ou reclamações: <span class="fill">[email de contacto]</span>.</p>
+
+  <section class="card warn" aria-label="Declaração de aceitação">
+    <p style="margin:0"><strong>Ao aceitar estes Termos, confirmas que compreendes os riscos de operar nos mercados. Confirmas também que o Grafictrader serve apenas para te auxiliar com análises e cálculos, que a decisão de seguir essas análises é tua, e que és o único responsável pelos resultados, positivos ou negativos, das tuas operações.</strong></p>
+  </section>
+
+  <footer>
+    Grafictrader · Termos de Uso e Aviso de Risco · versão 2026-10-05<br />
+    <a href="/#perfil">Voltar à app</a>
+  </footer>
+</main>
+</body>
+</html>

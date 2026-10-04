@@ -1578,3 +1578,36 @@ body.stage-open .tabbar { display: none; }
 .apk-card .fine-print.left { margin-top: 0; }
 .mt5-steps code { display: inline-block; max-width: 100%; overflow-x: auto; white-space: nowrap; word-break: normal; vertical-align: bottom; scrollbar-width: none; }
 .mt5-steps code::-webkit-scrollbar { display: none; }
+
+/* ---------- terms of use ---------- */
+.terms-check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-2);
+  padding: 4px 2px;
+  cursor: pointer;
+}
+.terms-check input { flex: none; width: 18px; height: 18px; margin: 1px 0 0; accent-color: var(--accent); }
+.terms-check a { color: var(--text); font-weight: 600; text-underline-offset: 2px; }
+.terms-points { margin: 4px 0 14px; padding-left: 20px; color: var(--text-2); font-size: 14px; line-height: 1.5; }
+.terms-points li { margin-bottom: 6px; }
+.gate-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: var(--backdrop);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.gate-backdrop .sheet { transform: none; display: flex; flex-direction: column; gap: 10px; }
+.gate-backdrop .sheet .card-head { margin-bottom: 0; }
+.menu a[role="menuitem"] { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 16px; text-align: left; color: inherit; text-decoration: none; }
+.menu a[role="menuitem"]:hover,
+.menu a[role="menuitem"]:focus-visible { background: var(--well); }
+.menu a[role="menuitem"] span:last-child { display: grid; gap: 2px; }
+.fine-print a { color: inherit; }

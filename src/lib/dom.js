@@ -70,6 +70,8 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.ok === false) {
+    // The server asks for the current terms: the app shows the acceptance sheet.
+    if (data.termsRequired) window.dispatchEvent(new CustomEvent('grafictrader:terms-required'));
     throw new ApiError(data.error || `Pedido falhou (${response.status})`, response.status, data);
   }
   return data;

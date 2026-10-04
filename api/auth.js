@@ -1,7 +1,7 @@
 import {
   authConfigured, normalizeEmail, validEmail, findUser, createUser, verifyPassword,
   createSession, destroySession, sessionToken, getSessionUser, setSessionCookie,
-  clearSessionCookie, publicUser, rotateBridgeKey
+  clearSessionCookie, publicUser, rotateBridgeKey, acceptTerms
 } from './_lib/auth.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 import { clientIp } from './_lib/validate.js';
@@ -39,6 +39,18 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, key: await rotateBridgeKey(user.email) });
     }
 
+    if (action === 'terms') {
+      const current = await getSessionUser(req);
+      if (!current) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
+      if (req.body?.accept !== true) return res.status(400).json({ ok: false, error: 'Marca a caixa para aceitar os Termos de Uso e o Aviso de Risco.' });
+      const user = await acceptTerms(current.email);
+      if (!user) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
+      // The session keeps a copy of the user: replace it so the acceptance counts at once.
+      await destroySession(sessionToken(req));
+      setSessionCookie(res, req, await createSession(user));
+      return res.status(200).json({ ok: true, user: publicUser(user) });
+    }
+
     const body = req.body || {};
     const email = normalizeEmail(body.email);
     const password = String(body.password || '');
@@ -53,7 +65,10 @@ export default async function handler(req, res) {
       if (password.length < 8 || password.length > 200) {
         return res.status(400).json({ ok: false, error: 'A palavra-passe deve ter pelo menos 8 caracteres.' });
       }
-      const user = await createUser({ name, email, password });
+      if (body.acceptTerms !== true) {
+        return res.status(400).json({ ok: false, error: 'Para criar conta tens de aceitar os Termos de Uso e o Aviso de Risco.' });
+      }
+      const user = await createUser({ name, email, password, acceptTerms: true });
       if (!user) return res.status(409).json({ ok: false, error: 'Já existe uma conta com este email.' });
       setSessionCookie(res, req, await createSession(user));
       return res.status(201).json({ ok: true, user: publicUser(user) });

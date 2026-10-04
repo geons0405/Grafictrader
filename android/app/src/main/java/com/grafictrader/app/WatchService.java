@@ -513,6 +513,10 @@ public class WatchService extends Service {
             finish("Inicia sessão na app Grafictrader para usar a análise ao vivo.");
             return;
         }
+        if (status == 403 && data.optBoolean("termsRequired")) {
+            finish(data.optString("error", "Aceita os Termos de Uso e o Aviso de Risco na app Grafictrader para continuar."));
+            return;
+        }
         if (status >= 400 || !data.optBoolean("ok")) {
             if (status == 503 || data.optBoolean("setupRequired")) {
                 finish(data.optString("error", "A análise por IA não está configurada no servidor."));

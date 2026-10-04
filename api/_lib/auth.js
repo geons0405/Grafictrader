@@ -1,6 +1,7 @@
 import { randomBytes, scrypt as scryptCb, timingSafeEqual, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
 import { redis, redisConfigured } from './redis.js';
+import { TERMS_VERSION, termsAccepted } from './terms.js';
 
 const scrypt = promisify(scryptCb);
 const SESSION_COOKIE = 'gt_session';
@@ -33,7 +34,13 @@ const userKey = email => 'grafictrader:user:' + email;
 const sessionKey = token => 'grafictrader:session:' + createHash('sha256').update(token).digest('hex');
 
 export function publicUser(user) {
-  return user ? { name: user.name, email: user.email, createdAt: user.createdAt || null } : null;
+  return user ? {
+    name: user.name,
+    email: user.email,
+    createdAt: user.createdAt || null,
+    termsVersion: user.termsVersion || null,
+    termsAcceptedAt: user.termsAcceptedAt || null
+  } : null;
 }
 
 export async function findUser(email) {
@@ -43,11 +50,21 @@ export async function findUser(email) {
 }
 
 /** Returns the created user, or null when the email is already registered. */
-export async function createUser({ name, email, password }) {
+export async function createUser({ name, email, password, acceptTerms = false }) {
   const { salt, hash } = await hashPassword(password);
-  const user = { name, email, salt, hash, createdAt: new Date().toISOString() };
+  const now = new Date().toISOString();
+  const user = { name, email, salt, hash, createdAt: now, ...(acceptTerms ? { termsVersion: TERMS_VERSION, termsAcceptedAt: now } : {}) };
   const created = await redis(['SET', userKey(email), JSON.stringify(user), 'NX']);
   return created === 'OK' ? user : null;
+}
+
+/** Records that the user accepted the current terms. Returns the updated user, or null. */
+export async function acceptTerms(email) {
+  const user = await findUser(email);
+  if (!user) return null;
+  const updated = { ...user, termsVersion: TERMS_VERSION, termsAcceptedAt: new Date().toISOString() };
+  await redis(['SET', userKey(email), JSON.stringify(updated)]);
+  return updated;
 }
 
 export async function createSession(user) {
@@ -106,7 +123,11 @@ export async function requireUserIfConfigured(req, res) {
   if (!authConfigured()) return { ok: true, user: null };
   try {
     const user = await getSessionUser(req);
-    if (user) return { ok: true, user };
+    if (user && termsAccepted(user)) return { ok: true, user };
+    if (user) {
+      res.status(403).json({ ok: false, termsRequired: true, error: 'Aceita os Termos de Uso e o Aviso de Risco na app Grafictrader para continuar a usar as análises.' });
+      return { ok: false };
+    }
   } catch {
     res.status(503).json({ ok: false, error: 'Serviço de contas indisponível.' });
     return { ok: false };

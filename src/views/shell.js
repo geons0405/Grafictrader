@@ -75,6 +75,7 @@ export const shellTemplate = `
       <label class="field"><i data-lucide="user"></i><input type="text" name="name" placeholder="Nome" autocomplete="name" maxlength="60" required></label>
       <label class="field" data-server-only><i data-lucide="mail"></i><input type="email" name="email" placeholder="Email" autocomplete="email" required></label>
       <label class="field" data-server-only><i data-lucide="lock"></i><input type="password" name="password" placeholder="Palavra-passe (mín. 8)" minlength="8" autocomplete="new-password" required></label>
+      <label class="terms-check"><input type="checkbox" name="acceptTerms" value="1"><span>Li e aceito os <a href="/termos.html" target="_blank" rel="noopener">Termos de Uso e o Aviso de Risco</a>. Sei que a app só me auxilia com análises e cálculos, e que a decisão de operar e os resultados, positivos ou negativos, são da minha responsabilidade.</span></label>
       <button class="btn btn-primary" type="submit"><span data-register-cta>Criar conta</span><i data-lucide="arrow-right"></i></button>
       <p class="form-message" role="alert"></p>
     </form>
@@ -414,6 +415,11 @@ export const shellTemplate = `
       <button class="btn btn-primary" type="button" id="mt5Generate">Gerar chave de ligação</button>
       <div class="mt5-symbols" id="mt5Symbols"></div>
     </article>
+    <article class="card terms-card">
+      <header class="card-head"><b>Termos e riscos</b><small data-terms-accepted>—</small></header>
+      <p class="reading-summary">O Grafictrader só te auxilia com análises e cálculos. A decisão de operar e os resultados, positivos ou negativos, são da tua responsabilidade.</p>
+      <a class="btn btn-soft" href="/termos.html"><i data-lucide="file-text"></i>Termos de Uso e Aviso de Risco</a>
+    </article>
     <article class="card">
       <header class="card-head"><b>Sessão</b><small data-session-mode>—</small></header>
       <button class="btn btn-soft" type="button" id="logoutBtn"><i data-lucide="log-out"></i>Terminar sessão</button>
@@ -423,7 +429,7 @@ export const shellTemplate = `
       <p>TradingView Lightweight Charts™ · Copyright (c) 2025 TradingView, Inc. · <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">tradingview.com</a></p>
       <p>Dados: Binance, TradingView, MetaTrader 5 (via EA), Yahoo Finance, ForexFactory, alternative.me, GDELT, Finnhub, Marketaux.</p>
     </article>
-    <p class="fine-print">Grafictrader · análise e operações simuladas, sem execução de ordens reais.</p>
+    <p class="fine-print">Grafictrader · análise e operações simuladas, sem execução de ordens reais. Não é aconselhamento financeiro. <a href="/termos.html">Termos e riscos</a></p>
   </section>
 
   <!-- MENU (top-right) -->
@@ -431,6 +437,28 @@ export const shellTemplate = `
     <div class="menu" role="menu" aria-label="Menu">
       <button type="button" role="menuitem" data-route="intel"><span class="menu-icon"><i data-lucide="activity"></i></span><span><b>Live Inteligente</b><small>Informação e estatística em tempo real</small></span></button>
       <button type="button" role="menuitem" data-route="perfil"><span class="menu-icon"><i data-lucide="user"></i></span><span><b>Perfil</b><small>Conta, tema e sessão</small></span></button>
+      <a role="menuitem" href="/termos.html"><span class="menu-icon"><i data-lucide="file-text"></i></span><span><b>Termos e riscos</b><small>Termos de Uso e Aviso de Risco</small></span></a>
+    </div>
+  </div>
+
+  <!-- TERMS GATE (cannot be dismissed: accept or sign out) -->
+  <div class="gate-backdrop" id="termsGate" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="termsGateTitle">
+      <div class="sheet-grip"></div>
+      <header class="card-head"><b id="termsGateTitle">Termos de Uso e Aviso de Risco</b><small data-terms-version>—</small></header>
+      <p class="reading-summary">Antes de continuar, confirma que compreendes como funciona o Grafictrader:</p>
+      <ul class="terms-points">
+        <li>A IA e a app <b>só te auxiliam</b> com análises e cálculos. Podem errar e não garantem lucro.</li>
+        <li><b>A decisão</b> de seguir uma análise e de a pôr em prática é <b>só tua</b>.</li>
+        <li>Os <b>resultados</b> das tuas operações, positivos ou negativos, são da <b>tua exclusiva responsabilidade</b>.</li>
+        <li>Operar pode fazer-te perder todo o dinheiro investido. Usa stop loss e só dinheiro que podes perder.</li>
+        <li>Tens 18 anos ou mais e operar é permitido no teu país.</li>
+      </ul>
+      <a class="btn btn-ghost" href="/termos.html" target="_blank" rel="noopener"><i data-lucide="file-text"></i>Ler os termos completos</a>
+      <label class="terms-check"><input type="checkbox" id="termsGateCheck"><span>Li e aceito os Termos de Uso e o Aviso de Risco.</span></label>
+      <button class="btn btn-primary" type="button" id="termsGateAccept" disabled>Aceitar e continuar</button>
+      <button class="btn btn-soft" type="button" id="termsGateLogout">Não aceito · terminar sessão</button>
+      <p class="form-message" role="alert" id="termsGateMessage"></p>
     </div>
   </div>
 

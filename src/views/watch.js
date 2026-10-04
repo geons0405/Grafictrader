@@ -125,7 +125,7 @@ async function tick() {
     if (error.status === 429) {
       minGap = 20000;
       setStatus('Muitas análises seguidas: a abrandar para uma a cada 20 s.');
-    } else if (error.status === 401 || error.status === 503) {
+    } else if (error.status === 401 || error.status === 503 || error.data?.termsRequired) {
       stop(error.status === 401 ? 'Inicia sessão para usar a análise ao vivo.' : error.message);
     } else {
       setStatus('Falhou uma análise (' + error.message + '). A tentar de novo…');

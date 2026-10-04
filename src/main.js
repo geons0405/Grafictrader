@@ -2,7 +2,8 @@ import './styles.css';
 import { $, $$ } from './lib/dom.js';
 import { renderIcons } from './lib/icons.js';
 import { applyTheme, toggleTheme, getThemePreference, onThemeChange } from './lib/theme.js';
-import { loadSession, currentUser, sessionMode, login, register, startLocalProfile, logout } from './lib/session.js';
+import { loadSession, currentUser, sessionMode, login, register, startLocalProfile, logout, acceptTerms } from './lib/session.js';
+import { TERMS_VERSION, needsTerms } from './lib/terms.js';
 import { shellTemplate } from './views/shell.js';
 import { initLiveScreen, activateLiveScreen, deactivateLiveScreen } from './views/live-screen.js';
 import { stop as stopWatch } from './views/watch.js';
@@ -44,6 +45,14 @@ function renderUser() {
   $$('[data-user-initial]').forEach(el => { el.textContent = name.charAt(0).toUpperCase(); });
   $$('[data-user-email]').forEach(el => { el.textContent = user?.email || 'Perfil guardado neste dispositivo'; });
   $$('[data-session-mode]').forEach(el => { el.textContent = sessionMode() === 'server' ? 'Conta no servidor' : 'Modo local'; });
+  const accepted = user?.termsAcceptedAt ? new Date(user.termsAcceptedAt) : null;
+  $$('[data-terms-accepted]').forEach(el => {
+    el.textContent = needsTerms(user)
+      ? 'por aceitar'
+      : accepted && !Number.isNaN(accepted.getTime())
+        ? 'aceites em ' + accepted.toLocaleDateString('pt-PT')
+        : 'aceites · versão ' + TERMS_VERSION;
+  });
   const since = user?.createdAt ? new Date(user.createdAt) : null;
   $$('[data-user-since]').forEach(el => {
     el.textContent = since && !Number.isNaN(since.getTime())
@@ -104,16 +113,75 @@ function formMessage(form, text) {
   form.querySelector('.form-message').textContent = text || '';
 }
 
+/* ---------- terms of use ---------- */
+
+function showTermsGate() {
+  const gate = $('#termsGate');
+  if (!currentUser() || !gate.hidden) return;
+  $('#termsGateCheck').checked = false;
+  $('#termsGateAccept').disabled = true;
+  $('#termsGateMessage').textContent = '';
+  gate.hidden = false;
+  document.body.classList.add('terms-pending');
+}
+
+function hideTermsGate() {
+  $('#termsGate').hidden = true;
+  document.body.classList.remove('terms-pending');
+}
+
+/** Existing accounts (and older local profiles) accept the current terms before using the app. */
+function checkTerms() {
+  if (needsTerms(currentUser())) showTermsGate();
+  else hideTermsGate();
+}
+
+function initTermsGate() {
+  $$('[data-terms-version]').forEach(el => { el.textContent = 'versão ' + TERMS_VERSION; });
+  $('#termsGateCheck').addEventListener('change', event => { $('#termsGateAccept').disabled = !event.target.checked; });
+  $('#termsGateAccept').addEventListener('click', async event => {
+    const button = event.currentTarget;
+    if (!$('#termsGateCheck').checked) return;
+    button.disabled = true;
+    $('#termsGateMessage').textContent = '';
+    try {
+      await acceptTerms();
+      renderUser();
+      hideTermsGate();
+    } catch (error) {
+      $('#termsGateMessage').textContent = error.message;
+      button.disabled = false;
+    }
+  });
+  $('#termsGateLogout').addEventListener('click', async () => {
+    stopWatch();
+    await logout();
+    hideTermsGate();
+    renderUser();
+    navigate('home');
+  });
+  // An analysis was refused because the terms changed while the app was open.
+  window.addEventListener('grafictrader:terms-required', () => {
+    const user = currentUser();
+    if (user && !user.local) user.termsVersion = null;
+    showTermsGate();
+  });
+}
+
 async function submitAuth(form, action) {
   const button = form.querySelector('button[type="submit"]');
   formMessage(form, '');
   const data = Object.fromEntries(new FormData(form));
+  if (action === 'register' && !data.acceptTerms) {
+    return formMessage(form, 'Para continuar, aceita os Termos de Uso e o Aviso de Risco.');
+  }
 
   if (sessionMode() === 'local') {
     if (!String(data.name || '').trim()) return formMessage(form, 'Indica o teu nome.');
-    startLocalProfile(data.name);
+    startLocalProfile(data.name, Boolean(data.acceptTerms));
     renderUser();
-    return navigate('live');
+    navigate('live');
+    return checkTerms();
   }
 
   if (action === 'register' && !String(data.name || '').trim()) return formMessage(form, 'Indica o teu nome.');
@@ -124,10 +192,11 @@ async function submitAuth(form, action) {
   button.disabled = true;
   try {
     if (action === 'login') await login(data.email, data.password);
-    else await register(data.name, data.email, data.password);
+    else await register(data.name, data.email, data.password, true);
     form.reset();
     renderUser();
     navigate('live');
+    checkTerms();
   } catch (error) {
     if (error.data?.setupRequired) {
       await loadSession();
@@ -192,12 +261,14 @@ async function boot() {
   initIntel();
   initProfile();
   wire();
+  initTermsGate();
   syncThemeControls();
   await loadSession();
   renderAuthMode();
   renderUser();
   document.body.classList.remove('booting');
   show(location.hash.slice(1) || 'home');
+  checkTerms();
 }
 
 boot();
