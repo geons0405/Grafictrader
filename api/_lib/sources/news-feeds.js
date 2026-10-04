@@ -19,6 +19,7 @@ const COINS = {
 };
 
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const YAHOO_MAX_AGE_MS = 72 * 60 * 60 * 1000;
 const parser = new Parser({ timeout: 6000 });
 let yahooClient = null;
 
@@ -96,9 +97,10 @@ export async function getYahooNews(symbol = 'BTCUSDT') {
     const data = await fetchJson('https://query1.finance.yahoo.com/v1/finance/search?' + new URLSearchParams({ q: yahoo, newsCount: '15', quotesCount: '0' }));
     news = data?.news;
   }
+  const now = Date.now();
   return (news || []).map(n => toEvent('Yahoo Finance', {
     title: n.title,
     link: n.link,
     time: typeof n.providerPublishTime === 'number' ? n.providerPublishTime * 1000 : n.providerPublishTime
-  }, symbol));
+  }, symbol)).filter(e => now - new Date(e.timestamp).getTime() <= YAHOO_MAX_AGE_MS);
 }

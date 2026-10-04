@@ -10,8 +10,8 @@ import { getRssNews, getYahooNews } from './_lib/sources/news-feeds.js';
 // Service status. Never returns key values: only whether each one is set and,
 // with ?probe=1, whether a small real call to each service works.
 
-// 48x32 PNG with a rising line: a tiny chart to check that image analysis works.
-const PROBE_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAIAAADbtmxLAAAAm0lEQVR42s3YMQ6AQAhEUQ7h/Q9qpdFCjWQX2GFgOrqXXyJ7m23XpA+lC+itOU9pQrk1laA/pQykhikDDShs0DgMG2ShkEDGMCSQi5IL8obJBcUoKaBwmBTQIgUJWg+DBKEoABAwDAAEp8RBGWHioDyKG5Qaxg0iUKwgThgriEmZgMhhJqASig6qCqODaikfUHmYB9SHooA6fEIOpG4Y593eu8YAAAAASUVORK5CYII=';
+// 360x220 candlestick chart in a clear uptrend: checks that image analysis works and reads direction.
+const PROBE_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAADcCAIAAADSq6xVAAADoUlEQVR42u3dS0rDUBiA0a7ChXSclbgwF+YCAncT0qEdidBAe5v7/g+ckVSRQD7vK/Fyu/0AZLm4BIBwAMIBCAcgHIBwAAgHIByAcADCAQgHgHAAwgEIByAcgHAACAcgHIBwAEOHI6UdIIsRB2CqAggHIByAcADCASAcgHAAwgEIByAcAMIBCAcgHIBwAMIBIByAcADCAQgHIByAcLgKgHAAwgEIByAcgHAACAcgHIBwAMIBCAeAcADCAQgHIByAcAAIByAcQLtwpLQDZDHiAExVAOEAhAMQDkA4AIQDEA5AOADhAIQDQDggpm3bhAMQDkA4AOEApr/thQOE49UPfHx9PhIOEA7hAIQDOOPpbf99vT4SDhAO4QCEAxAOYLJwnF89FQ5YbdOk4HhBOCDKgEI4wICi4kxEOMDprBa3vXDAlAMK4QDhmGxPRDgg+hKGcIBwCAdMvrQ5wmaqcIA9EeEA4RAOEA7hEA54c4Wi74OnwgHCIRwQY69UOJ6HI6UdlnQPx+HXD2/7/x84DEfWT1ieEQfhZiLLnwc3VYHy4SjYBeEAx711QTgQjqiHLIQDz4n0XMJAOHBqUziEg6gTDQMK4cCAwoBCOLAV2vBQpnAIB8JhJiIcWKEQDuEAz48hHAgHwoHj3ggH8659CodwYEDRc0AhHMKBcCAcCIdwCAcIB8JBrS7YK0U4hMOAAuEIf9sLB8KBcCAcDBAO78hBOITDeXCEg6nCgXC4CotseXjVBcIhHD3DAcIhHMKBcCzq/JaHcCAcwuGJdYSDkfZKhQPhCBeOevu1IBxxwwHCIRwgHNY+veoC4cBxb4QD4QDhEA6oEY6Udv7cb9r3vvGwC1kfOP87QDNGHGX+2htQYKoiHGYiIBynxwtedQHCIRwgHPXD4TEQiBsOb/EF4eiwtFlvXwaEQzhAOFafiXjADJYNh0MWIBwjDiiEA4RDF0A4hAOEo9TpLOEA4XA6C4TDsU4QjqlPZwFzhMN/PAXhEA5AOICO4Xh7hUI4IFw4Wh6ysCcCk4VjhL1S4QDhKL+hC6wWDkA4hAOEo/7aJyAcFiBAOIQDEA5g3MVRQDgAhAMQDkA4AOEAhANAOADhAHqFI6UdIIsRB2CqAggHIByAcADCASAcgHAAwgEIByAcAMIBCAcgHIBwAMIBIByAcADCAQgHIByAcLgKgHAAwgEIByAcgHAACAcgHIBwAMIBCAeAcADCAQgHIByAcAAIByAcQDO/+8aIVKjLpFsAAAAASUVORK5CYII=';
 
 const KEYS = ['UNOROUTER_API_KEY', 'GEMINI_API_KEY', 'OPENAI_API_KEY', 'TWELVE_DATA_API_KEY', 'MARKETAUX_API_KEY', 'FINNHUB_API_KEY'];
 
@@ -64,7 +64,7 @@ export default async function handler(req, res) {
       return { model, reply: (data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().slice(0, 20) };
     }) : { ok: false, error: 'não configurada' },
     check(async () => {
-      const result = await runVision(PROBE_IMAGE, 'Esta imagem mostra uma linha. Responde APENAS com JSON: {"direcao": "sobe" | "desce" | "lateral"}', { maxOutputTokens: 60 });
+      const result = await runVision(PROBE_IMAGE, 'Este é um gráfico de velas. Responde APENAS com JSON: {"tendencia": "alta" | "baixa" | "lateral"}', { maxOutputTokens: 60 });
       return { provider: result.provider, answer: result.raw };
     }),
     apiKey('TWELVE_DATA_API_KEY') ? check(async () => {
