@@ -2,7 +2,7 @@ import { apiKey } from './_lib/env.js';
 import { redis, redisConfigured } from './_lib/redis.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 import { clientIp } from './_lib/validate.js';
-import { chatUnoRouter, listUnoRouterModels, runVision } from './_lib/vision.js';
+import { chatUnoRouter, listUnoRouterModels, runVision, visionGemini } from './_lib/vision.js';
 import { getTwelveDataTicker } from './_lib/sources/twelvedata.js';
 import { getMarketauxEvents } from './_lib/sources/marketaux.js';
 import { getRssNews, getYahooNews } from './_lib/sources/news-feeds.js';
@@ -82,9 +82,13 @@ export default async function handler(req, res) {
 
   // ?compare=modelA,modelB: same chart to each UnoRouter model, to pick the most accurate.
   const compare = String(req.query?.compare || '').split(',').map(m => m.trim()).filter(Boolean).slice(0, 6);
-  if (unoKey && compare.length) {
+  if ((unoKey || geminiKey) && compare.length) {
     const prompt = 'Este é um gráfico de velas. Responde APENAS com JSON: {"tendencia": "alta" | "baixa" | "lateral"}';
     body.compare = Object.fromEntries(await Promise.all(compare.map(async model => [model, await check(async () => {
+      if (model === 'gemini-direct') {
+        if (!geminiKey) throw new Error('GEMINI_API_KEY não configurada');
+        return JSON.stringify((await visionGemini(PROBE_IMAGE, geminiKey, prompt, 1000)).raw);
+      }
       const { text } = await chatUnoRouter(unoKey, [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: PROBE_IMAGE } }], { models: [model], maxTokens: 1000 });
       return String(text).replace(/\s+/g, ' ').slice(0, 120);
     })])));

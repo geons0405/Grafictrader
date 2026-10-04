@@ -60,16 +60,21 @@ export async function visionOpenAI(image, key, prompt) {
 
 // UnoRouter: one key for many models behind an OpenAI-compatible API.
 const UNOROUTER_BASE = 'https://api.unorouter.com/v1';
-// Free models first (no balance needed), ordered by how well they read a test
-// chart; then a paid one, used only if the account has credit.
-const UNOROUTER_VISION_MODELS = [
-  'gpt-4o:free', 'qwen2.5-vl-7b-instruct-awq:free', 'llama-4-maverick-17b-128e-instruct:free',
-  'gemini-3.6-flash:free', 'gemini-3.5-flash'
-];
+// Free models that read a test chart correctly come first; the others are only
+// tried after the Gemini key (free tiers often hit per-minute or capacity limits).
+const UNOROUTER_PRIMARY_MODELS = ['gpt-4o:free', 'qwen2.5-vl-7b-instruct-awq:free'];
+const UNOROUTER_SECONDARY_MODELS = ['llama-4-maverick-17b-128e-instruct:free', 'gemini-3.6-flash:free', 'gemini-3.5-flash'];
+const UNOROUTER_TIMEOUT_MS = 20_000;
 
-function unoRouterModels() {
-  const configured = (process.env.UNOROUTER_MODEL || '').split(',').map(m => m.trim()).filter(Boolean);
-  return [...new Set([...configured, ...UNOROUTER_VISION_MODELS])];
+function configuredModels() {
+  return (process.env.UNOROUTER_MODEL || '').split(',').map(m => m.trim()).filter(Boolean);
+}
+
+function unoRouterModels(group = 'all') {
+  const primary = [...new Set([...configuredModels(), ...UNOROUTER_PRIMARY_MODELS])];
+  if (group === 'primary') return primary;
+  if (group === 'secondary') return UNOROUTER_SECONDARY_MODELS.filter(m => !primary.includes(m));
+  return [...new Set([...primary, ...UNOROUTER_SECONDARY_MODELS])];
 }
 
 /** Model ids visible to the key, with pricing when the API reports it (free ones first). */
@@ -95,7 +100,7 @@ export async function listUnoRouterModels(key) {
 
 // Worth trying the next model: model missing, no balance for a paid model, a busy
 // free model, or a model that does not take images.
-const isModelError = error => [402, 404, 429, 503].includes(error?.status)
+const isModelError = error => [402, 404, 429, 503].includes(error?.status) || error?.name === 'AbortError'
   || (error?.status === 400 && /model|image|vision|multimodal/i.test(error.message || ''))
   || /balance|credit|billing|quota/i.test(error?.message || '');
 
@@ -110,7 +115,7 @@ export async function chatUnoRouter(key, content, { maxTokens = 1800, temperatur
         temperature,
         max_tokens: maxTokens,
         messages: [{ role: 'user', content }]
-      });
+      }, UNOROUTER_TIMEOUT_MS);
       const message = result?.choices?.[0]?.message?.content;
       const text = Array.isArray(message) ? message.map(p => p?.text || '').join('\n') : message;
       if (text && accept(text)) return { text, model };
@@ -124,11 +129,11 @@ export async function chatUnoRouter(key, content, { maxTokens = 1800, temperatur
   throw lastError || new Error('Nenhum modelo do UnoRouter respondeu.');
 }
 
-export async function visionUnoRouter(image, key, prompt, maxOutputTokens = 1800) {
+export async function visionUnoRouter(image, key, prompt, maxOutputTokens = 1800, group = 'all') {
   const { text, model } = await chatUnoRouter(key, [
     { type: 'text', text: prompt },
     { type: 'image_url', image_url: { url: image } }
-  ], { maxTokens: maxOutputTokens, accept: answer => Boolean(parseJson(answer)) });
+  ], { maxTokens: maxOutputTokens, accept: answer => Boolean(parseJson(answer)), models: unoRouterModels(group) });
   const parsed = parseJson(text);
   if (!parsed) throw new Error('UnoRouter não devolveu uma análise válida.');
   return { raw: parsed, provider: `UnoRouter (${model})` };
@@ -147,9 +152,10 @@ export async function runVision(image, prompt, { maxOutputTokens } = {}) {
   }
   let lastError = null;
   const providers = [
-    [unoKey, (img, k) => visionUnoRouter(img, k, prompt, maxOutputTokens)],
+    [unoKey, (img, k) => visionUnoRouter(img, k, prompt, maxOutputTokens, 'primary')],
     [geminiKey, (img, k) => visionGemini(img, k, prompt, maxOutputTokens)],
-    [openAIKey, (img, k) => visionOpenAI(img, k, prompt)]
+    [openAIKey, (img, k) => visionOpenAI(img, k, prompt)],
+    [unoKey, (img, k) => visionUnoRouter(img, k, prompt, maxOutputTokens, 'secondary')]
   ];
   for (const [key, run] of providers) {
     if (!key) continue;
