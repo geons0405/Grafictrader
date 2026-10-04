@@ -306,6 +306,34 @@ export const shellTemplate = `
       </div>
     </div>
 
+    <div class="term-box engine-box">
+      <div class="term-label"><span>// MARKET INTELLIGENCE ENGINE</span><span id="eRegime">—</span></div>
+      <div class="engine-head" id="eHead"><p class="term-note">A calcular microestrutura, entropia, regimes, volatilidade, fractais, wavelets, anomalias e causalidade…</p></div>
+      <div class="engine-layers" id="eLayers"></div>
+      <div class="term-grid inner">
+        <div>
+          <div class="term-label second"><span>// EARLY WARNING</span><span id="eEarlyState">—</span></div>
+          <div class="engine-early" id="eEarly"></div>
+        </div>
+        <div>
+          <div class="term-label second"><span>// INTENÇÃO DO MOVIMENTO</span><span id="eIntentMove">—</span></div>
+          <div class="engine-intent" id="eIntent"></div>
+        </div>
+      </div>
+      <div class="term-grid inner">
+        <div>
+          <div class="term-label second"><span>// GRAFO DE CAUSALIDADE</span><span>Granger · transfer entropy</span></div>
+          <div class="engine-graph" id="eGraph"></div>
+        </div>
+        <div>
+          <div class="term-label second"><span>// ANOMALIAS</span><span id="eAnomalyLevel">—</span></div>
+          <ul class="term-reasons" id="eAnomalies"></ul>
+        </div>
+      </div>
+      <details class="engine-details"><summary>Leitura detalhada de cada camada</summary><div id="eNotes"></div></details>
+      <p class="term-note" id="eDisclaimer"></p>
+    </div>
+
     <div class="term-grid">
       <div class="term-box">
         <div class="term-label"><span>// MOTOR ESTATÍSTICO</span><span id="tRegime">—</span></div>

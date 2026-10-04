@@ -7,11 +7,12 @@ import { closedCandles } from '../mechanics/pattern-library.js';
 import { runInstructor } from '../quant/service.js';
 import { buildPlan } from '../quant/explain.js';
 import {
-  newsAnalyst, mathAnalyst, statsAnalyst, behaviourAnalyst, trendAnalyst, algorithmAnalyst, macroAnalyst, consensus
+  newsAnalyst, mathAnalyst, statsAnalyst, behaviourAnalyst, trendAnalyst, algorithmAnalyst, macroAnalyst, structureAnalyst, consensus
 } from './analysts.js';
+import { runEngine } from '../engine/index.js';
 import { judge } from './judge.js';
 
-// The council: seven analysts compute, the AI judge decides. Results are cached
+// The council: eight analysts compute, the AI judge decides. Results are cached
 // for a minute per market so free AI tiers are not exhausted.
 
 const HIGHER = { '1m': ['15m', '1h'], '3m': ['15m', '1h'], '5m': ['1h', '4h'], '15m': ['1h', '4h'], '30m': ['4h', '1d'], '1h': ['4h', '1d'], '2h': ['4h', '1d'], '4h': ['1d', '1w'], '1d': ['1w', '1M'] };
@@ -41,15 +42,17 @@ function planFor(decision, view) {
 
 async function computeCouncil(symbol, interval) {
   const [mid, high] = HIGHER[interval] || ['1h', '4h'];
-  const [view, midRaw, highRaw, news, fearGreed] = await Promise.all([
+  const [view, midRaw, highRaw, news, fearGreed, engine] = await Promise.all([
     runInstructor(symbol, interval),
     getBinanceCandles(symbol, mid, 200).catch(() => []),
     getBinanceCandles(symbol, high, 200).catch(() => []),
     newsFor(symbol).catch(() => []),
-    cachedFearGreed().catch(() => null)
+    cachedFearGreed().catch(() => null),
+    runEngine(symbol, interval).catch(() => null)
   ]);
   const base = closedCandles(rows(await getBinanceCandles(symbol, interval, 300)), interval);
   const analysts = [
+    structureAnalyst(engine),
     algorithmAnalyst(view.signal, view.summary),
     trendAnalyst({ base, mid: rows(midRaw), high: rows(highRaw), labels: { base: interval, mid, high } }),
     statsAnalyst(view.quant),
@@ -59,7 +62,7 @@ async function computeCouncil(symbol, interval) {
     macroAnalyst(view.context, true)
   ];
   const numbers = consensus(analysts);
-  const verdict = await judge({ symbol, interval, price: view.price, analysts, consensus: numbers });
+  const verdict = await judge({ symbol, interval, price: view.price, analysts, consensus: numbers, engine });
   return {
     ok: true,
     symbol,
@@ -68,6 +71,7 @@ async function computeCouncil(symbol, interval) {
     updatedAt: new Date().toISOString(),
     analysts,
     consensus: numbers,
+    engine: engine ? { regime: engine.regime, fusion: { structuralBias: engine.fusion.structuralBias, confidence: engine.fusion.confidence, probabilityUp: engine.fusion.probabilityUp, direction: engine.fusion.direction, expectedMove: engine.fusion.expectedMove }, earlyWarning: engine.earlyWarning, intent: engine.intent } : null,
     verdict,
     plan: planFor(verdict.decision, view)
   };

@@ -397,7 +397,69 @@ async function loadFeed() {
   schedule('feed', loadFeed, FEED_MS);
 }
 
+/* ---------- Market Intelligence Engine ---------- */
+
+const ENGINE_MS = 60_000;
+const signed = v => (v > 0 ? '+' : '') + v;
+
+function renderEngine(d) {
+  const f = d.fusion;
+  $('#eRegime').textContent = `REGIME ${d.regime.code} · ${d.regime.label.toUpperCase()}`;
+  const em = f.expectedMove;
+  $('#eHead').innerHTML = `
+    <div class="engine-score" data-side="${sign(f.structuralBias)}"><small>STRUCTURAL BIAS</small><strong>${signed(f.structuralBias)}</strong><span>${f.direction}</span></div>
+    <div class="engine-score"><small>CONFIANÇA</small><strong>${f.confidence}%</strong><span>concordância ${Math.round(f.agreement * 100)}%</span></div>
+    <div class="engine-score"><small>P(SUBIR) ${em ? em.horizonBars + ' VELAS' : ''}</small><strong>${Math.round(f.probabilityUp * 100)}%</strong><span>${em ? `esperado ${signed(em.centerPct)}% ± ${em.rangePct}%` : ''}</span></div>`;
+  $('#eLayers').innerHTML = d.layers.map(l => {
+    const w = f.weights.find(x => x.id === l.id);
+    const v = w?.validated;
+    const width = Math.min(50, Math.abs(l.score) / 2);
+    return `<div class="e-row">
+      <span class="e-name">${escapeHtml(l.name)}</span>
+      <span class="e-meter"><i data-side="${sign(l.score)}" style="${l.score >= 0 ? 'left:50%' : 'right:50%'};width:${width}%"></i></span>
+      <b data-side="${sign(l.score)}">${l.id === 'volatility' ? '—' : signed(l.score)}</b>
+      <small>${l.confidence}%${w ? ' · peso ' + w.weight : ''}${v ? ` · IC ${v.ic > 0 ? '+' : ''}${v.ic}` : ''}</small>
+    </div>`;
+  }).join('');
+  const ew = d.earlyWarning;
+  $('#eEarlyState').textContent = `${ew.state} · ${Math.round(ew.probability * 100)}% · ${ew.direction}`;
+  const r = ew.readings;
+  const cell = (k, v) => `<div><small>${k}</small><b>${v ?? '—'}</b></div>`;
+  $('#eEarly').innerHTML = `<div class="early-grid">${[
+    cell('Preço', r.precoPct != null ? signed(r.precoPct) + '%' : null), cell('Volume', r.volumePct != null ? signed(r.volumePct) + '%' : null),
+    cell('CVD', r.cvdPct != null ? signed(r.cvdPct) + '%' : null), cell('Liquidez', r.liquidezPct != null ? signed(r.liquidezPct) + '%' : null),
+    cell('Entropia', r.entropia), cell('Hurst', r.hurst), cell('OFI', r.ofiPct != null ? signed(r.ofiPct) + '%' : null), cell('Volatilidade', r.volatilidade)
+  ].join('')}</div>${ew.active.length ? `<p class="term-note">Sinais ativos: ${ew.active.map(escapeHtml).join(' · ')}</p>` : ''}`;
+  const it = d.intent;
+  $('#eIntentMove').textContent = `${signed(Number(it.movePct).toFixed(2))}% em ${it.bars} velas`;
+  $('#eIntent').innerHTML = it.shares.map(x => `<div class="intent-row"><span>${escapeHtml(x.name)}</span><span class="q-meter"><i style="--w:${x.pct}%"></i></span><b>${x.pct}%</b></div>`).join('')
+    + (it.risks.length ? `<ul class="term-reasons">${it.risks.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : '');
+  const causality = d.layers.find(l => l.id === 'causality');
+  const edges = causality?.metrics?.edges || [];
+  $('#eGraph').innerHTML = edges.length
+    ? edges.sort((a, b) => a.p - b.p).slice(0, 8).map(e => `<div class="edge"><b>${escapeHtml(e.from)}</b><span>→</span><b>${escapeHtml(e.to)}</b><small>p ${e.p} · ${e.sign > 0 ? 'mesma direção' : 'direção oposta'} · TE ${e.transferEntropy ?? '—'}${e.leadLag?.lag ? ` · lidera ${e.leadLag.lag} vela(s)` : ''}</small></div>`).join('')
+    : '<p class="term-note">Sem relações de precedência significativas agora (p &lt; 0,05).</p>';
+  const anomaly = d.layers.find(l => l.id === 'anomaly');
+  $('#eAnomalyLevel').textContent = anomaly?.metrics?.level != null ? `nível ${Math.round(anomaly.metrics.level * 100)}%` : '—';
+  $('#eAnomalies').innerHTML = (anomaly?.notes || []).map(x => `<li>${escapeHtml(x)}</li>`).join('');
+  $('#eNotes').innerHTML = d.layers.map(l => `<div class="e-note"><b>${escapeHtml(l.name)}</b><ul class="term-reasons">${l.notes.map(n => `<li>${escapeHtml(n)}</li>`).join('')}</ul></div>`).join('')
+    + (d.validation?.validated ? `<p class="term-note">Validação walk-forward: ${d.validation.points} pontos do histórico, horizonte ${d.validation.horizon} velas. IC = correlação entre a leitura de cada camada e o retorno que se seguiu; pesos ajustados por isso.</p>` : '');
+  $('#eDisclaimer').textContent = d.disclaimer;
+}
+
+async function loadEngine() {
+  await guarded('engine', async () => {
+    try {
+      renderEngine(await api(`/api/intelligence?engine=1&symbol=${market.symbol}&interval=${market.interval}`));
+    } catch (error) {
+      $('#eHead').innerHTML = `<p class="term-note">Motor indisponível: ${escapeHtml(error.message)}</p>`;
+    }
+  });
+  schedule('engine', loadEngine, ENGINE_MS);
+}
+
 function refreshAll() {
+  loadEngine();
   loadGlobal();
   loadTerminal();
   loadDesk();
