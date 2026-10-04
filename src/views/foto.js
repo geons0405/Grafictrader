@@ -122,6 +122,8 @@ function stopCamera() {
   $('#video').srcObject = null;
   $('#snap').disabled = true;
   $('#camera').classList.remove('active');
+  $('.camera-card').classList.remove('expanded');
+  document.body.classList.remove('stage-open');
   $('#cameraStatus').textContent = 'Câmara desligada';
 }
 
@@ -133,6 +135,9 @@ export function initFoto() {
       $('#video').srcObject = stream;
       $('#snap').disabled = false;
       $('#camera').classList.add('active');
+      // The live camera takes the whole screen so the chart is easy to frame.
+      $('.camera-card').classList.add('expanded');
+      document.body.classList.add('stage-open');
       $('#cameraStatus').textContent = 'Câmara ativa';
     } catch {
       $('#cameraStatus').textContent = 'Câmara bloqueada';
@@ -144,8 +149,16 @@ export function initFoto() {
   $('#snap').onclick = () => {
     const video = $('#video');
     if (!video.videoWidth) return;
-    analyze(toJpeg(video, video.videoWidth, video.videoHeight));
+    const image = toJpeg(video, video.videoWidth, video.videoHeight);
+    // Close the full-screen camera so the analysis is visible.
+    stopCamera();
+    analyze(image);
   };
+
+  $('#closeCam').onclick = () => stopCamera();
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && $('.camera-card').classList.contains('expanded')) stopCamera();
+  });
 
   $('#fileInput').onchange = event => {
     const file = event.target.files?.[0];

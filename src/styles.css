@@ -138,7 +138,8 @@ svg.lucide { width: 20px; height: 20px; flex: none; }
 }
 
 .screen { display: none; flex-direction: column; gap: 14px; }
-.screen.active { display: flex; animation: screen-in 0.28s ease both; }
+/* backwards fill: a transform kept after the animation would trap the full-screen stage */
+.screen.active { display: flex; animation: screen-in 0.28s ease backwards; }
 
 @keyframes screen-in {
   from { opacity: 0; transform: translateY(6px); }
@@ -1474,4 +1475,98 @@ body.is-watching .tabbar button[data-tab="live"]::after { top: 8px; right: 10px;
 @media (prefers-reduced-transparency: reduce) {
   :root,
   :root[data-theme] { --glass: var(--card); --glass-strong: var(--card); }
+}
+
+/* =========================================================
+   Full-screen stage: the FOTO camera and the broker watch open
+   as a whole-screen card so the chart is easy to frame and read.
+   ========================================================= */
+body.stage-open { overflow: hidden; }
+body.stage-open .tabbar { display: none; }
+.stage-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  display: none;
+  place-items: center;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.camera.active .camera-close,
+.watch-stage.active .watch-expand { display: grid; }
+.watch-hud { display: none; }
+
+.camera-card.expanded,
+.watch-card.expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: calc(var(--safe-top) + 10px) 10px calc(var(--safe-bottom) + 12px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #0b0b0d;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+  animation: stage-in 0.22s ease both;
+}
+@keyframes stage-in { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: none; } }
+.expanded .camera,
+.expanded .watch-stage {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  aspect-ratio: auto;
+  border-radius: 24px;
+}
+.expanded .camera video,
+.expanded .watch-stage[data-kind="camera"] video { object-fit: cover; }
+.expanded .camera-guide { inset: 10% 8% 14%; }
+.camera-card.expanded .camera-actions { grid-template-columns: 1fr; }
+.camera-card.expanded #startCam,
+.camera-card.expanded .upload-file { display: none; }
+.camera-card.expanded #snap { height: 58px; font-size: 16px; background: #f4f4f6; color: #111114; box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.8); }
+
+/* broker watch: only the stage and its heads-up bar while expanded */
+.watch-card.expanded > :not(.watch-stage) { display: none !important; }
+.watch-card.expanded .watch-expand { display: none; }
+.watch-card.expanded .watch-hud {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 20px;
+  color: #ffffff;
+  background: rgba(18, 18, 22, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  backdrop-filter: blur(20px) saturate(150%);
+  box-shadow: 0 18px 40px -14px rgba(0, 0, 0, 0.8);
+}
+.watch-hud-now { font-size: 15px; font-weight: 600; line-height: 1.4; }
+.watch-hud-status { color: #b9b9c2; font-size: 11.5px; }
+.watch-hud-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 2px; }
+.watch-hud-actions .btn { height: 46px; font-size: 14px; }
+.watch-hud-actions .btn-soft { background: rgba(255, 255, 255, 0.12); color: #ffffff; border-color: rgba(255, 255, 255, 0.14); box-shadow: none; }
+.watch-hud-actions .btn-primary { background: #f4f4f6; color: #111114; }
+.watch-card.expanded .watch-overlay { top: 14px; left: 14px; font-size: 14px; padding: 8px 12px; }
+
+@media (min-width: 600px) {
+  .camera-card.expanded,
+  .watch-card.expanded { padding: 24px; }
 }

@@ -92,6 +92,7 @@ export const shellTemplate = `
         <video id="video" autoplay playsinline muted></video>
         <div class="camera-guide"><b>Enquadra o gráfico inteiro</b><small>Velas · preço · timeframe · indicadores</small></div>
         <span class="camera-status" id="cameraStatus">Câmara desligada</span>
+        <button class="stage-btn camera-close" type="button" id="closeCam" aria-label="Fechar câmara"><i data-lucide="x"></i></button>
       </div>
       <div class="camera-actions">
         <button class="btn btn-soft" type="button" id="startCam"><i data-lucide="camera"></i>Abrir câmara</button>
@@ -118,6 +119,15 @@ export const shellTemplate = `
         <div class="watch-stage" id="watchStage">
           <video id="watchVideo" autoplay playsinline muted></video>
           <span class="watch-overlay" id="watchOverlay">—</span>
+          <button class="stage-btn watch-expand" type="button" id="watchExpand" aria-label="Ver em ecrã inteiro"><i data-lucide="maximize-2"></i></button>
+          <div class="watch-hud" id="watchHud">
+            <p class="watch-hud-now" id="watchHudNow">A preparar a primeira análise…</p>
+            <small class="watch-hud-status" id="watchHudStatus"></small>
+            <div class="watch-hud-actions">
+              <button class="btn btn-soft" type="button" id="watchMin"><i data-lucide="minimize-2"></i>Ver análise</button>
+              <button class="btn btn-primary" type="button" id="watchHudStop"><i data-lucide="x"></i>Parar</button>
+            </div>
+          </div>
           <div class="watch-empty" id="watchEmpty">
             <b>A IA acompanha a tua corretora ao vivo</b>
             <ol>
