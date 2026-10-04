@@ -72,8 +72,9 @@ function whyNoise(snap) {
   const lines = [];
   const z = snap?.kalmanZ;
   const move = snap?.movePct;
-  if (Number.isFinite(z) && Math.abs(z) >= 2 && Number.isFinite(move) && Math.abs(move) >= 0.15) {
-    lines.push(z > 0
+  // Only talk about a direction when the local slope and the hour's move agree.
+  if (Number.isFinite(z) && Math.abs(z) >= 2 && Number.isFinite(move) && Math.abs(move) >= 0.15 && Math.sign(z) === Math.sign(move)) {
+    lines.push(move > 0
       ? `O preço vem a subir com força (${move >= 0 ? '+' : ''}${move.toFixed(2)}% nas últimas 60 velas), por isso o gráfico parece ter direção.`
       : `O preço vem a descer com força (${move.toFixed(2)}% nas últimas 60 velas), por isso o gráfico parece ter direção.`);
   }

@@ -75,3 +75,12 @@ test('a choppy market explains the real move and the box to watch, not a coin to
   assert.match(text, /\$86,066\.22/);
   assert.doesNotMatch(text, /moeda ao ar/);
 });
+
+test('the move line never contradicts its own percentage', async () => {
+  const { explainPlain } = await import('../api/_lib/quant/explain.js');
+  const g = explainPlain({ decision: { direction: 0, reasons: [] }, snapshot: { regime: 'noise', kalmanZ: -2.5, movePct: 0.4, rangeHigh: 101, rangeLow: 99 }, context: null, plan: null });
+  const text = g.why.join(' ');
+  assert.doesNotMatch(text, /a descer com força/);
+  assert.doesNotMatch(text, /a subir com força/);
+  assert.match(text, /aos saltos entre/);
+});
