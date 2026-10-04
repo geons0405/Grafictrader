@@ -31,7 +31,7 @@ async function postJson(url, headers, body, timeoutMs = 45_000) {
 }
 
 export async function visionGemini(image, key, prompt, maxOutputTokens = 1800) {
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
   const [, mime, data] = image.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s) || [];
   const result = await postJson(
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -60,7 +60,11 @@ export async function visionOpenAI(image, key, prompt) {
 
 // UnoRouter: one key for many models behind an OpenAI-compatible API.
 const UNOROUTER_BASE = 'https://api.unorouter.com/v1';
-const UNOROUTER_VISION_MODELS = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gpt-4o-mini'];
+// Free models first (no balance needed), then paid ones.
+const UNOROUTER_VISION_MODELS = [
+  'gemini-3.6-flash:free', 'gpt-4o:free', 'gemini-3.5-flash-lite:free', 'llama-4-maverick-17b-128e-instruct:free',
+  'qwen2.5-vl-7b-instruct-awq:free', 'llama-3.2-11b-vision:free', 'gemini-3.5-flash'
+];
 
 function unoRouterModels() {
   const configured = (process.env.UNOROUTER_MODEL || '').split(',').map(m => m.trim()).filter(Boolean);
@@ -88,7 +92,11 @@ export async function listUnoRouterModels(key) {
   }
 }
 
-const isModelError = error => error?.status === 404 || (error?.status === 400 && /model/i.test(error.message || ''));
+// Worth trying the next model: model missing, no balance for a paid model, a busy
+// free model, or a model that does not take images.
+const isModelError = error => [402, 404, 429, 503].includes(error?.status)
+  || (error?.status === 400 && /model|image|vision|multimodal/i.test(error.message || ''))
+  || /balance|credit|billing|quota/i.test(error?.message || '');
 
 /** Chat completion through UnoRouter, trying the next model when one is unavailable. */
 export async function chatUnoRouter(key, content, { maxTokens = 1800, temperature = 0.2 } = {}) {

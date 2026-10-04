@@ -39,7 +39,7 @@ const CACHE_MS = 60_000;
 const cache = new Map();
 
 async function askGemini(payload, key) {
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25_000);
   try {

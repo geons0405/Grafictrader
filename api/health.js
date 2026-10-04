@@ -2,13 +2,16 @@ import { apiKey } from './_lib/env.js';
 import { redis, redisConfigured } from './_lib/redis.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 import { clientIp } from './_lib/validate.js';
-import { chatUnoRouter, listUnoRouterModels } from './_lib/vision.js';
+import { chatUnoRouter, listUnoRouterModels, runVision } from './_lib/vision.js';
 import { getTwelveDataTicker } from './_lib/sources/twelvedata.js';
 import { getMarketauxEvents } from './_lib/sources/marketaux.js';
 import { getRssNews, getYahooNews } from './_lib/sources/news-feeds.js';
 
 // Service status. Never returns key values: only whether each one is set and,
 // with ?probe=1, whether a small real call to each service works.
+
+// 48x32 PNG with a rising line: a tiny chart to check that image analysis works.
+const PROBE_IMAGE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAgCAIAAADbtmxLAAAAm0lEQVR42s3YMQ6AQAhEUQ7h/Q9qpdFCjWQX2GFgOrqXXyJ7m23XpA+lC+itOU9pQrk1laA/pQykhikDDShs0DgMG2ShkEDGMCSQi5IL8obJBcUoKaBwmBTQIgUJWg+DBKEoABAwDAAEp8RBGWHioDyKG5Qaxg0iUKwgThgriEmZgMhhJqASig6qCqODaikfUHmYB9SHooA6fEIOpG4Y593eu8YAAAAASUVORK5CYII=';
 
 const KEYS = ['UNOROUTER_API_KEY', 'GEMINI_API_KEY', 'OPENAI_API_KEY', 'TWELVE_DATA_API_KEY', 'MARKETAUX_API_KEY', 'FINNHUB_API_KEY'];
 
@@ -39,15 +42,18 @@ export default async function handler(req, res) {
 
   const unoKey = apiKey('UNOROUTER_API_KEY');
   const geminiKey = apiKey('GEMINI_API_KEY');
-  const [database, unorouter, unorouterModels, gemini, twelveData, marketaux, rss, yahoo] = await Promise.all([
+  const [database, unorouter, unorouterModels, gemini, vision, twelveData, marketaux, rss, yahoo] = await Promise.all([
     redisConfigured() ? check(async () => ({ reply: await redis(['PING']) })) : { ok: false, error: 'não configurada' },
     unoKey ? check(async () => {
       const { text, model } = await chatUnoRouter(unoKey, 'Responde só com a palavra OK.', { maxTokens: 5, temperature: 0 });
       return { model, reply: String(text).trim().slice(0, 20) };
     }) : { ok: false, error: 'não configurada' },
-    unoKey ? check(async () => listUnoRouterModels(unoKey)) : { ok: false, error: 'não configurada' },
+    unoKey ? check(async () => {
+      const list = await listUnoRouterModels(unoKey);
+      return { total: list.total, free: list.free.length };
+    }) : { ok: false, error: 'não configurada' },
     geminiKey ? check(async () => {
-      const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+      const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
@@ -57,6 +63,10 @@ export default async function handler(req, res) {
       if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
       return { model, reply: (data?.candidates?.[0]?.content?.parts?.[0]?.text || '').trim().slice(0, 20) };
     }) : { ok: false, error: 'não configurada' },
+    check(async () => {
+      const result = await runVision(PROBE_IMAGE, 'Esta imagem mostra uma linha. Responde APENAS com JSON: {"direcao": "sobe" | "desce" | "lateral"}', { maxOutputTokens: 60 });
+      return { provider: result.provider, answer: result.raw };
+    }),
     apiKey('TWELVE_DATA_API_KEY') ? check(async () => {
       const quotes = (await getTwelveDataTicker(['EUR/USD'])).filter(Boolean);
       if (!quotes.length) throw new Error('Sem cotação: chave inválida ou limite atingido.');
@@ -66,7 +76,7 @@ export default async function handler(req, res) {
     check(async () => ({ headlines: (await getRssNews('BTCUSDT')).length })),
     check(async () => ({ headlines: (await getYahooNews('BTCUSDT')).length }))
   ]);
-  body.services = { database, unorouter, gemini, twelveData, marketaux, rss, yahoo };
+  body.services = { database, vision, unorouter, gemini, twelveData, marketaux, rss, yahoo };
   body.ok = Object.values(body.services).every(s => s.ok);
   body.unorouterModels = unorouterModels;
   return res.status(200).json(body);
