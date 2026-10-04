@@ -1,3 +1,4 @@
+import { headlineSentiment } from './headline-sentiment.js';
 const GDELT_BASE = 'https://api.gdeltproject.org/api/v2/doc/doc';
 
 export function parseGdeltDate(value) {
@@ -15,10 +16,7 @@ export function parseGdeltDate(value) {
 }
 
 function sentimentFromText(text = '') {
-  const t = text.toLowerCase();
-  if (/surge|rally|gain|approval|bullish|record|rise|upbeat|growth/.test(t)) return 'bullish';
-  if (/fall|drop|crash|hack|ban|bearish|loss|decline|lawsuit|warning/.test(t)) return 'bearish';
-  return 'neutral';
+  return headlineSentiment(text).sentiment;
 }
 
 function tagsFor(text = '') {

@@ -2,6 +2,7 @@ import { getBinanceMarketEvents } from './sources/binance.js';
 import { getGdeltEvents } from './sources/gdelt.js';
 import { getMarketauxEvents } from './sources/marketaux.js';
 import { getFinnhubEvents } from './sources/finnhub.js';
+import { getRssNews, getYahooNews } from './sources/news-feeds.js';
 import { apiKey } from './env.js';
 
 export async function getAllIntelligence(symbol = 'BTCUSDT') {
@@ -9,7 +10,9 @@ export async function getAllIntelligence(symbol = 'BTCUSDT') {
     ['Binance', () => getBinanceMarketEvents(symbol)],
     ['GDELT', () => getGdeltEvents(symbol)],
     ['Marketaux', () => getMarketauxEvents(symbol)],
-    ['Finnhub', () => getFinnhubEvents(symbol)]
+    ['Finnhub', () => getFinnhubEvents(symbol)],
+    ['Notícias RSS', () => getRssNews(symbol)],
+    ['Yahoo Finance', () => getYahooNews(symbol)]
   ];
   const settled = await Promise.allSettled(tasks.map(([, run]) => run()));
   const events = [];

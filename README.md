@@ -132,10 +132,19 @@ Na Vercel, cada variável tem de estar ativa em **Production** (e Preview), com 
 
 | Variável | Para quê |
 | --- | --- |
-| `GEMINI_API_KEY` | Obrigatória para FOTO e Minha corretora (análise por IA) |
+| `UNOROUTER_API_KEY` | IA principal (FOTO, Minha corretora, bolha Android). Opcional: `UNOROUTER_MODEL` para escolher o modelo |
+| `GEMINI_API_KEY` | IA de reserva, se o UnoRouter falhar |
 | `KV_REST_API_URL` | `https://grafictrader-dados.floot.app/_api/kv` |
 | `KV_REST_API_TOKEN` | O mesmo token guardado no Floot (`GRAFICTRADER_KV_TOKEN`) |
 | `OPENAI_API_KEY`, `TWELVE_DATA_API_KEY`, `MARKETAUX_API_KEY`, `FINNHUB_API_KEY` | Opcionais |
+
+Estado dos serviços: `GET /api/health` (o que está configurado) e `GET /api/health?probe=1` (faz uma chamada real a cada serviço; limitado a 5 por 10 minutos).
+
+### Notícias em tempo real sem chave
+
+- [rss-parser](https://github.com/rbren/rss-parser): CoinDesk, Cointelegraph, Investing.com, Yahoo Finance e pesquisa do Google News por ativo.
+- [yahoo-finance2](https://github.com/gadicc/node-yahoo-finance2): notícias do Yahoo Finance por ativo.
+- [sentiment](https://github.com/thisandagain/sentiment): tom de cada manchete (positivo, negativo, neutro), usado no contexto da IA instrutora.
 
 ### Base de dados (Floot)
 

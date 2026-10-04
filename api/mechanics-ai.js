@@ -3,6 +3,7 @@ import { parseMarketQuery, clientIp } from './_lib/validate.js';
 import { requireUserIfConfigured } from './_lib/auth.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 import { apiKey } from './_lib/env.js';
+import { chatUnoRouter } from './_lib/vision.js';
 
 const SYSTEM_PROMPT = `És o motor de interpretação do Grafictrader.
 Recebes métricas calculadas pelo código a partir de OHLCV, trades e/ou order book.
@@ -107,8 +108,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
   res.setHeader('Cache-Control', 'no-store');
 
+  const unoKey = apiKey('UNOROUTER_API_KEY');
   const key = apiKey('GEMINI_API_KEY');
-  if (!key) return res.status(503).json({ ok: false, error: 'GEMINI_API_KEY não configurada.', setupRequired: true });
+  if (!unoKey && !key) return res.status(503).json({ ok: false, error: 'Nenhuma IA configurada (UNOROUTER_API_KEY ou GEMINI_API_KEY).', setupRequired: true });
 
   // The client only names the market; the metrics are recomputed here so the
   // prompt never carries client-controlled text.
@@ -127,10 +129,23 @@ export default async function handler(req, res) {
 
   try {
     const snapshot = await buildMechanicsSnapshot(market.symbol, market.interval);
-    const interpretation = await askGemini(compactPayload(snapshot), key);
+    const payload = compactPayload(snapshot);
+    let interpretation;
+    let provider = 'Gemini';
+    if (unoKey) {
+      try {
+        const answer = await chatUnoRouter(unoKey, SYSTEM_PROMPT + '\n\nDADOS DO MERCADO:\n' + JSON.stringify(payload), { maxTokens: 700, temperature: 0.15 });
+        interpretation = answer.text;
+        provider = `UnoRouter (${answer.model})`;
+      } catch (error) {
+        if (!key) throw error;
+        console.error('[mechanics-ai] UnoRouter', error?.message || error);
+      }
+    }
+    if (!interpretation) interpretation = await askGemini(payload, key);
     const body = {
       ok: true,
-      provider: 'Gemini',
+      provider,
       symbol: market.symbol,
       interval: market.interval,
       state: snapshot.state,
