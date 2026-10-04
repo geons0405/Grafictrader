@@ -36,3 +36,9 @@ test('RSS headlines become dated, scored events and old items are dropped', asyn
     globalThis.fetch = original;
   }
 });
+
+test('Marketaux filter uses the CC: prefix for crypto', async () => {
+  const { marketauxFilter } = await import('../api/_lib/sources/marketaux.js');
+  assert.deepEqual(marketauxFilter('ETHUSDT'), { symbols: 'CC:ETH', entity_types: 'cryptocurrency' });
+  assert.deepEqual(marketauxFilter('AAPL'), { symbols: 'AAPL', entity_types: 'equity' });
+});

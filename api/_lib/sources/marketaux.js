@@ -1,5 +1,11 @@
 import { apiKey } from '../env.js';
-const SYMBOLS = { BTCUSDT: 'BTC', ETHUSDT: 'ETH', BNBUSDT: 'BNB', SOLUSDT: 'SOL', XRPUSDT: 'XRP', ADAUSDT: 'ADA', DOGEUSDT: 'DOGE' };
+/** Marketaux entity filter: crypto uses the "CC:" prefix (CC:BTC); stocks use the ticker. */
+export function marketauxFilter(symbol = 'BTCUSDT') {
+  const s = String(symbol).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (s.endsWith('USDT')) return { symbols: `CC:${s.slice(0, -4)}`, entity_types: 'cryptocurrency' };
+  if (/^[A-Z]{1,5}$/.test(s)) return { symbols: s, entity_types: 'equity' };
+  return { symbols: 'CC:BTC', entity_types: 'cryptocurrency' };
+}
 
 export async function getMarketauxEvents(symbol = 'BTCUSDT') {
   const key = apiKey('MARKETAUX_API_KEY');
@@ -12,13 +18,12 @@ export async function getMarketauxEvents(symbol = 'BTCUSDT') {
   try {
     const url = 'https://api.marketaux.com/v1/news/all?' + new URLSearchParams({
       api_token: key,
-      symbols: SYMBOLS[symbol] || 'BTC',
-      entity_types: 'cryptocurrency',
+      ...marketauxFilter(symbol),
       language: 'en',
       filter_entities: 'true',
       limit: '20',
       sort: 'published_at',
-      published_after: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString().slice(0, 16)
+      published_after: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
     });
     const response = await fetch(url, { signal: controller.signal, cache: 'no-store' });
     const data = await response.json();
