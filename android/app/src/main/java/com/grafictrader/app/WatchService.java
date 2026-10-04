@@ -467,10 +467,12 @@ public class WatchService extends Service {
 
         JSONObject verdict = data.optJSONObject("verdict");
         String decision = verdict == null ? "AGUARDAR" : verdict.optString("decision", "AGUARDAR");
-        boolean chartVisible = data.optBoolean("chartVisible", true);
+        // Only an explicit "true" from the server counts as a chart.
+        boolean chartVisible = data.optBoolean("chartVisible", false);
         Stabilizer.Step step = stabilizer.push(decision, chartVisible);
         if (chartVisible) lastByDecision.put(decision, data);
-        JSONObject shown = step.shown != null && lastByDecision.containsKey(step.shown) ? lastByDecision.get(step.shown) : data;
+        // No chart now: show this reading, never the last trade.
+        JSONObject shown = chartVisible && step.shown != null && lastByDecision.containsKey(step.shown) ? lastByDecision.get(step.shown) : data;
         current = shown;
         render(shown, step, chartVisible);
         if (step.changed) announce(shown, step.shown);
@@ -494,7 +496,7 @@ public class WatchService extends Service {
     }
 
     private void render(JSONObject data, Stabilizer.Step step, boolean chartVisible) {
-        String decision = step.shown != null ? step.shown : "AGUARDAR";
+        String decision = chartVisible && step.shown != null ? step.shown : "AGUARDAR";
         JSONObject vision = data.optJSONObject("vision");
         JSONObject verdict = data.optJSONObject("verdict");
         JSONObject guidance = data.optJSONObject("guidance");
@@ -509,15 +511,16 @@ public class WatchService extends Service {
         if (!chartVisible) detail.append("Não vejo um gráfico. Mostra o gráfico da corretora inteiro.");
         else if (guidance != null) detail.append(guidance.optString("now", ""));
         JSONObject levels = guidance == null ? null : guidance.optJSONObject("levels");
-        if (levels != null && !"AGUARDAR".equals(decision)) {
+        if (chartVisible && levels != null && !"AGUARDAR".equals(decision)) {
             detail.append("\nEntrada ").append(levels.optString("entry", "—"))
                     .append(" · Stop ").append(levels.optString("stop", "—"))
                     .append(" · Alvo ").append(levels.optString("target", "—"));
         }
-        if (step.pending != null) detail.append("\nA confirmar sinal de ").append(label(step.pending)).append("…");
+        if (chartVisible && step.pending != null) detail.append("\nA confirmar sinal de ").append(label(step.pending)).append("…");
 
-        if (bubble != null) bubble.update(label(decision), side(decision), asset.toString().trim(), detail.toString());
-        setNotice(label(decision) + " · " + analyses + " análise(s)");
+        String title = chartVisible ? label(decision) : "SEM GRÁFICO";
+        if (bubble != null) bubble.update(title, side(decision), asset.toString().trim(), detail.toString());
+        setNotice(title + " · " + analyses + " análise(s)");
     }
 
     private void announce(JSONObject data, String decision) {

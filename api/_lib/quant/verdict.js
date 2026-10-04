@@ -57,7 +57,59 @@ export function normalizeVision(raw = {}) {
     risks: list(raw.riscos),
     summary: raw.resumo ? String(raw.resumo).slice(0, 300) : null,
     plain: raw.explicacaoSimples ? String(raw.explicacaoSimples).slice(0, 900) : null,
-    imageQuality: raw.qualidadeImagem ? String(raw.qualidadeImagem) : null
+    imageQuality: typeof raw.qualidadeImagem === 'string' && raw.qualidadeImagem.trim() ? raw.qualidadeImagem.trim().toLowerCase() : null
+  };
+}
+
+const TRENDS = ['alta', 'baixa', 'lateral'];
+
+/**
+ * Whether the model really read a price chart. The model's own flag is not
+ * enough: it must also have read at least two chart details (trend, price,
+ * asset, timeframe, structure, patterns or indicators), so a photo of anything
+ * else never turns into a trade.
+ */
+export function isChartVisible(raw = {}) {
+  // Model output is untrusted: normalise the flag and count only readable scalar values.
+  const flag = typeof raw.graficoVisivel === 'string' ? raw.graficoVisivel.trim().toLowerCase() : raw.graficoVisivel;
+  if (flag === false || flag === 0 || ['false', 'não', 'nao', 'no', '0'].includes(flag)) return false;
+  const present = v => (typeof v === 'string' || typeof v === 'number') && String(v).trim() !== '' && String(v).trim().toLowerCase() !== 'null';
+  const evidence = [
+    TRENDS.includes(String(typeof raw.tendencia === 'string' ? raw.tendencia : '').trim().toLowerCase()),
+    present(raw.precoAtual) && Number.isFinite(Number(raw.precoAtual)),
+    present(raw.ativo),
+    present(raw.timeframe),
+    present(raw.estrutura),
+    Array.isArray(raw.padroes) && raw.padroes.some(present),
+    present(raw.indicadores)
+  ].filter(Boolean).length;
+  return evidence >= 2;
+}
+
+/** A blurry or cut chart is read but never traded on. Mutates and returns the reading. */
+export function guardImageQuality(vision) {
+  if (vision.imageQuality === 'fraca') {
+    vision.direction = 0;
+    vision.confidence = Math.min(vision.confidence, 30);
+  }
+  return vision;
+}
+
+/** Neutral reading for an image that is not a chart: no side, no levels, no asset. */
+export function noChartVision(raw = {}) {
+  const base = normalizeVision({ resumo: raw.resumo, qualidadeImagem: raw.qualidadeImagem });
+  return { ...base, direction: 0, confidence: 0, trend: 'indefinida' };
+}
+
+/** Verdict shown when the image is not a chart. */
+export function noChartVerdict() {
+  return {
+    decision: 'AGUARDAR',
+    direction: 0,
+    confidence: 0,
+    agreement: 'sem dados ao vivo',
+    headline: 'Isto não parece um gráfico de preços',
+    reasons: ['A IA não encontrou um gráfico na imagem, por isso não dá nenhuma orientação de compra ou venda.']
   };
 }
 
@@ -116,4 +168,22 @@ export function mergeVerdict(vision, reading) {
       ? 'Viés de venda: o gráfico tende a descer'
       : 'Mercado instável: melhor aguardar';
   return { decision, direction, confidence: direction === 0 ? Math.min(confidence, 40) : confidence, agreement, headline, reasons };
+}
+
+/** Plain guidance for an image that is not a chart. `source` is 'foto' or 'ecrã'. */
+export function noChartGuidance(vision = {}, source = 'foto') {
+  const saw = vision.summary ? `A IA vê: ${vision.summary}` : 'A IA não reconhece velas, barras ou linha de preço nesta imagem.';
+  return {
+    action: 'SEM GRÁFICO',
+    tone: 'wait',
+    headline: 'Isto não parece um gráfico de preços',
+    why: [saw, 'Sem um gráfico visível não há leitura de mercado, por isso a IA não dá sinal de compra nem de venda.'],
+    steps: source === 'ecrã'
+      ? ['Mostra o gráfico da corretora inteiro no ecrã partilhado ou na câmara.', 'Garante que se vêem as velas, o preço e o timeframe.']
+      : ['Fotografa ou carrega o ecrã com o gráfico da corretora.', 'Enquadra o gráfico inteiro: velas, eixo do preço e timeframe.', 'Evita reflexos e imagens tremidas.'],
+    now: source === 'ecrã'
+      ? 'Mostra o gráfico da corretora inteiro, bem enquadrado, para a IA conseguir analisar.'
+      : 'Tira uma foto ao gráfico da corretora para receberes a orientação.',
+    levels: null
+  };
 }

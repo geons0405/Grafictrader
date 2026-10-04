@@ -38,7 +38,28 @@ const AGREEMENT_LABEL = {
 
 const list = items => (items || []).map(item => `<li>${escapeHtml(item)}</li>`).join('');
 
+function renderNoChart(image, data) {
+  const g = data.guidance || {};
+  return `
+    <div class="verdict" data-side="flat">
+      <span class="verdict-icon"><i data-lucide="image"></i></span>
+      <div class="verdict-main">
+        <small>Sem gráfico</small>
+        <strong>NÃO OPERAR</strong>
+        <span>${escapeHtml(g.headline || 'Isto não parece um gráfico de preços')}</span>
+      </div>
+    </div>
+    <div class="guide">
+      <div class="guide-now"><small>O que fazer agora</small><p>${escapeHtml(g.now || 'Tira uma foto ao gráfico da corretora.')}</p></div>
+      <div class="guide-block"><small>Porquê</small>${(g.why || []).map(p => `<p>${escapeHtml(p)}</p>`).join('')}</div>
+      <div class="guide-block"><small>Como tirar a foto</small><ol>${list(g.steps)}</ol></div>
+    </div>
+    <div class="analysis-preview"><img src="${image}" alt="Imagem enviada"><div><small>Imagem enviada</small><b>A IA não deu sinal porque não encontrou um gráfico.</b></div></div>
+    <button class="btn btn-soft" type="button" id="retryPhoto"><i data-lucide="refresh-cw"></i>Tentar outra foto</button>`;
+}
+
 function renderResult(image, data) {
+  if (data.chartVisible === false) return renderNoChart(image, data);
   const v = data.verdict;
   const vis = data.vision;
   const side = v.direction > 0 ? 'up' : v.direction < 0 ? 'down' : 'flat';

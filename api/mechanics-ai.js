@@ -3,6 +3,7 @@ import { parseMarketQuery, clientIp } from './_lib/validate.js';
 import { requireUserIfConfigured } from './_lib/auth.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 import { runText, chainFor } from './_lib/vision.js';
+import { rulesBlock } from './_lib/ai-rules.js';
 
 const SYSTEM_PROMPT = `És o motor de interpretação do Grafictrader.
 Recebes métricas calculadas pelo código a partir de OHLCV, trades e/ou order book.
@@ -22,6 +23,7 @@ Distingue claramente:
 - HISTÓRICO DA FAMÍLIA: se patternLibrary trouxer outcomes históricos, descreve-os como comportamento observado nas ocorrências já resolvidas. Mostra amostra/horizonte quando relevante; nunca transforma taxa histórica em probabilidade futura, sinal ou recomendação.
 - LIMITAÇÃO: dados que faltam.
 
+${rulesBlock()}
 Responde em português de Angola, curto e técnico, neste formato:
 MECANISMO: ...
 OBSERVAÇÃO: ...

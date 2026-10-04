@@ -1,3 +1,4 @@
+import { rulesBlock } from '../ai-rules.js';
 import { runText, parseJson } from '../vision.js';
 
 // The judge: an AI model reads every analyst's numbers and reasons and gives
@@ -23,6 +24,7 @@ Regras:
 - Se os analistas mais confiantes discordam entre si, prefere AGUARDAR.
 - Só COMPRAR ou VENDER quando a maioria dos analistas confiantes aponta no mesmo sentido.
 - Não inventes dados que não estão acima. Não prometas lucro.
+${rulesBlock()}
 Responde APENAS com JSON:
 {"decisao": "COMPRAR" | "VENDER" | "AGUARDAR", "confianca": 0-100, "resumo": "uma frase simples", "porque": ["até 3 razões em linguagem simples"], "riscos": ["até 2 riscos"], "decisivos": ["nomes dos analistas que mais pesaram"]}`;
 }

@@ -3,7 +3,8 @@ import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 import { clientIp } from './_lib/validate.js';
 import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
 import { marketReading } from './_lib/quant/service.js';
-import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict } from './_lib/quant/verdict.js';
+import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance, guardImageQuality } from './_lib/quant/verdict.js';
+import { rulesBlock } from './_lib/ai-rules.js';
 import { photoGuidance } from './_lib/quant/explain.js';
 
 // Live analysis of the user's broker: the app sends one frame of the shared
@@ -17,8 +18,9 @@ Decide a orientação para a próxima fase:
 - "VENDER" se favorecem descida;
 - "AGUARDAR" se está lateral, confuso, sem confirmação, ou se não há um gráfico visível.
 Se a imagem não mostrar um gráfico de preços (outro ecrã, menu, imagem tremida), indica graficoVisivel false.
+${rulesBlock({ chart: true })}
 {CONTINUITY}
-Não inventes valores que não estejam visíveis. Não prometas resultados. Responde em português de Angola.
+Responde em português de Angola.
 Responde APENAS com JSON válido:
 {
   "graficoVisivel": true | false,
@@ -38,7 +40,8 @@ Responde APENAS com JSON válido:
   "riscos": ["até 2 riscos"],
   "mudanca": "o que mudou desde a leitura anterior, numa frase",
   "resumo": "uma frase",
-  "explicacaoSimples": "2 a 4 frases informais para quem nunca operou: o que fazer agora e porquê"
+  "explicacaoSimples": "2 a 4 frases informais para quem nunca operou: o que fazer agora e porquê",
+  "qualidadeImagem": "boa" | "média" | "fraca"
 }`;
 
 // Engine readings are shared between frames of the same market for a few seconds.
@@ -87,27 +90,24 @@ export default async function handler(req, res) {
     return res.status(error.status || 502).json({ ok: false, setupRequired: Boolean(error.setupRequired), error: error.message });
   }
 
-  const chartVisible = vision.raw?.graficoVisivel !== false;
-  const normalized = normalizeVision(chartVisible ? vision.raw : { ...vision.raw, decisao: 'AGUARDAR', confianca: 0 });
+  const chartVisible = isChartVisible(vision.raw);
+  const normalized = chartVisible ? guardImageQuality(normalizeVision(vision.raw)) : noChartVision(vision.raw);
   const symbol = chartVisible ? mapAsset(normalized.asset) : null;
   const interval = mapTimeframe(normalized.timeframe) || '5m';
   let reading = null;
   if (symbol) {
     try { reading = await cachedReading(symbol, interval); } catch { reading = null; }
   }
-  const verdict = mergeVerdict(normalized, reading);
-  const guidance = photoGuidance(verdict, normalized, reading);
-  if (!chartVisible) {
-    guidance.headline = 'Não vejo um gráfico no ecrã';
-    guidance.now = 'Mostra o gráfico da corretora inteiro, bem enquadrado, para a IA conseguir analisar.';
-  }
+  // Not a chart: neutral verdict, no levels, no live market mixed in.
+  const verdict = chartVisible ? mergeVerdict(normalized, reading) : noChartVerdict();
+  const guidance = chartVisible ? photoGuidance(verdict, normalized, reading) : { ...noChartGuidance(normalized, 'ecrã'), headline: 'Não vejo um gráfico no ecrã' };
 
   return res.status(200).json({
     ok: true,
     provider: vision.provider,
     at: new Date().toISOString(),
     chartVisible,
-    change: vision.raw?.mudanca ? String(vision.raw.mudanca).slice(0, 200) : null,
+    change: chartVisible && vision.raw?.mudanca ? String(vision.raw.mudanca).slice(0, 200) : null,
     vision: normalized,
     verdict,
     guidance,
