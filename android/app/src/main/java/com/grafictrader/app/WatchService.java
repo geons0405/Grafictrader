@@ -120,6 +120,7 @@ public class WatchService extends Service {
     private long startedAt;
     private int analyses;
     private JSONObject current;
+    private boolean blankShown;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -323,6 +324,26 @@ public class WatchService extends Service {
         return (double) sum / a.length;
     }
 
+    /** A uniform frame (all black, for example) has nothing for the AI to read. */
+    private static boolean blank(byte[] sig) {
+        int min = 255;
+        int max = 0;
+        for (byte b : sig) {
+            int v = b & 0xFF;
+            if (v < min) min = v;
+            if (v > max) max = v;
+        }
+        return max - min < 12;
+    }
+
+    private void showBlank() {
+        if (!running || blankShown) return;
+        blankShown = true;
+        String title = "SEM IMAGEM";
+        if (bubble != null) bubble.update(title, "", "", "A partilha do ecrã chega vazia. Toca em Parar, volta a ligar e escolhe «Ecrã inteiro».");
+        setNotice(title + " · a partilha do ecrã chega vazia");
+    }
+
     private void tick() {
         if (!running) return;
         capture.postDelayed(this::tick, TICK_MS);
@@ -337,6 +358,12 @@ public class WatchService extends Service {
         if (bitmap == null) return;
         byte[] sig = signature(bitmap);
         bitmap.recycle();
+        if (blank(sig)) {
+            // Don't spend an analysis on an empty frame; send the next real one at once.
+            lastSig = null;
+            main.post(this::showBlank);
+            return;
+        }
         double change = diff(sig, lastSig);
         if (lastSentAt != 0 && change < THRESHOLD && now - lastSentAt < MAX_GAP_MS) return;
 
@@ -464,6 +491,7 @@ public class WatchService extends Service {
         }
         minGap = MIN_GAP_MS;
         analyses += 1;
+        blankShown = false;
 
         JSONObject verdict = data.optJSONObject("verdict");
         String decision = verdict == null ? "AGUARDAR" : verdict.optString("decision", "AGUARDAR");
@@ -508,7 +536,11 @@ public class WatchService extends Service {
         if (verdict != null) asset.append("· ").append(verdict.optInt("confidence")).append('%');
 
         StringBuilder detail = new StringBuilder();
-        if (!chartVisible) detail.append("Não vejo um gráfico. Mostra o gráfico da corretora inteiro.");
+        if (!chartVisible) {
+            String saw = vision == null || vision.isNull("summary") ? "" : vision.optString("summary", "").trim();
+            if (!saw.isEmpty()) detail.append("A IA vê: ").append(saw.length() > 120 ? saw.substring(0, 120) + "…" : saw).append('\n');
+            detail.append("Não vejo um gráfico. Mostra o gráfico da corretora inteiro.");
+        }
         else if (guidance != null) detail.append(guidance.optString("now", ""));
         JSONObject levels = guidance == null ? null : guidance.optJSONObject("levels");
         if (chartVisible && levels != null && !"AGUARDAR".equals(decision)) {

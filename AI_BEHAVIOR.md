@@ -19,7 +19,8 @@ Valem para a visão (FOTO e Minha corretora), para a juíza do conselho e para o
 Antes de analisar qualquer imagem, a IA de visão segue estes passos:
 
 - Primeiro confirma se a imagem mostra um gráfico de preços (velas, barras ou linha de preço com eixos).
-- Se não for um gráfico de preços (foto de pessoa, documento, menu, conversa, ecrã preto, imagem desfocada ou cortada), responde graficoVisivel false, decisao AGUARDAR, confianca 0 e deixa ativo, timeframe, precoAtual, entrada, stop e alvos a null.
+- Uma captura do ecrã de uma corretora (Pocket Option, Quotex, IQ Option, MetaTrader, Binance…) com o gráfico conta como gráfico, mesmo com saldo, botões, menus, foto de perfil ou imagem de fundo à volta.
+- Se não houver gráfico de preços (só uma foto de pessoa, documento, menu, conversa, ecrã preto, ou imagem tão desfocada ou cortada que não se vêem as velas), responde graficoVisivel false, decisao AGUARDAR, confianca 0 e deixa ativo, timeframe, precoAtual, entrada, stop e alvos a null.
 - Nesse caso usa o resumo para dizer em poucas palavras o que vês e pede para mostrar o gráfico inteiro.
 - Só lês valores que consegues ver na imagem; se um valor não estiver legível, usa null.
 
@@ -32,7 +33,8 @@ As IAs podem enganar-se. Por isso o servidor confirma a resposta antes de a most
 - Se a IA disser que vê um gráfico mas não ler nada dele (por exemplo a foto de um gato), não conta como gráfico.
 - Sem gráfico, a resposta é sempre AGUARDAR com confiança 0, sem entrada, stop nem alvos, e sem misturar dados do mercado ao vivo.
 - A FOTO mostra "Isto não parece um gráfico de preços" e explica como tirar a foto.
-- A corretora (web e bolha do Android) mostra **SEM GRÁFICO**. Nunca fica a mostrar a última decisão de compra ou venda.
+- A corretora (web e bolha do Android) mostra **SEM GRÁFICO** e o que a IA diz ver. Nunca fica a mostrar a última decisão de compra ou venda.
+- A bolha do Android pede a partilha do ecrã inteiro. Se a captura chegar vazia (toda da mesma cor), mostra **SEM IMAGEM** e não gasta uma análise.
 
 **Imagem fraca:** um gráfico desfocado ou cortado (`qualidadeImagem: "fraca"`) é lido, mas a decisão fica AGUARDAR.
 

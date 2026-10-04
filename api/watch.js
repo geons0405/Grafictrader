@@ -17,7 +17,8 @@ Decide a orientação para a próxima fase:
 - "COMPRAR" se a estrutura e o momentum favorecem subida;
 - "VENDER" se favorecem descida;
 - "AGUARDAR" se está lateral, confuso, sem confirmação, ou se não há um gráfico visível.
-Se a imagem não mostrar um gráfico de preços (outro ecrã, menu, imagem tremida), indica graficoVisivel false.
+O ecrã de uma corretora (Pocket Option, Quotex, IQ Option, MetaTrader…) tem o gráfico rodeado de saldo, botões, menus e foto de perfil: isso é um gráfico visível.
+Só indica graficoVisivel false se não houver velas, barras nem linha de preço (outra app, menu sem gráfico, ecrã preto, imagem tão tremida que não se vêem as velas).
 ${rulesBlock({ chart: true })}
 {CONTINUITY}
 Responde em português de Angola.
@@ -91,6 +92,10 @@ export default async function handler(req, res) {
   }
 
   const chartVisible = isChartVisible(vision.raw);
+  if (!chartVisible) {
+    // No image or key in the log: just enough to tell a model misread from an empty capture.
+    console.info('[watch] sem gráfico', vision.provider, JSON.stringify({ flag: vision.raw?.graficoVisivel ?? null, summary: String(vision.raw?.resumo || '').slice(0, 160) }));
+  }
   const normalized = chartVisible ? guardImageQuality(normalizeVision(vision.raw)) : noChartVision(vision.raw);
   const symbol = chartVisible ? mapAsset(normalized.asset) : null;
   const interval = mapTimeframe(normalized.timeframe) || '5m';

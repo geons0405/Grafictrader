@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.projection.MediaProjectionConfig;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
@@ -82,7 +83,12 @@ public class GrafictraderNativePlugin extends Plugin {
             ActivityCompat.requestPermissions(getActivity(), new String[] {Manifest.permission.POST_NOTIFICATIONS}, 41);
         }
         MediaProjectionManager manager = (MediaProjectionManager) getContext().getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-        startActivityForResult(call, manager.createScreenCaptureIntent(), "onProjection");
+        // The bubble reads whatever app is in front, so ask for the whole screen:
+        // sharing a single app sends empty frames once the user switches to the broker.
+        Intent capture = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                ? manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
+                : manager.createScreenCaptureIntent();
+        startActivityForResult(call, capture, "onProjection");
     }
 
     @ActivityCallback
