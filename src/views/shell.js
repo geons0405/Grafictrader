@@ -388,7 +388,13 @@ export const shellTemplate = `
     </header>
     <article class="card profile-card">
       <span class="avatar" data-user-initial>G</span>
-      <div><b data-user-name>—</b><small data-user-email>—</small></div>
+      <div><b data-user-name>—</b><small data-user-email>—</small><small data-user-since hidden></small></div>
+    </article>
+    <article class="card apk-card" id="apkCard">
+      <header class="card-head"><b>App Android</b><small>grátis · APK</small></header>
+      <p class="reading-summary">Instala o Grafictrader no telemóvel para a IA analisar a tua corretora com uma bolha por cima dela.</p>
+      <a class="btn btn-primary" href="https://github.com/geons0405/Grafictrader/releases/download/android-latest/Grafictrader.apk" rel="noopener"><i data-lucide="smartphone"></i>Descarregar a app Android</a>
+      <p class="fine-print left">Depois de descarregar, abre o ficheiro Grafictrader.apk e permite instalar apps desta fonte quando o Android pedir.</p>
     </article>
     <article class="card">
       <header class="card-head"><b>Aparência</b></header>
@@ -398,12 +404,13 @@ export const shellTemplate = `
       <header class="card-head"><b>MetaTrader 5</b><small id="mt5Status">—</small></header>
       <p class="reading-summary">Liga o teu MT5 para veres no app exatamente o mesmo gráfico da tua corretora, com a IA a analisar os mesmos preços.</p>
       <ol class="mt5-steps">
-        <li><a href="/bridge/GrafictraderBridge.mq5" download>Descarrega o EA GrafictraderBridge</a> e copia-o para MQL5 &gt; Experts. Compila no MetaEditor (F7).</li>
+        <li>No computador, <a href="/bridge/GrafictraderBridge.mq5" download>descarrega o EA GrafictraderBridge</a> (ficheiro para o MetaTrader 5, não é a app do telemóvel) e copia-o para MQL5 &gt; Experts. Compila no MetaEditor (F7).</li>
         <li>No MT5: Ferramentas &gt; Opções &gt; Expert Advisors &gt; ativa "Permitir WebRequest" e adiciona <code id="mt5Origin">—</code></li>
         <li>Gera a tua chave abaixo e cola-a no EA, com o URL <code id="mt5Url">—</code></li>
         <li>Arrasta o EA para o gráfico (M1, M5, M15, H1 ou H4). O EA só lê preços, não abre ordens.</li>
       </ol>
       <div class="mt5-key" id="mt5KeyBox" hidden><code id="mt5Key"></code><button class="btn btn-soft btn-sm" type="button" id="mt5Copy">Copiar</button></div>
+      <p class="fine-print left" id="mt5KeyHint" hidden>Esta chave é só tua: não a partilhes nem a mostres em capturas de ecrã. Se alguém a vir, gera uma nova (a anterior deixa de funcionar).</p>
       <button class="btn btn-primary" type="button" id="mt5Generate">Gerar chave de ligação</button>
       <div class="mt5-symbols" id="mt5Symbols"></div>
     </article>

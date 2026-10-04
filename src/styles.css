@@ -1570,3 +1570,11 @@ body.stage-open .tabbar { display: none; }
   .camera-card.expanded,
   .watch-card.expanded { padding: 24px; }
 }
+
+/* Profile: APK download, member since, URLs that never break mid-word */
+.profile-card [data-user-since] { color: var(--muted); font-size: 11.5px; }
+.apk-card { display: grid; gap: 12px; }
+.apk-card .card-head { margin-bottom: 0; }
+.apk-card .fine-print.left { margin-top: 0; }
+.mt5-steps code { display: inline-block; max-width: 100%; overflow-x: auto; white-space: nowrap; word-break: normal; vertical-align: bottom; scrollbar-width: none; }
+.mt5-steps code::-webkit-scrollbar { display: none; }

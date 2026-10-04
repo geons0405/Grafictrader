@@ -44,6 +44,13 @@ function renderUser() {
   $$('[data-user-initial]').forEach(el => { el.textContent = name.charAt(0).toUpperCase(); });
   $$('[data-user-email]').forEach(el => { el.textContent = user?.email || 'Perfil guardado neste dispositivo'; });
   $$('[data-session-mode]').forEach(el => { el.textContent = sessionMode() === 'server' ? 'Conta no servidor' : 'Modo local'; });
+  const since = user?.createdAt ? new Date(user.createdAt) : null;
+  $$('[data-user-since]').forEach(el => {
+    el.textContent = since && !Number.isNaN(since.getTime())
+      ? 'Membro desde ' + since.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' })
+      : '';
+    el.hidden = !el.textContent;
+  });
 }
 
 function renderAuthMode() {
