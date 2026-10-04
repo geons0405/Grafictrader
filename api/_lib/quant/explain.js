@@ -67,6 +67,25 @@ function addContext(lines, dir, ctx) {
   }
 }
 
+/** Describes what the chart really shows when the statistics find no edge. */
+function whyNoise(snap) {
+  const lines = [];
+  const z = snap?.kalmanZ;
+  const move = snap?.movePct;
+  if (Number.isFinite(z) && Math.abs(z) >= 2 && Number.isFinite(move) && Math.abs(move) >= 0.15) {
+    lines.push(z > 0
+      ? `O preço vem a subir com força (${move >= 0 ? '+' : ''}${move.toFixed(2)}% nas últimas 60 velas), por isso o gráfico parece ter direção.`
+      : `O preço vem a descer com força (${move.toFixed(2)}% nas últimas 60 velas), por isso o gráfico parece ter direção.`);
+  }
+  if (Number.isFinite(snap?.rangeHigh) && Number.isFinite(snap?.rangeLow) && snap.rangeHigh > snap.rangeLow) {
+    lines.push(`Mas nas últimas 20 velas anda aos saltos entre ${money(snap.rangeLow)} e ${money(snap.rangeHigh)}, com velas grandes para os dois lados.`);
+  }
+  lines.push(lines.length
+    ? 'Os cálculos não encontram "memória" neste movimento: subidas e descidas assim desfazem-se tão depressa como aparecem, e quem entra no meio é apanhado num desses saltos.'
+    : 'O preço está aos saltos, sem uma direção clara. Os cálculos não encontram vantagem em entrar agora.');
+  return lines;
+}
+
 function whyWait(snap, ctx, decision) {
   const lines = [];
   const risk = ctx?.eventRisk;
@@ -80,7 +99,7 @@ function whyWait(snap, ctx, decision) {
       lines.push('O mercado está muito agitado agora: as velas estão bem maiores do que o normal. Entrar assim é arriscar muito para nada.');
       break;
     case 'noise':
-      lines.push('O preço está aos saltos, sem uma direção clara. Os cálculos dizem que agora é quase como atirar uma moeda ao ar: não há vantagem nenhuma em entrar.');
+      lines.push(...whyNoise(snap));
       break;
     case 'trend':
       lines.push('Existe tendência, mas os sinais ainda não estão todos alinhados (força do movimento, volume e preço médio). Melhor esperar confirmação do que entrar cedo demais.');
@@ -113,17 +132,23 @@ export function explainPlain({ decision, snapshot, context, plan }) {
   const tone = dir > 0 ? 'up' : dir < 0 ? 'down' : 'wait';
 
   if (!dir) {
+    // In a choppy market, say where the box is so the person knows what to wait for.
+    const box = !context?.eventRisk?.blocked && snapshot?.regime === 'noise'
+      && Number.isFinite(snapshot?.rangeHigh) && Number.isFinite(snapshot?.rangeLow) && snapshot.rangeHigh > snapshot.rangeLow;
     return {
       action: label,
       tone,
-      headline: context?.eventRisk?.blocked ? 'Não operes agora: notícia forte a sair' : 'Agora não é hora de entrar',
+      headline: context?.eventRisk?.blocked ? 'Não operes agora: notícia forte a sair' : box ? 'Preço aos saltos: espera que saia da zona' : 'Agora não é hora de entrar',
       why: whyWait(snapshot, context, decision),
       steps: [
         'Não abras nenhuma operação neste momento.',
+        box ? `Fica atento aos limites: ${money(snapshot.rangeHigh)} em cima e ${money(snapshot.rangeLow)} em baixo. Só um fecho fora desta zona mostra uma direção, e mesmo aí espera pela confirmação da IA aqui.` : null,
         'Se já tens uma operação aberta, mantém o teu stop loss e não o afastes.',
         'A IA continua a analisar vela a vela; quando houver uma entrada boa, aparece aqui.'
-      ],
-      now: 'Fica de fora e espera pelo próximo sinal.'
+      ].filter(Boolean),
+      now: box
+        ? `Fica de fora enquanto o preço andar entre ${money(snapshot.rangeLow)} e ${money(snapshot.rangeHigh)}.`
+        : 'Fica de fora e espera pelo próximo sinal.'
     };
   }
 

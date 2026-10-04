@@ -1,4 +1,5 @@
 import { $, api, escapeHtml, fmtTime } from '../lib/dom.js';
+import { Capacitor } from '@capacitor/core';
 import { sessionMode } from '../lib/session.js';
 
 async function loadStatus() {
@@ -23,6 +24,8 @@ async function loadStatus() {
 }
 
 export function initProfile() {
+  // Already inside the Android app: no need to offer the download.
+  $('#apkCard').hidden = Capacitor.isNativePlatform();
   $('#mt5Generate').onclick = async () => {
     const button = $('#mt5Generate');
     button.disabled = true;
@@ -30,6 +33,7 @@ export function initProfile() {
       const { key } = await api('/api/auth?action=mt5key', { method: 'POST' });
       $('#mt5Key').textContent = key;
       $('#mt5KeyBox').hidden = false;
+      $('#mt5KeyHint').hidden = false;
       button.textContent = 'Gerar nova chave (a anterior deixa de funcionar)';
     } catch (error) {
       $('#mt5Status').textContent = error.message;

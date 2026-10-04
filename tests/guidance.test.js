@@ -59,3 +59,19 @@ test('photo guidance explains divergence and unsupported assets', () => {
   assert.equal(g.action, 'COMPRAR');
   assert.ok(g.steps[1].includes('1.0820'));
 });
+
+test('a choppy market explains the real move and the box to watch, not a coin toss', async () => {
+  const { explainPlain } = await import('../api/_lib/quant/explain.js');
+  const g = explainPlain({
+    decision: { direction: 0, reasons: [] },
+    snapshot: { regime: 'noise', kalmanZ: 2.96, movePct: 0.66, rangeHigh: 86066.22, rangeLow: 85778.78 },
+    context: null,
+    plan: null
+  });
+  assert.equal(g.action, 'NÃO OPERAR');
+  const text = [g.headline, g.now, ...g.why, ...g.steps].join(' ');
+  assert.match(text, /a subir com força/);
+  assert.match(text, /\$85,778\.78/);
+  assert.match(text, /\$86,066\.22/);
+  assert.doesNotMatch(text, /moeda ao ar/);
+});

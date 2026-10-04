@@ -33,7 +33,7 @@ const userKey = email => 'grafictrader:user:' + email;
 const sessionKey = token => 'grafictrader:session:' + createHash('sha256').update(token).digest('hex');
 
 export function publicUser(user) {
-  return user ? { name: user.name, email: user.email } : null;
+  return user ? { name: user.name, email: user.email, createdAt: user.createdAt || null } : null;
 }
 
 export async function findUser(email) {
