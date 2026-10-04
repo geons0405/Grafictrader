@@ -132,13 +132,37 @@ Na Vercel, cada variável tem de estar ativa em **Production** (e Preview), com 
 
 | Variável | Para quê |
 | --- | --- |
-| `UNOROUTER_API_KEY` | IA principal (FOTO, Minha corretora, bolha Android). Opcional: `UNOROUTER_MODEL` para escolher o modelo |
-| `GEMINI_API_KEY` | IA de reserva, se o UnoRouter falhar |
+| `GROQ_API_KEY` | IA principal: lê gráficos (qwen3.8-27b) e é a juíza do conselho (gpt-oss-120b) |
+| `NVIDIA_API_KEY`, `GEMINI_API_KEY`, `UNOROUTER_API_KEY` | IAs de reserva, usadas por ordem quando a anterior falha ou atinge o limite |
+| `AI_VISION_MODELS`, `AI_JUDGE_MODELS` | Opcionais: `provedor:modelo,...` para pôr modelos à frente (ex.: `nvidia:meta/llama-3.2-90b-vision-instruct`) |
 | `KV_REST_API_URL` | `https://grafictrader-dados.floot.app/_api/kv` |
 | `KV_REST_API_TOKEN` | O mesmo token guardado no Floot (`GRAFICTRADER_KV_TOKEN`) |
 | `OPENAI_API_KEY`, `TWELVE_DATA_API_KEY`, `MARKETAUX_API_KEY`, `FINNHUB_API_KEY` | Opcionais |
 
 Estado dos serviços: `GET /api/health` (o que está configurado) e `GET /api/health?probe=1` (faz uma chamada real a cada serviço; limitado a 5 por 10 minutos).
+
+### Conselho de analistas e juíza IA
+
+`GET /api/instructor?council=1&symbol=BTCUSDT&interval=5m` (separador **Conselho** no LIVE › Mercado):
+
+| Analista | O que calcula |
+| --- | --- |
+| Noticiário | Tom das manchetes das últimas 12 h (mais peso às recentes) |
+| Matemático | MACD, ROC 10/30, RSI, inclinação da EMA 20 |
+| Estatístico | Regime: Hurst, razão de variância, entropia, VWAP z, Kalman |
+| Comportamental | Medo e Ganância (contrário nos extremos), fluxo agressor, livro, VPIN |
+| Tendencial | EMA 20/50 no tempo gráfico e em dois superiores |
+| Algorítmico | Sinal do motor quant, pesado pelo historial de acertos |
+| Macro e risco | Apetite ao risco global; notícia de alto impacto veta qualquer entrada |
+
+O consenso ponderado e os motivos vão para a juíza IA, que dá o veredito final. O código mantém as regras duras: com veto a decisão é AGUARDAR, e a juíza não pode inverter um consenso forte. Sem IA, decide o consenso numérico.
+
+### Escolha dos modelos (teste de 4/10/2026)
+
+`/api/health?compare=provedor:modelo,...&chart=up|down|side` e `&task=reasoning`:
+
+- Gráficos (alta, queda, lateral): Groq qwen3.8-27b acertou os três em menos de 1 s; NVIDIA Llama 3.2 Vision 90B e Gemini 3.8 Flash também acertaram, mais lentos ou muitas vezes ocupados.
+- Raciocínio (subida forte com notícia forte daqui a 10 min → AGUARDAR): Groq gpt-oss-120b e qwen3.8-27b acertaram em 0,5 s; os modelos grandes da NVIDIA estavam sobrecarregados.
 
 ### Notícias em tempo real sem chave
 
