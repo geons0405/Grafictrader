@@ -79,5 +79,15 @@ export default async function handler(req, res) {
   body.services = { database, vision, unorouter, gemini, twelveData, marketaux, rss, yahoo };
   body.ok = Object.values(body.services).every(s => s.ok);
   body.unorouterModels = unorouterModels;
+
+  // ?compare=modelA,modelB: same chart to each UnoRouter model, to pick the most accurate.
+  const compare = String(req.query?.compare || '').split(',').map(m => m.trim()).filter(Boolean).slice(0, 6);
+  if (unoKey && compare.length) {
+    const prompt = 'Este é um gráfico de velas. Responde APENAS com JSON: {"tendencia": "alta" | "baixa" | "lateral"}';
+    body.compare = Object.fromEntries(await Promise.all(compare.map(async model => [model, await check(async () => {
+      const { text } = await chatUnoRouter(unoKey, [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: PROBE_IMAGE } }], { models: [model], maxTokens: 1000 });
+      return String(text).replace(/\s+/g, ' ').slice(0, 120);
+    })])));
+  }
   return res.status(200).json(body);
 }

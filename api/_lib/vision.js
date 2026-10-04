@@ -99,10 +99,10 @@ const isModelError = error => [402, 404, 429, 503].includes(error?.status)
   || /balance|credit|billing|quota/i.test(error?.message || '');
 
 /** Chat completion through UnoRouter, trying the next model when one is unavailable. */
-export async function chatUnoRouter(key, content, { maxTokens = 1800, temperature = 0.2, accept = () => true } = {}) {
+export async function chatUnoRouter(key, content, { maxTokens = 1800, temperature = 0.2, accept = () => true, models } = {}) {
   const base = (process.env.UNOROUTER_BASE_URL || UNOROUTER_BASE).replace(/\/$/, '');
   let lastError = null;
-  for (const model of unoRouterModels()) {
+  for (const model of models || unoRouterModels()) {
     try {
       const result = await postJson(`${base}/chat/completions`, { Authorization: `Bearer ${key}` }, {
         model,
