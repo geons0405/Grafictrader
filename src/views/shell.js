@@ -441,6 +441,18 @@ export const shellTemplate = `
     </div>
   </div>
 
+  <!-- CAPTURE NOTICE (Terms, section 13) -->
+  <div class="gate-backdrop" id="captureConsent" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="captureTitle">
+      <div class="sheet-grip"></div>
+      <header class="card-head"><b id="captureTitle">Antes de ligar</b></header>
+      <dl class="consent-list" id="captureList"></dl>
+      <a class="btn btn-ghost" href="/termos.html#t13" target="_blank" rel="noopener"><i data-lucide="file-text"></i>Ler a secção 13 dos Termos</a>
+      <button class="btn btn-primary" type="button" id="captureOk">Concordo, ligar</button>
+      <button class="btn btn-soft" type="button" id="captureCancel">Agora não</button>
+    </div>
+  </div>
+
   <!-- TERMS GATE (cannot be dismissed: accept or sign out) -->
   <div class="gate-backdrop" id="termsGate" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="termsGateTitle">

@@ -62,12 +62,16 @@ test('server, app and terms page share one terms version', () => {
 
 test('terms page states that the app only assists and the user owns every decision and result', () => {
   const text = page.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
-  assert.match(text, /servem apenas para auxiliar/);
-  assert.match(text, /é da tua extrema e exclusiva responsabilidade/);
-  assert.match(text, /sejam negativos ou positivos, são da tua exclusiva responsabilidade/);
+  assert.match(text, /servem apenas para auxiliar na operação/);
+  assert.match(text, /e de as pôr em prática, é da exclusiva responsabilidade do Utilizador/);
+  assert.match(text, /sejam positivos ou negativos, são da exclusiva responsabilidade do Utilizador/);
   assert.match(text, /Não é aconselhamento financeiro/);
   assert.match(text, /18 anos ou mais/);
-  for (let i = 1; i <= 24; i++) assert.ok(page.includes(`id="t${i}"`), `missing section ${i}`);
+  // Consumer rights stay protected: the limits never cover what the law does not allow.
+  assert.match(text, /não se aplicam a danos causados com dolo ou negligência grave/);
+  assert.match(text, /não priva o consumidor/);
+  assert.match(text, /14 dias/);
+  for (let i = 1; i <= 30; i++) assert.ok(page.includes(`id="t${i}"`), `missing section ${i}`);
 });
 
 test('an account can only be created after accepting the terms', async () => {
@@ -102,4 +106,15 @@ test('an older account must accept the current terms before using the analyses',
 
   const anonymous = await call(auth, { method: 'POST', query: { action: 'terms' }, body: { accept: true } });
   assert.equal(anonymous.status, 401);
+});
+
+test('capture notices cover every point section 13 of the terms promises', async () => {
+  const { CAPTURE_NOTICES } = await import('../src/lib/consent.js');
+  for (const [kind, notice] of Object.entries(CAPTURE_NOTICES)) {
+    const terms = notice.items.map(([term]) => term).join(' | ');
+    for (const point of ['O que é captado', 'Durante quanto tempo', 'Para quê', 'Para onde vai', 'O que guardamos', 'Como parar']) {
+      assert.ok(terms.includes(point), `${kind}: missing "${point}"`);
+    }
+  }
+  assert.match(CAPTURE_NOTICES.bubble.items[0][1], /ECRÃ INTEIRO/);
 });

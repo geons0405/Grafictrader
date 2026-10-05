@@ -1,5 +1,6 @@
 import { $, $$, api, escapeHtml, fmtTime } from '../lib/dom.js';
 import { renderIcons } from '../lib/icons.js';
+import { confirmCapture } from '../lib/consent.js';
 import { frameSignature, frameDiff, shouldSend, createStabilizer } from '../lib/watch-core.js';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
@@ -351,6 +352,7 @@ function initNative() {
   $('#watchShare').hidden = true;
   $('#watchShareHint').hidden = true;
   $('#watchNative').onclick = async () => {
+    if (!(await confirmCapture('bubble'))) return;
     try {
       await Native.startWatch({ serverUrl: location.origin, voice: prefs.voice });
       await begin(null, 'native');
@@ -381,6 +383,7 @@ export function initWatch() {
   $('#watchPip').hidden = !('documentPictureInPicture' in window);
 
   $('#watchShare').onclick = async () => {
+    if (!(await confirmCapture('screen'))) return;
     try {
       const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 5 }, audio: false });
       await begin(s, 'screen');
@@ -389,6 +392,7 @@ export function initWatch() {
     }
   };
   $('#watchCamera').onclick = async () => {
+    if (!(await confirmCapture('camera'))) return;
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } }, audio: false });
       await begin(s, 'camera');

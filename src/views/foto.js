@@ -1,6 +1,7 @@
 import { $, api, escapeHtml, fmtPrice, pairLabel } from '../lib/dom.js';
 import { market } from '../lib/store.js';
 import { renderIcons } from '../lib/icons.js';
+import { confirmCapture } from '../lib/consent.js';
 
 const MAX_SIDE = 1600;
 
@@ -154,6 +155,7 @@ function stopCamera() {
 
 export function initFoto() {
   $('#startCam').onclick = async () => {
+    if (!(await confirmCapture('camera'))) return;
     try {
       stopCamera();
       const request = cameraRequest;
