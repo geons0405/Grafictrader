@@ -312,12 +312,8 @@ public class WatchService extends Service {
      * so moving or updating the bubble never counts as a chart change.
      */
     private byte[] signature(Bitmap bitmap) {
-        return signature(bitmap, true);
-    }
-
-    private byte[] signature(Bitmap bitmap, boolean maskBubble) {
         Bubble current = bubble;
-        Rect mask = current == null || !maskBubble ? null : current.bounds();
+        Rect mask = current == null ? null : current.bounds();
         Bitmap source = bitmap;
         if (mask != null) {
             if (!source.isMutable()) source = bitmap.copy(Bitmap.Config.ARGB_8888, true);
@@ -356,16 +352,21 @@ public class WatchService extends Service {
         return (double) sum / a.length;
     }
 
-    /** A uniform frame (all black, for example) has nothing for the AI to read. */
+    /**
+     * A uniform frame (all black, for example) has nothing for the AI to read.
+     * Pure black pixels are skipped: that is how the bubble's area is masked,
+     * so the bubble never makes an empty frame look busy.
+     */
     private static boolean blank(byte[] sig) {
         int min = 255;
         int max = 0;
         for (byte b : sig) {
             int v = b & 0xFF;
+            if (v == 0) continue;
             if (v < min) min = v;
             if (v > max) max = v;
         }
-        return max - min < 12;
+        return max == 0 || max - min < 12;
     }
 
     private void showBlank() {
@@ -401,8 +402,7 @@ public class WatchService extends Service {
         Bitmap bitmap = latestBitmap();
         if (bitmap == null) return;
         byte[] sig = signature(bitmap);
-        // Uniformity is judged on the frame as captured: the black bubble mask would add false contrast.
-        boolean empty = blank(signature(bitmap, false));
+        boolean empty = blank(sig);
         bitmap.recycle();
         if (empty) {
             // Don't spend an analysis on an empty frame; send the next real one at once.
@@ -551,13 +551,9 @@ public class WatchService extends Service {
         String decision = verdict == null ? "AGUARDAR" : verdict.optString("decision", "AGUARDAR");
         // Only an explicit "true" from the server counts as a chart.
         boolean chartVisible = data.optBoolean("chartVisible", false);
-        JSONObject vision = data.optJSONObject("vision");
-        String context = null;
-        if (chartVisible && vision != null) {
-            String asset = vision.isNull("asset") ? "" : vision.optString("asset", "");
-            String timeframe = vision.isNull("timeframe") ? "" : vision.optString("timeframe", "");
-            if (!asset.isEmpty() || !timeframe.isEmpty()) context = asset + "|" + timeframe;
-        }
+        // The server names the market in one stable spelling; null when asset or timeframe is missing.
+        String context = chartVisible && !data.isNull("market") ? data.optString("market", "") : "";
+        if (context.isEmpty()) context = null;
         Stabilizer.Step step = stabilizer.push(decision, chartVisible, context);
         // A different market: the previous one's levels must not come back.
         if (step.contextChanged) lastByDecision.clear();

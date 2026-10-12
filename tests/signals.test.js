@@ -25,7 +25,7 @@ process.env.KV_REST_API_URL = 'http://kv.test';
 process.env.KV_REST_API_TOKEN = 'x';
 
 const { judgeSignal, recordSignal, verifySignals, recentSignals, signalStats } = await import('../api/_lib/signals.js');
-const { default: signalsApi } = await import('../api/signals.js');
+const { default: instructorApi } = await import('../api/instructor.js');
 
 const bar = (time, open, high, low, close) => ({ time, open, high, low, close });
 
@@ -56,9 +56,17 @@ test('the live watch records one signal per market and candle, then settles it',
 test('the public track record lists results without any user data', async () => {
   const result = await new Promise(resolve => {
     const res = { headers: {}, setHeader(k, v) { this.headers[k] = v; }, status(c) { this.code = c; return this; }, json(b) { resolve({ status: this.code, body: b }); return this; } };
-    signalsApi({ method: 'GET', headers: { 'x-forwarded-for': '1.1.1.1' }, query: {} }, res);
+    instructorApi({ method: 'GET', headers: { 'x-forwarded-for': '1.1.1.1' }, query: { signals: '1' } }, res);
   });
   assert.equal(result.status, 200);
   assert.ok(result.body.stats.total);
   assert.deepEqual(Object.keys(result.body.recent[0]).sort(), ['at', 'entry', 'interval', 'outcome', 'r', 'side', 'source', 'symbol']);
+});
+
+test('signals recorded at the same time are all kept', async () => {
+  const at = Math.floor(Date.now() / 1000) - 7200;
+  const symbols = ['ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'ADAUSDT'];
+  await Promise.all(symbols.map(symbol => recordSignal({ source: 'foto', symbol, interval: '1h', side: 1, price: 10, atr: 1, at })));
+  const kept = (await recentSignals(1)).filter(s => s.at === at && s.source === 'foto');
+  assert.equal(kept.length, symbols.length);
 });

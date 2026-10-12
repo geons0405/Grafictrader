@@ -122,8 +122,8 @@ test('a pause blocks the AI analyses until it ends and cannot be shortened', asy
 });
 
 test('the trading journal keeps the user own trades and compares following the app with not', async () => {
-  const { default: journal } = await import('../api/journal.js');
   const cookie = await register('ivo@acc.test');
+  const journal = (req, res) => auth({ ...req, query: { action: 'journal', ...req.query } }, res);
   const post = body => call(journal, { body, headers: { cookie, 'content-type': 'application/json' } });
   assert.equal((await post({ asset: '', side: 'BUY', amount: 10, result: 5 })).status, 400);
   assert.equal((await post({ asset: 'BTC', side: 'BUY', amount: '', result: '' })).status, 400, 'blank is not a break-even trade');
@@ -152,4 +152,15 @@ test('sign out everywhere also ends sessions that were never indexed', async () 
   assert.equal(await signedIn(legacyCookie), false);
   const again = cookieOf(await call(auth, { query: { action: 'login' }, body: { email: 'old@acc.test', password: 'segredo123' } }));
   assert.ok(await signedIn(again), 'a new login after that works');
+});
+
+test('knowing an email is not enough to lock its owner out of login', async () => {
+  await register('lia@acc.test');
+  for (let i = 0; i < 12; i++) {
+    await call(auth, { query: { action: 'login' }, body: { email: 'lia@acc.test', password: 'errada' + i }, headers: { 'x-forwarded-for': '9.9.9.9' } });
+  }
+  const attacker = await call(auth, { query: { action: 'login' }, body: { email: 'lia@acc.test', password: 'outra' }, headers: { 'x-forwarded-for': '9.9.9.9' } });
+  assert.equal(attacker.status, 429, 'the guessing IP is stopped');
+  const owner = await call(auth, { query: { action: 'login' }, body: { email: 'lia@acc.test', password: 'segredo123' }, headers: { 'x-forwarded-for': '8.8.8.8' } });
+  assert.equal(owner.status, 200, 'the owner still signs in from elsewhere');
 });

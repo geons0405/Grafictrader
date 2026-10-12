@@ -32,12 +32,12 @@
   ],
   "crons": [
     {
-      "path": "/api/cron",
+      "path": "/api/instructor?cron=1",
       "schedule": "15 3 * * *"
     }
   ],
   "functions": {
-    "api/cron.js": {
+    "api/instructor.js": {
       "maxDuration": 60
     }
   }

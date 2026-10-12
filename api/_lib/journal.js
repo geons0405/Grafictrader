@@ -1,13 +1,14 @@
-import { redis, redisConfigured } from './_lib/redis.js';
-import { getSessionUser } from './_lib/auth.js';
-import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
-import { crossSite } from './_lib/validate.js';
+import { redis, redisConfigured } from './redis.js';
+import { getSessionUser } from './auth.js';
+import { rateLimit, sendRateLimited } from './rate-limit.js';
+import { crossSite } from './validate.js';
 import { randomBytes } from 'node:crypto';
 
 // Trading journal: the user's own trades, to see what really works for them.
-//  GET    /api/journal            → entries, newest first, and totals
-//  POST   /api/journal            → { date, asset, side, amount, result, followedApp, note }
-//  DELETE /api/journal?id=…
+// Served by /api/auth?action=journal (Vercel Hobby allows 12 functions):
+//  GET    /api/auth?action=journal          → entries, newest first, and totals
+//  POST   /api/auth?action=journal          → { date, asset, side, amount, result, followedApp, note }
+//  DELETE /api/auth?action=journal&id=…
 const MAX_ENTRIES = 500;
 const key = email => 'grafictrader:journal:' + email;
 
@@ -54,7 +55,7 @@ export function journalTotals(entries) {
   return { all: group(entries), followedApp: group(entries.filter(e => e.followedApp)), ownCall: group(entries.filter(e => !e.followedApp)) };
 }
 
-export default async function handler(req, res) {
+export async function journalHandler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (!redisConfigured()) return res.status(503).json({ ok: false, setupRequired: true, error: 'O diário precisa das contas no servidor.' });
   if (req.method !== 'GET' && crossSite(req)) return res.status(403).json({ ok: false, error: 'Pedido recusado.' });

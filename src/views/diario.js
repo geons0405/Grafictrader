@@ -42,7 +42,7 @@ async function loadJournal() {
   if (sessionMode() !== 'server') return;
   // Never keep showing a previous account's trades while loading (or if loading fails).
   renderJournal();
-  try { renderJournal(await api('/api/journal')); } catch { /* shown empty */ }
+  try { renderJournal(await api('/api/auth?action=journal')); } catch { /* shown empty */ }
 }
 
 export function initDiario() {
@@ -62,7 +62,7 @@ export function initDiario() {
       return;
     }
     try {
-      renderJournal(await api('/api/journal', { method: 'POST', body: { ...data, followedApp: Boolean(data.followedApp), date: new Date().toISOString() } }));
+      renderJournal(await api('/api/auth?action=journal', { method: 'POST', body: { ...data, followedApp: Boolean(data.followedApp), date: new Date().toISOString() } }));
       form.reset();
     } catch (error) {
       form.querySelector('.form-message').textContent = error.message;
@@ -71,7 +71,7 @@ export function initDiario() {
   $('#journalList').addEventListener('click', async event => {
     const id = event.target.closest('[data-delete-entry]')?.dataset.deleteEntry;
     if (!id || !confirm('Apagar esta operação do diário?')) return;
-    try { renderJournal(await api('/api/journal?id=' + encodeURIComponent(id), { method: 'DELETE' })); } catch { /* keep list */ }
+    try { renderJournal(await api('/api/auth?action=journal&id=' + encodeURIComponent(id), { method: 'DELETE' })); } catch { /* keep list */ }
   });
 }
 

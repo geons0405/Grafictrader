@@ -472,7 +472,7 @@ const SOURCE_NAMES = { foto: 'FOTO', corretora: 'Minha corretora' };
 
 async function loadSignals() {
   try {
-    const data = await api('/api/signals');
+    const data = await api('/api/instructor?signals=1');
     if (!data.available) {
       $('#sigStats').innerHTML = '<p class="term-note">O histórico precisa da base de dados do servidor.</p>';
       return;

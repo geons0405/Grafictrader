@@ -79,3 +79,10 @@ test('invalid images are rejected', async () => {
 });
 
 test.after(() => { globalThis.fetch = realFetch; });
+
+test('the market on screen has one name whatever spelling the model used', async () => {
+  const { marketKey } = await import('../api/watch.js');
+  assert.equal(marketKey({ asset: 'BTC/USDT', timeframe: 'M5' }), marketKey({ asset: 'BTCUSDT', timeframe: '5m' }));
+  assert.equal(marketKey({ asset: 'EUR/USD OTC', timeframe: 'M1' }), 'EURUSDOTC|1m');
+  assert.equal(marketKey({ asset: 'BTC/USDT', timeframe: null }), null, 'half a name never counts as a new market');
+});

@@ -68,6 +68,13 @@ function continuity(previous) {
   return parts.join(', ') + '. Só muda a decisão se o gráfico mostrar uma razão clara.';
 }
 
+/** "BTCUSDT|5m" from whatever spelling the model used; null when the asset or timeframe is missing. */
+export function marketKey(vision) {
+  const asset = mapAsset(vision.asset) || String(vision.asset || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const timeframe = mapTimeframe(vision.timeframe) || String(vision.timeframe || '').toLowerCase().replace(/\s+/g, '');
+  return asset && timeframe ? asset + '|' + timeframe : null;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
   if (crossSite(req)) return res.status(403).json({ ok: false, error: 'Pedido recusado.' });
@@ -122,6 +129,8 @@ export default async function handler(req, res) {
     provider: vision.provider,
     at: new Date().toISOString(),
     chartVisible,
+    // Stable name of the market on screen, so "BTC/USDT M5" and "BTCUSDT 5m" are the same one.
+    market: chartVisible ? marketKey(normalized) : null,
     change: chartVisible && vision.raw?.mudanca ? String(vision.raw.mudanca).slice(0, 200) : null,
     vision: normalized,
     verdict,

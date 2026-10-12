@@ -1,8 +1,8 @@
-import { verifySignals } from './_lib/signals.js';
-import { runInstructor } from './_lib/quant/service.js';
-import { SYMBOLS } from './_lib/validate.js';
+import { verifySignals } from './signals.js';
+import { runInstructor } from './quant/service.js';
+import { SYMBOLS } from './validate.js';
 
-// Daily job (vercel.json "crons"): settles the signals whose horizon has
+// Daily job, GET /api/instructor?cron=1 (vercel.json "crons"): settles the signals whose horizon has
 // passed and moves the demo robots forward, so their history has fewer holes
 // when nobody opens the app for a while. Needs CRON_SECRET: Vercel then sends
 // "Authorization: Bearer <CRON_SECRET>" on each run.
@@ -13,7 +13,7 @@ const PLAN = [
   ['1m', ['BTCUSDT', 'ETHUSDT']]
 ];
 
-export default async function handler(req, res) {
+export async function cronHandler(req, res) {
   const secret = process.env.CRON_SECRET;
   const auth = String(req.headers?.authorization || '');
   // Without CRON_SECRET the job is off: a user agent can be faked by anyone.

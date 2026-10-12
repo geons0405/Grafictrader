@@ -239,7 +239,8 @@ function handleResult(data) {
     setStatus(`Ao vivo no telemóvel · ${analyses} análise(s) · a bolha mostra a orientação por cima da corretora`);
   }
   const decision = data.verdict.decision;
-  const context = data.chartVisible ? [data.vision?.asset, data.vision?.timeframe].filter(Boolean).join('|') || null : null;
+  // Only a market named in full (asset and timeframe) can count as a different one.
+  const context = data.chartVisible ? data.market || null : null;
   const step = stabilizer.push(decision, { chartVisible: data.chartVisible, context });
   // A different market: levels and readings of the previous one must not come back.
   if (step.contextChanged) lastByDecision = {};

@@ -24,6 +24,30 @@ async function writeDay(day, list) {
   await redis(['SET', dayKey(day), JSON.stringify(list.slice(-MAX_PER_DAY)), 'EX', String(DAYS_KEPT * 86_400)]);
 }
 
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Read-modify-write of one day under a short lock, so a signal recorded while
+ * results are being saved (or two signals at once) is never lost.
+ */
+async function updateDay(day, change) {
+  const lock = dayKey(day) + ':lock';
+  const token = Math.random().toString(36).slice(2);
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if ((await redis(['SET', lock, token, 'NX', 'EX', '10'])) === 'OK') {
+      try {
+        const list = await readDay(day);
+        if (change(list) !== false) await writeDay(day, list);
+        return true;
+      } finally {
+        if ((await redis(['GET', lock])) === token) await redis(['DEL', lock]);
+      }
+    }
+    await pause(50 + Math.random() * 100);
+  }
+  return false;
+}
+
 /**
  * Records one shown signal. The same source, market and side is recorded at
  * most once per candle, so the live watch (a frame every few seconds) does
@@ -36,10 +60,8 @@ export async function recordSignal({ source, symbol, interval, side, price, atr,
     const bucket = Math.floor(at / SECONDS[interval]);
     const fresh = await redis(['SET', `grafictrader:sigseen:${source}:${symbol}:${interval}:${side}:${bucket}`, '1', 'NX', 'EX', String(SECONDS[interval] * 2)]);
     if (fresh !== 'OK') return false;
-    const day = dayOf(at);
-    const list = await readDay(day);
-    list.push({
-      id: `${Math.round(at)}-${source}-${symbol}-${interval}`,
+    const entry = {
+      id: `${Math.round(at)}-${source}-${symbol}-${interval}-${side}`,
       at: Math.round(at),
       source,
       symbol,
@@ -50,9 +72,8 @@ export async function recordSignal({ source, symbol, interval, side, price, atr,
       target: price + side * TARGET_R * STOP_ATR * atr,
       confidence,
       outcome: null
-    });
-    await writeDay(day, list);
-    return true;
+    };
+    return await updateDay(dayOf(at), list => { list.push(entry); });
   } catch {
     return false;
   }
@@ -96,7 +117,7 @@ export async function verifySignals({ maxFetches = 12, now = Date.now() / 1000 }
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(s);
     }
-    let changed = false;
+    const results = new Map();
     for (const group of groups.values()) {
       if (fetches >= maxFetches) break;
       const first = Math.min(...group.map(s => s.at));
@@ -106,14 +127,20 @@ export async function verifySignals({ maxFetches = 12, now = Date.now() / 1000 }
       const candles = await getBinanceCandles(group[0].symbol, group[0].interval, Math.min(1000, span), first).catch(() => []);
       for (const s of group) {
         const result = judgeSignal(s, candles);
-        if (result) {
-          Object.assign(s, result, { checkedAt: Math.round(now) });
-          settled += 1;
-          changed = true;
-        }
+        if (result) results.set(s.id, { ...result, checkedAt: Math.round(now) });
       }
     }
-    if (changed) await writeDay(day, list);
+    // Saved on a fresh copy of the day, under the lock: signals added meanwhile stay.
+    if (results.size) {
+      await updateDay(day, fresh => {
+        for (const s of fresh) {
+          if (!s.outcome && results.has(s.id)) {
+            Object.assign(s, results.get(s.id));
+            settled += 1;
+          }
+        }
+      });
+    }
   }
   return settled;
 }

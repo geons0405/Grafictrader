@@ -51,3 +51,9 @@ test('in production paid AI never runs without accounts', async () => {
     delete process.env.GROQ_API_KEY;
   }
 });
+
+test('the deployment stays within the 12 functions Vercel Hobby allows', async () => {
+  const { readdirSync } = await import('node:fs');
+  const functions = readdirSync(new URL('../api/', import.meta.url)).filter(f => f.endsWith('.js'));
+  assert.ok(functions.length <= 12, `${functions.length} functions: ${functions.join(', ')}`);
+});

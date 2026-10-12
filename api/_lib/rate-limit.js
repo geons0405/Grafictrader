@@ -28,6 +28,20 @@ export async function rateLimit(bucket, id, { limit, windowSeconds, failClosed =
   return { allowed: count <= limit, remaining: Math.max(0, limit - count), retryAfter };
 }
 
+/** Current count of a window without adding to it (for limits that only count failures). */
+export async function peekLimit(bucket, id, { limit, windowSeconds }) {
+  const windowId = Math.floor(Date.now() / 1000 / windowSeconds);
+  const key = `grafictrader:rl:${bucket}:${id}:${windowId}`;
+  let count = 0;
+  if (redisConfigured()) {
+    try { count = Number(await redis(['GET', key])) || 0; } catch { count = 0; }
+  } else {
+    count = memory.get(key) || 0;
+  }
+  const retryAfter = windowSeconds - (Math.floor(Date.now() / 1000) % windowSeconds);
+  return { allowed: count < limit, remaining: Math.max(0, limit - count), retryAfter };
+}
+
 export function sendRateLimited(res, result) {
   res.setHeader('Retry-After', String(result.retryAfter));
   return res.status(429).json({ ok: false, error: result.message || 'Demasiados pedidos. Tenta novamente dentro de instantes.' });
@@ -47,7 +61,7 @@ const envLimit = (name, fallback) => {
 export async function aiQuota(id) {
   const user = await rateLimit('ai-day', id, { limit: envLimit('AI_DAILY_PER_USER', 400), windowSeconds: DAY, failClosed: true });
   if (!user.allowed) return { ...user, message: 'Chegaste ao limite diário de análises por IA. Volta amanhã.' };
-  const all = await rateLimit('ai-day-global', 'all', { limit: envLimit('AI_DAILY_GLOBAL', 6000), windowSeconds: DAY, failClosed: true });
+  const all = await rateLimit('ai-day-global', 'all', { limit: envLimit('AI_DAILY_GLOBAL', 20000), windowSeconds: DAY, failClosed: true });
   if (!all.allowed) return { ...all, message: 'As análises por IA atingiram o limite de hoje. Tenta mais tarde.' };
   return user;
 }

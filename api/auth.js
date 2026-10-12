@@ -5,8 +5,9 @@ import {
   checkCredentials, changePassword, deleteAccount, destroyAllSessions,
   startPause, pausedUntil, PAUSE_DAYS
 } from './_lib/auth.js';
-import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
+import { rateLimit, sendRateLimited, peekLimit } from './_lib/rate-limit.js';
 import { clientIp, crossSite } from './_lib/validate.js';
+import { journalHandler } from './_lib/journal.js';
 
 const notConfigured = res => res.status(503).json({
   ok: false,
@@ -25,6 +26,9 @@ export default async function handler(req, res) {
       if (!user) return res.status(401).json({ ok: false, user: null });
       return res.status(200).json({ ok: true, user: { ...user, pausedUntil: await pausedUntil(user.email) } });
     }
+
+    // Trading journal (GET, POST, DELETE) lives here: Vercel Hobby allows 12 functions.
+    if (action === 'journal') return journalHandler(req, res);
 
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
     if (crossSite(req)) return res.status(403).json({ ok: false, error: 'Pedido recusado.' });
@@ -117,11 +121,20 @@ export default async function handler(req, res) {
     }
 
     if (action === 'login') {
-      // Per account too: guessing one account's password from many IPs is also limited.
-      const perAccount = await rateLimit('login', email || 'none', { limit: 10, windowSeconds: 900 });
-      if (!perAccount.allowed) return sendRateLimited(res, perAccount);
+      // Only failed passwords count, so nobody can lock a user out just by knowing the email:
+      // 10 failures per account and IP, 50 per account from everywhere (spread guessing).
+      const who = email || 'none';
+      const ip = clientIp(req);
+      const failures = { here: { limit: 10, windowSeconds: 900 }, everywhere: { limit: 50, windowSeconds: 900 } };
+      for (const check of [await peekLimit('login-fail', who + ':' + ip, failures.here), await peekLimit('login-fail-all', who, failures.everywhere)]) {
+        if (!check.allowed) return sendRateLimited(res, check);
+      }
       const user = await checkCredentials(email, password);
-      if (!user) return res.status(401).json({ ok: false, error: 'Email ou palavra-passe incorretos.' });
+      if (!user) {
+        await rateLimit('login-fail', who + ':' + ip, failures.here);
+        await rateLimit('login-fail-all', who, failures.everywhere);
+        return res.status(401).json({ ok: false, error: 'Email ou palavra-passe incorretos.' });
+      }
       setSessionCookie(res, req, await createSession(user));
       return res.status(200).json({ ok: true, user: publicUser(user) });
     }
