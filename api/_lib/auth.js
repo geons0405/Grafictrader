@@ -80,12 +80,26 @@ async function readSessionList(email) {
   try { return JSON.parse(value || '[]'); } catch { return []; }
 }
 
-export async function createSession(user) {
+/** Time (ms) of the account's last "end every session", or 0. */
+export async function revokedSince(email) {
+  return Number(await redis(['GET', revokedKey(email)])) || 0;
+}
+
+/**
+ * Starts a session for the user. `checkedAt` is when the password or session
+ * proving who the user is began to be checked, and `revokedAt` what
+ * revokedSince() said just before. A revocation since then (password changed,
+ * account deleted, "sign out everywhere") wins: no session, null returned, so
+ * a login racing with it never ends up signed in. Without them the caller has
+ * just revoked on purpose and starts afresh.
+ */
+export async function createSession(user, { checkedAt = null, revokedAt: seen } = {}) {
   const token = randomBytes(32).toString('base64url');
   const key = sessionKey(token);
-  // Always issued after the last revocation, even within the same millisecond.
-  const revokedAt = Number(await redis(['GET', revokedKey(user.email)])) || 0;
-  const issuedAt = Math.max(Date.now(), revokedAt + 1);
+  const revokedAt = await revokedSince(user.email);
+  if (checkedAt != null && (seen !== undefined ? revokedAt !== seen : revokedAt >= checkedAt)) return null;
+  // Always after the last revocation, even within the same millisecond.
+  const issuedAt = Math.max(checkedAt ?? Date.now(), revokedAt + 1);
   await redis(['SET', key, JSON.stringify({ ...publicUser(user), issuedAt }), 'EX', String(SESSION_TTL_SECONDS)]);
   // Index of the account's sessions, so "sign out everywhere" can end them all.
   const list = (await readSessionList(user.email)).filter(k => k !== key);

@@ -164,3 +164,29 @@ test('knowing an email is not enough to lock its owner out of login', async () =
   const owner = await call(auth, { query: { action: 'login' }, body: { email: 'lia@acc.test', password: 'segredo123' }, headers: { 'x-forwarded-for': '8.8.8.8' } });
   assert.equal(owner.status, 200, 'the owner still signs in from elsewhere');
 });
+
+test('a login whose password check races a password change or deletion never signs in', async () => {
+  const { createSession, revokedSince, destroyAllSessions, findUser } = await import('../api/_lib/auth.js');
+  await register('race@acc.test');
+  const user = await findUser('race@acc.test');
+
+  // The old password was checked, then the password changed before the session was written.
+  let checkedAt = Date.now();
+  let seen = await revokedSince(user.email);
+  await destroyAllSessions(user.email);
+  assert.equal(await createSession(user, { checkedAt, revokedAt: seen }), null);
+
+  // The session was written first, then the revocation landed: it is void at once.
+  await new Promise(resolve => setTimeout(resolve, 2));
+  checkedAt = Date.now();
+  seen = await revokedSince(user.email);
+  const token = await createSession(user, { checkedAt, revokedAt: seen });
+  assert.ok(token);
+  await destroyAllSessions(user.email);
+  assert.equal(await signedIn('gt_session=' + encodeURIComponent(token)), false);
+
+  // Nothing in between: the login works.
+  const ok = await call(auth, { query: { action: 'login' }, body: { email: 'race@acc.test', password: 'segredo123' } });
+  assert.equal(ok.status, 200);
+  assert.ok(await signedIn(cookieOf(ok)));
+});
