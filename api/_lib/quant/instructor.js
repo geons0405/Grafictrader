@@ -3,7 +3,10 @@ import { quantSnapshot, decide, regimeLabel } from './signal.js';
 // The AI instructor trades a simulated account candle by candle.
 // Entries happen at the close of the signal candle; exits are checked on
 // following candles against stop/target with the conservative rule that a
-// candle touching both levels counts as a stop.
+// candle touching both levels counts as a stop. A candle that opens beyond
+// the stop fills at its open (the real, worse price). Every trade pays a
+// round-trip cost (fees + spread), and a signal whose cost would eat more
+// than a quarter of the risk is not taken.
 
 export const START_BALANCE = 1000;
 export const RISK_PER_TRADE = 0.01;
@@ -14,10 +17,20 @@ const WARMUP = 200;
 const MAX_TRADES = 200;
 const MAX_LOG = 120;
 const MAX_EQUITY_POINTS = 600;
+// Round-trip trading cost as a fraction of price (0.08% ≈ futures taker fees
+// in and out plus a little spread). Override with INSTRUCTOR_COST_PCT.
+export function tradeCost() {
+  const pct = Number(process.env.INSTRUCTOR_COST_PCT);
+  return (Number.isFinite(pct) && pct >= 0 ? pct : 0.08) / 100;
+}
+const MAX_COST_R = 0.25;
+
+// Version 2 counts trading costs and gap fills; older saved accounts restart.
+export const STATE_VERSION = 2;
 
 export function emptyState(symbol, interval) {
   return {
-    version: 1,
+    version: STATE_VERSION,
     symbol,
     interval,
     balance: START_BALANCE,
@@ -43,7 +56,8 @@ function closePosition(state, candle, exitPrice, why) {
   const p = state.position;
   const risk = Math.abs(p.entry - p.initialStop);
   const move = (exitPrice - p.entry) * p.side;
-  const r = risk > 0 ? move / risk : 0;
+  const costR = risk > 0 ? (p.entry * (p.cost ?? 0)) / risk : 0;
+  const r = risk > 0 ? move / risk - costR : 0;
   const pnl = state.balance * RISK_PER_TRADE * r;
   state.balance += pnl;
   const trade = {
@@ -56,6 +70,7 @@ function closePosition(state, candle, exitPrice, why) {
     closedAt: candle.time,
     bars: p.bars,
     r: Number(r.toFixed(2)),
+    costR: Number(costR.toFixed(2)),
     pnl: Number(pnl.toFixed(2)),
     pnlPct: Number(((move / p.entry) * 100).toFixed(3)),
     outcome: r > 0.05 ? 'win' : r < -0.05 ? 'loss' : 'flat',
@@ -74,7 +89,12 @@ function manage(state, candle) {
   p.bars += 1;
   const hitStop = p.side > 0 ? candle.low <= p.stop : candle.high >= p.stop;
   const hitTarget = p.side > 0 ? candle.high >= p.target : candle.low <= p.target;
-  if (hitStop) return closePosition(state, candle, p.stop, p.stop === p.entry ? 'stop no zero' : 'stop');
+  if (hitStop) {
+    // Opened past the stop (gap): the order fills at the open, which is worse than the stop.
+    const gapped = p.side > 0 ? candle.open < p.stop : candle.open > p.stop;
+    const fill = gapped ? candle.open : p.stop;
+    return closePosition(state, candle, fill, gapped ? 'stop (salto de preço)' : p.stop === p.entry ? 'stop no zero' : 'stop');
+  }
   if (hitTarget) return closePosition(state, candle, p.target, 'alvo');
   if (p.bars >= MAX_BARS) return closePosition(state, candle, candle.close, 'tempo');
   // Move the stop to break-even once price has travelled 1R in our favour.
@@ -99,8 +119,22 @@ export function advance(state, history, { context = null } = {}) {
   if (startIndex < 0 || startIndex >= history.length) return state;
   if (state.startedAt == null) state.startedAt = history[Math.max(startIndex, 0)]?.time ?? null;
 
-  for (let i = Math.max(startIndex, WARMUP); i < history.length; i++) {
+  // Candles missing between the last run and the oldest one we have now (nobody
+  // opened the app for a long time): say so instead of hiding the hole.
+  if (state.lastTime != null && startIndex === 0 && history.length > 1) {
+    const step = history[1].time - history[0].time;
+    const missing = step > 0 ? Math.round((history[0].time - state.lastTime) / step) - 1 : 0;
+    if (missing > 0) pushLog(state, history[0].time, 'info', `Pausa: ${missing} vela(s) sem análise (sem dados desse período).`);
+  }
+
+  for (let i = startIndex; i < history.length; i++) {
     const candle = history[i];
+    // An open position is always managed, even on candles before the warm-up.
+    if (i < WARMUP) {
+      if (state.position) manage(state, candle);
+      state.lastTime = candle.time;
+      continue;
+    }
     state.cycle += 1;
     if (state.position) manage(state, candle);
 
@@ -116,11 +150,16 @@ export function advance(state, history, { context = null } = {}) {
       reasons: decision.reasons
     };
 
-    if (!state.position && decision.direction !== 0 && snap?.atr > 0) {
+    const cost = tradeCost();
+    const costR = snap?.atr > 0 ? (candle.close * cost) / (STOP_ATR * snap.atr) : Infinity;
+    if (!state.position && decision.direction !== 0 && snap?.atr > 0 && costR > MAX_COST_R) {
+      pushLog(state, candle.time, 'info', `Sinal de ${decision.direction > 0 ? 'compra' : 'venda'} ignorado: os custos comeriam ${Math.round(costR * 100)}% do risco (velas pequenas demais).`);
+    } else if (!state.position && decision.direction !== 0 && snap?.atr > 0) {
       const entry = candle.close;
       const stop = entry - decision.direction * STOP_ATR * snap.atr;
       const target = entry + decision.direction * TARGET_R * STOP_ATR * snap.atr;
       state.position = {
+        cost,
         side: decision.direction,
         entry,
         stop,
@@ -141,7 +180,7 @@ export function advance(state, history, { context = null } = {}) {
     state.lastTime = candle.time;
   }
 
-  const scanned = history.length - Math.max(startIndex, WARMUP);
+  const scanned = Math.max(0, history.length - Math.max(startIndex, WARMUP));
   if (scanned > 0) pushLog(state, state.lastTime, 'scan', `${scanned} vela(s) analisada(s) · regime ${state.lastDecision?.regimeLabel || '—'} · decisão ${state.lastDecision?.action || '—'}`);
   return state;
 }
@@ -156,6 +195,15 @@ export function summarize(state, livePrice = null) {
   const totalR = trades.reduce((s, t) => s + t.r, 0);
   const grossWin = trades.filter(t => t.pnl > 0).reduce((s, t) => s + t.pnl, 0);
   const grossLoss = -trades.filter(t => t.pnl < 0).reduce((s, t) => s + t.pnl, 0);
+  // Largest fall of the balance from a previous high, over the trades kept.
+  let running = state.balance - trades.reduce((s, t) => s + t.pnl, 0);
+  let peak = running;
+  let maxDrawdown = 0;
+  for (const t of trades) {
+    running += t.pnl;
+    peak = Math.max(peak, running);
+    if (peak > 0) maxDrawdown = Math.max(maxDrawdown, (peak - running) / peak);
+  }
 
   let open = null;
   if (state.position) {
@@ -192,6 +240,9 @@ export function summarize(state, livePrice = null) {
     winRate: trades.length ? Math.round((wins / trades.length) * 1000) / 10 : null,
     profitFactor: grossLoss > 0 ? Number((grossWin / grossLoss).toFixed(2)) : null,
     totalR: Number(totalR.toFixed(2)),
+    expectancyR: trades.length ? Number((totalR / trades.length).toFixed(2)) : null,
+    maxDrawdownPct: Number((maxDrawdown * 100).toFixed(2)),
+    costPct: Number((tradeCost() * 100).toFixed(3)),
     streak,
     cycle: state.cycle,
     startedAt: state.startedAt,

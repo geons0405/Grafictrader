@@ -110,3 +110,44 @@ test('live context weighs flow, book and news', () => {
   const ctx = buildContext({ trades, orderBook, news });
   assert.ok(ctx.score > 0.5 && ctx.score <= 1);
 });
+
+function openTrade(side, entry, stop, target, cost = 0) {
+  return { side, entry, stop, initialStop: stop, target, openedAt: 1, bars: 0, setup: 'trend', confidence: 60, reasons: [], cost };
+}
+
+test('a candle that opens past the stop fills at the open, not at the stop', () => {
+  const state = { ...emptyState('BTCUSDT', '5m'), lastTime: 100, position: openTrade(1, 100, 98, 104) };
+  const gap = [{ time: 200, open: 95, high: 96, low: 94, close: 95.5, volume: 1 }];
+  const after = advance(state, gap);
+  const trade = after.trades.at(-1);
+  assert.equal(trade.exit, 95);
+  assert.equal(trade.r, -2.5);
+  assert.match(trade.exitReason, /salto/);
+});
+
+test('every trade pays its round-trip cost in R', () => {
+  // Risk 2 (1%) and cost 0.1% of 100 = 0.1 → 0.05R off the result.
+  const state = { ...emptyState('BTCUSDT', '5m'), lastTime: 100, position: openTrade(1, 100, 98, 104, 0.001) };
+  const after = advance(state, [{ time: 200, open: 101, high: 105, low: 100.5, close: 104.5, volume: 1 }]);
+  const trade = after.trades.at(-1);
+  assert.equal(trade.r, 1.95);
+  assert.equal(trade.costR, 0.05);
+});
+
+test('an open position is managed even on candles older than the warm-up window', () => {
+  // The saved state is older than every candle fetched now (nobody opened the app for days).
+  const candles = makeCandles(300, { seed: 7 });
+  // Stop and target far away: only the 24-candle time limit can close it.
+  const state = { ...emptyState('BTCUSDT', '5m'), lastTime: candles[0].time - 5000, position: openTrade(1, candles[0].close, -1e9, 1e9) };
+  const after = advance(state, candles);
+  assert.ok(after.trades.length >= 1, 'closed by time instead of being skipped');
+  assert.ok(after.trades[0].closedAt <= candles[30].time);
+  assert.ok(after.log.some(l => /Pausa/.test(l.text)));
+});
+
+test('summary reports expectancy, drawdown and the cost used', () => {
+  const s = summarize(advance(emptyState('BTCUSDT', '5m'), makeCandles(700, { seed: 21 })));
+  assert.ok('expectancyR' in s && 'maxDrawdownPct' in s);
+  assert.ok(s.maxDrawdownPct >= 0);
+  assert.equal(s.costPct, 0.08);
+});

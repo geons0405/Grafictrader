@@ -84,9 +84,11 @@ export default async function handler(req, res) {
   // Cross-check with the live engine when the chart is a market we track.
   const hint = parseMarketQuery({ symbol: hintSymbol, interval: hintInterval });
   const symbol = mapAsset(normalized.asset) || null;
-  const interval = mapTimeframe(normalized.timeframe) || hint?.interval || '15m';
+  // A timeframe the engine does not run (30m, D1…) gets no live cross-check rather than a different one.
+  const readTimeframe = mapTimeframe(normalized.timeframe);
+  const interval = readTimeframe || hint?.interval || '15m';
   let reading = null;
-  if (symbol) {
+  if (symbol && (readTimeframe || !normalized.timeframe)) {
     try {
       reading = await marketReading(symbol, interval);
     } catch (error) {

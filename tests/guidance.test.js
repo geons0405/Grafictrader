@@ -93,3 +93,11 @@ test('the range box leaves out the current candle, so a breakout can show', asyn
   assert.equal(snap.rangeHigh, 101);
   assert.ok(snap.price > snap.rangeHigh);
 });
+
+test('only dollar pairs are matched to the live market', async () => {
+  const { mapAsset } = await import('../api/_lib/quant/verdict.js');
+  for (const [text, expected] of [
+    ['BTC/USDT', 'BTCUSDT'], ['ETHUSD', 'ETHUSDT'], ['Bitcoin', 'BTCUSDT'], ['Solana', 'SOLUSDT'], ['BTCUSDT.P', 'BTCUSDT'],
+    ['ETH/BTC', null], ['XRP/BTC', null], ['BTC/BRL', null], ['Bitcoin / Euro', null], ['ETHBTC', null], ['Ethereum/Bitcoin', null], ['BTCST', null]
+  ]) assert.equal(mapAsset(text), expected, text);
+});

@@ -101,9 +101,11 @@ export default async function handler(req, res) {
   }
   const normalized = chartVisible ? guardImageQuality(normalizeVision(vision.raw)) : noChartVision(vision.raw);
   const symbol = chartVisible ? mapAsset(normalized.asset) : null;
-  const interval = mapTimeframe(normalized.timeframe) || '5m';
+  // A timeframe the engine does not run (30m, D1…) gets no live cross-check rather than a different one.
+  const readTimeframe = mapTimeframe(normalized.timeframe);
+  const interval = readTimeframe || '5m';
   let reading = null;
-  if (symbol) {
+  if (symbol && (readTimeframe || !normalized.timeframe)) {
     try { reading = await cachedReading(symbol, interval); } catch { reading = null; }
   }
   // Not a chart: neutral verdict, no levels, no live market mixed in.

@@ -104,7 +104,7 @@ async function read(req, res) {
   const mid = record.bid && record.ask ? (record.bid + record.ask) / 2 : record.candles.at(-1).close;
   let instructor = null;
   if (record.candles.length >= 260) {
-    try { instructor = await instructorFromCandles(symbol, TIMEFRAMES[tf], record.candles, mid); } catch { instructor = null; }
+    try { instructor = await instructorFromCandles(symbol, TIMEFRAMES[tf], record.candles, mid, user.email); } catch { instructor = null; }
   }
   res.setHeader('Cache-Control', 'no-store');
   return res.status(200).json({
