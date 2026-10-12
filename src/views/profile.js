@@ -57,8 +57,9 @@ function initAccount() {
     if (!confirm('Terminar a sessão em todos os dispositivos, incluindo este?')) return;
     try {
       await api('/api/auth?action=logout-all', { method: 'POST' });
-    } finally {
       signedOut();
+    } catch (error) {
+      alert(error.message);
     }
   };
   $('#passwordForm').onsubmit = async event => {

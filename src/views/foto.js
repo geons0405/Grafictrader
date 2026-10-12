@@ -155,7 +155,9 @@ function stopCamera() {
 
 export function initFoto() {
   $('#startCam').onclick = async () => {
-    if (!(await confirmCapture('camera'))) return;
+    // Left FOTO while the notice was open: do not start the camera afterwards.
+    const beforeConsent = cameraRequest;
+    if (!(await confirmCapture('camera')) || beforeConsent !== cameraRequest) return;
     try {
       stopCamera();
       const request = cameraRequest;

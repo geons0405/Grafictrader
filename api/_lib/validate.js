@@ -1,7 +1,8 @@
 export const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT', 'ADAUSDT', 'DOGEUSDT'];
 export const INTERVALS = ['1m', '5m', '15m', '1h', '4h'];
 
-export const INTERVAL_SECONDS = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400 };
+// Durations also cover the higher timeframes the council reads (1d, 1w); INTERVALS is what users can pick.
+export const INTERVAL_SECONDS = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400, '1w': 604800 };
 
 // Any Binance spot pair quoted in USDT; Binance itself rejects unknown ones.
 export const isBinanceSymbol = symbol => /^[A-Z0-9]{2,16}USDT$/.test(symbol);

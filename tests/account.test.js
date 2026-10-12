@@ -138,3 +138,17 @@ test('the trading journal keeps the user own trades and compares following the a
   const empty = await call(journal, { method: 'GET', headers: { cookie: other } });
   assert.equal(empty.body.entries.length, 0, 'each account only sees its own journal');
 });
+
+test('sign out everywhere also ends sessions that were never indexed', async () => {
+  const cookie = await register('old@acc.test');
+  // A session from before the index existed: present in storage, absent from the list.
+  const legacy = 'legacy-token-' + Math.random();
+  const { createHash } = await import('node:crypto');
+  store.set('grafictrader:session:' + createHash('sha256').update(legacy).digest('hex'), JSON.stringify({ name: 'Old', email: 'old@acc.test' }));
+  const legacyCookie = 'gt_session=' + encodeURIComponent(legacy);
+  assert.ok(await signedIn(legacyCookie));
+  await call(auth, { query: { action: 'logout-all' }, headers: { cookie } });
+  assert.equal(await signedIn(legacyCookie), false);
+  const again = cookieOf(await call(auth, { query: { action: 'login' }, body: { email: 'old@acc.test', password: 'segredo123' } }));
+  assert.ok(await signedIn(again), 'a new login after that works');
+});

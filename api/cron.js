@@ -4,8 +4,8 @@ import { SYMBOLS } from './_lib/validate.js';
 
 // Daily job (vercel.json "crons"): settles the signals whose horizon has
 // passed and moves the demo robots forward, so their history has fewer holes
-// when nobody opens the app for a while. Vercel sends
-// "Authorization: Bearer <CRON_SECRET>" when CRON_SECRET is set.
+// when nobody opens the app for a while. Needs CRON_SECRET: Vercel then sends
+// "Authorization: Bearer <CRON_SECRET>" on each run.
 const PLAN = [
   ['1h', SYMBOLS],
   ['15m', SYMBOLS],
@@ -16,7 +16,8 @@ const PLAN = [
 export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET;
   const auth = String(req.headers?.authorization || '');
-  if (secret ? auth !== `Bearer ${secret}` : !/vercel-cron/i.test(String(req.headers?.['user-agent'] || ''))) {
+  // Without CRON_SECRET the job is off: a user agent can be faked by anyone.
+  if (!secret || auth !== `Bearer ${secret}`) {
     return res.status(401).json({ ok: false });
   }
   const started = Date.now();

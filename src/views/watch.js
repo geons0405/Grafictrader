@@ -128,6 +128,7 @@ async function tick() {
     minGap = MIN_GAP_MS;
     handleResult(data);
   } catch (error) {
+    if (mine !== session) return;
     if (error.status === 429) {
       minGap = 20000;
       setStatus('Muitas análises seguidas: a abrandar para uma a cada 20 s.');

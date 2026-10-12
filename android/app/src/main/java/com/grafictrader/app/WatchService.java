@@ -312,8 +312,12 @@ public class WatchService extends Service {
      * so moving or updating the bubble never counts as a chart change.
      */
     private byte[] signature(Bitmap bitmap) {
+        return signature(bitmap, true);
+    }
+
+    private byte[] signature(Bitmap bitmap, boolean maskBubble) {
         Bubble current = bubble;
-        Rect mask = current == null ? null : current.bounds();
+        Rect mask = current == null || !maskBubble ? null : current.bounds();
         Bitmap source = bitmap;
         if (mask != null) {
             if (!source.isMutable()) source = bitmap.copy(Bitmap.Config.ARGB_8888, true);
@@ -397,8 +401,10 @@ public class WatchService extends Service {
         Bitmap bitmap = latestBitmap();
         if (bitmap == null) return;
         byte[] sig = signature(bitmap);
+        // Uniformity is judged on the frame as captured: the black bubble mask would add false contrast.
+        boolean empty = blank(signature(bitmap, false));
         bitmap.recycle();
-        if (blank(sig)) {
+        if (empty) {
             // Don't spend an analysis on an empty frame; send the next real one at once.
             lastSig = null;
             main.post(this::showBlank);

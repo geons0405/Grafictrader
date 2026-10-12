@@ -101,12 +101,12 @@ async function computeInstructor(symbol, interval) {
 export async function advanceStored(key, lock, symbol, interval, closed, context, { ttl = null } = {}) {
   const token = randomBytes(12).toString('hex');
   const locked = (await redis(['SET', lock, token, 'NX', 'EX', '30'])) === 'OK';
-  const stored = await redis(['GET', key]);
-  let state = stored ? JSON.parse(stored) : null;
-  // An account saved before costs and gap fills were counted starts again.
-  if (state && state.version !== STATE_VERSION) state = null;
-  if (!locked) return state || advance(emptyState(symbol, interval), closed);
   try {
+    const stored = await redis(['GET', key]);
+    let state = stored ? JSON.parse(stored) : null;
+    // An account saved before costs and gap fills were counted starts again.
+    if (state && state.version !== STATE_VERSION) state = null;
+    if (!locked) return state || advance(emptyState(symbol, interval), closed);
     const before = state?.lastTime ?? null;
     state = advance(state || emptyState(symbol, interval), closed, { context });
     if (before == null || state.lastTime > before) {
@@ -114,7 +114,7 @@ export async function advanceStored(key, lock, symbol, interval, closed, context
     }
     return state;
   } finally {
-    if ((await redis(['GET', lock])) === token) await redis(['DEL', lock]);
+    if (locked && (await redis(['GET', lock])) === token) await redis(['DEL', lock]);
   }
 }
 

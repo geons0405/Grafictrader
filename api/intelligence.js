@@ -30,13 +30,17 @@ export default async function handler(req, res) {
   const limit = await rateLimit('feed', clientIp(req), { limit: 120, windowSeconds: 600 });
   if (!limit.allowed) return sendRateLimited(res, limit);
   try {
-    // News quotas are paid: one fetch per asset and minute per instance.
-    const hit = feedCache.get(symbol);
-    const result = hit && Date.now() - hit.at < FEED_CACHE_MS ? hit.result : await getAllIntelligence(symbol);
-    if (!hit || hit.result !== result) {
+    // News quotas are paid: one fetch per asset and minute per instance, shared
+    // by requests that arrive while it is still running.
+    let hit = feedCache.get(symbol);
+    if (!hit || Date.now() - hit.at >= FEED_CACHE_MS) {
       if (feedCache.size > 200) feedCache.clear();
-      feedCache.set(symbol, { at: Date.now(), result });
+      const promise = getAllIntelligence(symbol);
+      hit = { at: Date.now(), promise };
+      feedCache.set(symbol, hit);
+      promise.catch(() => { if (feedCache.get(symbol) === hit) feedCache.delete(symbol); });
     }
+    const result = await hit.promise;
     res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=30');
     return res.status(200).json({
       ok: true,

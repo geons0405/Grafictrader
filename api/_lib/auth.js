@@ -68,16 +68,22 @@ export async function acceptTerms(email) {
 }
 
 const sessionsKey = email => 'grafictrader:sessions:' + email;
-const MAX_SESSIONS = 20;
+// Sessions issued before this time (ms) are no longer valid: "sign out
+// everywhere" also covers sessions missing from the index (older ones, or
+// lost to two logins at the same instant).
+const revokedKey = email => 'grafictrader:revoked:' + email;
+const MAX_SESSIONS = 50;
 
 async function readSessionList(email) {
-  try { return JSON.parse((await redis(['GET', sessionsKey(email)])) || '[]'); } catch { return []; }
+  // Storage errors must surface (never treat "could not read" as "no sessions").
+  const value = await redis(['GET', sessionsKey(email)]);
+  try { return JSON.parse(value || '[]'); } catch { return []; }
 }
 
 export async function createSession(user) {
   const token = randomBytes(32).toString('base64url');
   const key = sessionKey(token);
-  await redis(['SET', key, JSON.stringify(publicUser(user)), 'EX', String(SESSION_TTL_SECONDS)]);
+  await redis(['SET', key, JSON.stringify({ ...publicUser(user), issuedAt: Date.now() }), 'EX', String(SESSION_TTL_SECONDS)]);
   // Index of the account's sessions, so "sign out everywhere" can end them all.
   const list = (await readSessionList(user.email)).filter(k => k !== key);
   list.push(key);
@@ -87,6 +93,7 @@ export async function createSession(user) {
 
 /** Ends every session of the account (all devices). */
 export async function destroyAllSessions(email) {
+  await redis(['SET', revokedKey(email), String(Date.now()), 'EX', String(SESSION_TTL_SECONDS)]);
   for (const key of await readSessionList(email)) await redis(['DEL', key]);
   await redis(['DEL', sessionsKey(email)]);
 }
@@ -149,7 +156,15 @@ export async function getSessionUser(req) {
   if (!token) return null;
   const raw = await redis(['GET', sessionKey(token)]);
   if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+  let session;
+  try { session = JSON.parse(raw); } catch { return null; }
+  const revokedAt = Number(await redis(['GET', revokedKey(session.email)]));
+  if (revokedAt && (session.issuedAt || 0) < revokedAt) {
+    await redis(['DEL', sessionKey(token)]);
+    return null;
+  }
+  const { issuedAt, ...user } = session;
+  return user;
 }
 
 function cookie(value, maxAge, req) {
