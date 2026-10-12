@@ -1,10 +1,11 @@
 import {
-  authConfigured, normalizeEmail, validEmail, findUser, createUser, verifyPassword,
+  authConfigured, normalizeEmail, validEmail, createUser,
   createSession, destroySession, sessionToken, getSessionUser, setSessionCookie,
-  clearSessionCookie, publicUser, rotateBridgeKey, acceptTerms
+  clearSessionCookie, publicUser, rotateBridgeKey, acceptTerms,
+  checkCredentials, changePassword, deleteAccount, destroyAllSessions
 } from './_lib/auth.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
-import { clientIp } from './_lib/validate.js';
+import { clientIp, crossSite } from './_lib/validate.js';
 
 const notConfigured = res => res.status(503).json({
   ok: false,
@@ -24,6 +25,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
+    if (crossSite(req)) return res.status(403).json({ ok: false, error: 'Pedido recusado.' });
 
     if (action === 'logout') {
       if (authConfigured()) await destroySession(sessionToken(req));
@@ -51,6 +53,33 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, user: publicUser(user) });
     }
 
+    if (action === 'logout-all' || action === 'password' || action === 'delete') {
+      const current = await getSessionUser(req);
+      if (!current) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
+      const guard = await rateLimit('account', current.email, { limit: 10, windowSeconds: 900 });
+      if (!guard.allowed) return sendRateLimited(res, guard);
+
+      if (action === 'logout-all') {
+        await destroyAllSessions(current.email);
+        clearSessionCookie(res, req);
+        return res.status(200).json({ ok: true });
+      }
+      // Changing the password or deleting the account always asks for the current password.
+      const user = await checkCredentials(current.email, String(req.body?.password || ''));
+      if (!user) return res.status(401).json({ ok: false, error: 'A palavra-passe atual não está correta.' });
+
+      if (action === 'password') {
+        const next = String(req.body?.newPassword || '');
+        if (next.length < 8 || next.length > 200) return res.status(400).json({ ok: false, error: 'A nova palavra-passe deve ter pelo menos 8 caracteres.' });
+        const updated = await changePassword(current.email, next);
+        setSessionCookie(res, req, await createSession(updated));
+        return res.status(200).json({ ok: true, user: publicUser(updated) });
+      }
+      await deleteAccount(current.email);
+      clearSessionCookie(res, req);
+      return res.status(200).json({ ok: true, deleted: true });
+    }
+
     const body = req.body || {};
     const email = normalizeEmail(body.email);
     const password = String(body.password || '');
@@ -75,9 +104,11 @@ export default async function handler(req, res) {
     }
 
     if (action === 'login') {
-      const user = validEmail(email) ? await findUser(email) : null;
-      const valid = user ? await verifyPassword(password, user.salt, user.hash) : false;
-      if (!valid) return res.status(401).json({ ok: false, error: 'Email ou palavra-passe incorretos.' });
+      // Per account too: guessing one account's password from many IPs is also limited.
+      const perAccount = await rateLimit('login', email || 'none', { limit: 10, windowSeconds: 900 });
+      if (!perAccount.allowed) return sendRateLimited(res, perAccount);
+      const user = await checkCredentials(email, password);
+      if (!user) return res.status(401).json({ ok: false, error: 'Email ou palavra-passe incorretos.' });
       setSessionCookie(res, req, await createSession(user));
       return res.status(200).json({ ok: true, user: publicUser(user) });
     }

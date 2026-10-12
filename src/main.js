@@ -250,6 +250,14 @@ function wire() {
     navigate('home');
   });
 
+  // Account deleted or every session ended (Perfil): back to the start, signed out.
+  window.addEventListener('grafictrader:signed-out', async () => {
+    stopWatch();
+    await logout();
+    renderUser();
+    navigate('home');
+  });
+
   onThemeChange(syncThemeControls);
   window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 }

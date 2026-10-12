@@ -1,6 +1,6 @@
 import { requireUserIfConfigured } from './_lib/auth.js';
 import { rateLimit, sendRateLimited, aiQuota } from './_lib/rate-limit.js';
-import { clientIp } from './_lib/validate.js';
+import { clientIp, crossSite } from './_lib/validate.js';
 import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
 import { marketReading } from './_lib/quant/service.js';
 import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance, guardImageQuality } from './_lib/quant/verdict.js';
@@ -69,6 +69,7 @@ function continuity(previous) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
+  if (crossSite(req)) return res.status(403).json({ ok: false, error: 'Pedido recusado.' });
   res.setHeader('Cache-Control', 'no-store');
 
   const { image, previous } = req.body || {};

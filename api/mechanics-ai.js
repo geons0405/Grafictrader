@@ -1,5 +1,5 @@
 import { buildMechanicsSnapshot } from './_lib/mechanics/snapshot.js';
-import { parseMarketQuery, clientIp } from './_lib/validate.js';
+import { parseMarketQuery, clientIp, crossSite } from './_lib/validate.js';
 import { requireUserIfConfigured } from './_lib/auth.js';
 import { rateLimit, sendRateLimited, aiQuota } from './_lib/rate-limit.js';
 import { runText, chainFor } from './_lib/vision.js';
@@ -77,6 +77,7 @@ function compactPayload(snapshot) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
+  if (crossSite(req)) return res.status(403).json({ ok: false, error: 'Pedido recusado.' });
   res.setHeader('Cache-Control', 'no-store');
 
   if (!chainFor('judge').length) return res.status(503).json({ ok: false, error: 'Nenhuma IA configurada.', setupRequired: true });

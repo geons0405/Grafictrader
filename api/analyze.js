@@ -1,6 +1,6 @@
 import { requireUserIfConfigured } from './_lib/auth.js';
 import { rateLimit, sendRateLimited, aiQuota } from './_lib/rate-limit.js';
-import { clientIp, parseMarketQuery } from './_lib/validate.js';
+import { clientIp, parseMarketQuery, crossSite } from './_lib/validate.js';
 import { marketReading } from './_lib/quant/service.js';
 import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance, guardImageQuality } from './_lib/quant/verdict.js';
 import { rulesBlock } from './_lib/ai-rules.js';
@@ -40,6 +40,7 @@ Responde APENAS com JSON válido neste formato:
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
+  if (crossSite(req)) return res.status(403).json({ ok: false, error: 'Pedido recusado.' });
   res.setHeader('Cache-Control', 'no-store');
 
   const { image, symbol: hintSymbol, interval: hintInterval } = req.body || {};

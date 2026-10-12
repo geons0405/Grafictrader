@@ -1618,3 +1618,10 @@ body.stage-open .tabbar { display: none; }
 .consent-list div { padding: 10px 12px; border-radius: 14px; background: var(--well); }
 .consent-list dt { font-weight: 600; color: var(--text); font-size: 13px; margin-bottom: 2px; }
 .consent-list dd { margin: 0; color: var(--text-2); font-size: 13px; line-height: 1.45; }
+
+/* ---------- account ---------- */
+.account-action { border-top: 1px solid var(--line); padding: 10px 0 2px; }
+.account-action:first-of-type { border-top: 0; }
+.account-action summary { cursor: pointer; font-weight: 600; color: var(--text); padding: 4px 0; }
+.account-action .form { margin-top: 10px; }
+.btn-danger { background: var(--down); color: #fff; }

@@ -17,3 +17,21 @@ export function clientIp(req) {
   const forwarded = String(req.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
   return forwarded || req.headers?.['x-real-ip'] || req.socket?.remoteAddress || 'unknown';
 }
+
+/**
+ * Browser requests that change state must come from this site: a different
+ * Origin, or a plain HTML form post, is refused. Native app and MT5 bridge
+ * requests send no Origin and pass.
+ */
+export function crossSite(req) {
+  const origin = req.headers?.origin;
+  if (origin) {
+    let host = '';
+    try { host = new URL(origin).host; } catch { return true; }
+    const own = String(req.headers?.['x-forwarded-host'] || req.headers?.host || '');
+    if (host !== own) return true;
+  }
+  // The content types a cross-site HTML form can send without asking permission.
+  const type = String(req.headers?.['content-type'] || '').toLowerCase();
+  return /^(application\/x-www-form-urlencoded|multipart\/form-data|text\/plain)/.test(type);
+}

@@ -1,6 +1,6 @@
 import { $, api, escapeHtml, fmtTime } from '../lib/dom.js';
 import { Capacitor } from '@capacitor/core';
-import { sessionMode } from '../lib/session.js';
+import { sessionMode, setUser } from '../lib/session.js';
 
 async function loadStatus() {
   const status = $('#mt5Status');
@@ -23,7 +23,55 @@ async function loadStatus() {
   }
 }
 
+const signedOut = () => window.dispatchEvent(new CustomEvent('grafictrader:signed-out'));
+
+function formMessage(form, text) {
+  form.querySelector('.form-message').textContent = text || '';
+}
+
+function initAccount() {
+  $('#logoutAllBtn').onclick = async () => {
+    if (!confirm('Terminar a sessão em todos os dispositivos, incluindo este?')) return;
+    try {
+      await api('/api/auth?action=logout-all', { method: 'POST' });
+    } finally {
+      signedOut();
+    }
+  };
+  $('#passwordForm').onsubmit = async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = Object.fromEntries(new FormData(form));
+    if (String(data.newPassword || '').length < 8) return formMessage(form, 'A nova palavra-passe deve ter pelo menos 8 caracteres.');
+    form.querySelector('button').disabled = true;
+    try {
+      const { user } = await api('/api/auth?action=password', { method: 'POST', body: data });
+      setUser(user);
+      form.reset();
+      formMessage(form, 'Palavra-passe mudada. As sessões nos outros dispositivos foram terminadas.');
+    } catch (error) {
+      formMessage(form, error.message);
+    } finally {
+      form.querySelector('button').disabled = false;
+    }
+  };
+  $('#deleteForm').onsubmit = async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!confirm('Apagar a conta para sempre? Não dá para desfazer.')) return;
+    form.querySelector('button').disabled = true;
+    try {
+      await api('/api/auth?action=delete', { method: 'POST', body: Object.fromEntries(new FormData(form)) });
+      signedOut();
+    } catch (error) {
+      formMessage(form, error.message);
+      form.querySelector('button').disabled = false;
+    }
+  };
+}
+
 export function initProfile() {
+  initAccount();
   // Already inside the Android app: no need to offer the download.
   $('#apkCard').hidden = Capacitor.isNativePlatform();
   $('#mt5Generate').onclick = async () => {

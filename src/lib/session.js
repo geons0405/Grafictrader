@@ -20,6 +20,10 @@ export function currentUser() {
   return state.user;
 }
 
+export function setUser(user) {
+  state.user = user;
+}
+
 export function sessionMode() {
   return state.mode;
 }

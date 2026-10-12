@@ -67,10 +67,60 @@ export async function acceptTerms(email) {
   return updated;
 }
 
+const sessionsKey = email => 'grafictrader:sessions:' + email;
+const MAX_SESSIONS = 20;
+
+async function readSessionList(email) {
+  try { return JSON.parse((await redis(['GET', sessionsKey(email)])) || '[]'); } catch { return []; }
+}
+
 export async function createSession(user) {
   const token = randomBytes(32).toString('base64url');
-  await redis(['SET', sessionKey(token), JSON.stringify(publicUser(user)), 'EX', String(SESSION_TTL_SECONDS)]);
+  const key = sessionKey(token);
+  await redis(['SET', key, JSON.stringify(publicUser(user)), 'EX', String(SESSION_TTL_SECONDS)]);
+  // Index of the account's sessions, so "sign out everywhere" can end them all.
+  const list = (await readSessionList(user.email)).filter(k => k !== key);
+  list.push(key);
+  await redis(['SET', sessionsKey(user.email), JSON.stringify(list.slice(-MAX_SESSIONS)), 'EX', String(SESSION_TTL_SECONDS)]);
   return token;
+}
+
+/** Ends every session of the account (all devices). */
+export async function destroyAllSessions(email) {
+  for (const key of await readSessionList(email)) await redis(['DEL', key]);
+  await redis(['DEL', sessionsKey(email)]);
+}
+
+/** Checks the password; runs scrypt even for unknown accounts so timing does not reveal which emails exist. */
+export async function checkCredentials(email, password) {
+  const user = validEmail(email) ? await findUser(email) : null;
+  if (!user) {
+    await hashPassword(password, DUMMY_SALT);
+    return null;
+  }
+  return (await verifyPassword(password, user.salt, user.hash)) ? user : null;
+}
+const DUMMY_SALT = 'grafictrader-dummy-salt';
+
+/** New password for the account. Ends all sessions; the caller starts a fresh one. */
+export async function changePassword(email, password) {
+  const user = await findUser(email);
+  if (!user) return null;
+  const { salt, hash } = await hashPassword(password);
+  const updated = { ...user, salt, hash, passwordChangedAt: new Date().toISOString() };
+  await redis(['SET', userKey(email), JSON.stringify(updated)]);
+  await destroyAllSessions(email);
+  return updated;
+}
+
+/** Deletes the account, its sessions and its MetaTrader 5 key. Market data it sent expires on its own. */
+export async function deleteAccount(email) {
+  const user = await findUser(email);
+  if (!user) return false;
+  await destroyAllSessions(email);
+  if (user.mt5KeyHash) await redis(['DEL', 'grafictrader:mt5key:' + user.mt5KeyHash]);
+  await redis(['DEL', userKey(email)]);
+  return true;
 }
 
 export async function destroySession(token) {

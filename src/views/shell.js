@@ -423,6 +423,28 @@ export const shellTemplate = `
     <article class="card">
       <header class="card-head"><b>Sessão</b><small data-session-mode>—</small></header>
       <button class="btn btn-soft" type="button" id="logoutBtn"><i data-lucide="log-out"></i>Terminar sessão</button>
+      <button class="btn btn-ghost" type="button" id="logoutAllBtn" data-server-only><i data-lucide="log-out"></i>Terminar sessão em todos os dispositivos</button>
+    </article>
+    <article class="card account-card" data-server-only>
+      <header class="card-head"><b>Conta</b></header>
+      <details class="account-action">
+        <summary>Mudar a palavra-passe</summary>
+        <form id="passwordForm" class="form" novalidate>
+          <label class="field"><i data-lucide="lock"></i><input type="password" name="password" placeholder="Palavra-passe atual" autocomplete="current-password" required></label>
+          <label class="field"><i data-lucide="lock"></i><input type="password" name="newPassword" placeholder="Nova palavra-passe (mín. 8)" minlength="8" autocomplete="new-password" required></label>
+          <button class="btn btn-primary" type="submit">Guardar a nova palavra-passe</button>
+          <p class="form-message" role="alert"></p>
+        </form>
+      </details>
+      <details class="account-action">
+        <summary>Apagar a minha conta</summary>
+        <form id="deleteForm" class="form" novalidate>
+          <p class="reading-summary">Apaga a conta, as sessões e a chave do MetaTrader 5. Não dá para desfazer.</p>
+          <label class="field"><i data-lucide="lock"></i><input type="password" name="password" placeholder="Palavra-passe atual" autocomplete="current-password" required></label>
+          <button class="btn btn-danger" type="submit">Apagar a conta para sempre</button>
+          <p class="form-message" role="alert"></p>
+        </form>
+      </details>
     </article>
     <article class="card credits">
       <header class="card-head"><b>Créditos</b></header>
