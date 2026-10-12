@@ -83,7 +83,10 @@ async function readSessionList(email) {
 export async function createSession(user) {
   const token = randomBytes(32).toString('base64url');
   const key = sessionKey(token);
-  await redis(['SET', key, JSON.stringify({ ...publicUser(user), issuedAt: Date.now() }), 'EX', String(SESSION_TTL_SECONDS)]);
+  // Always issued after the last revocation, even within the same millisecond.
+  const revokedAt = Number(await redis(['GET', revokedKey(user.email)])) || 0;
+  const issuedAt = Math.max(Date.now(), revokedAt + 1);
+  await redis(['SET', key, JSON.stringify({ ...publicUser(user), issuedAt }), 'EX', String(SESSION_TTL_SECONDS)]);
   // Index of the account's sessions, so "sign out everywhere" can end them all.
   const list = (await readSessionList(user.email)).filter(k => k !== key);
   list.push(key);
@@ -159,7 +162,7 @@ export async function getSessionUser(req) {
   let session;
   try { session = JSON.parse(raw); } catch { return null; }
   const revokedAt = Number(await redis(['GET', revokedKey(session.email)]));
-  if (revokedAt && (session.issuedAt || 0) < revokedAt) {
+  if (revokedAt && (session.issuedAt || 0) <= revokedAt) {
     await redis(['DEL', sessionKey(token)]);
     return null;
   }
