@@ -128,10 +128,11 @@ export async function getSparkline(symbol = 'BTCUSDT', interval = '1h', limit = 
   }
 }
 
-export async function getBinanceCandles(symbol = 'BTCUSDT', interval = '5m', limit = 120) {
+export async function getBinanceCandles(symbol = 'BTCUSDT', interval = '5m', limit = 120, startTimeSec = null) {
   try {
     const data = await binanceJson('/klines?' + new URLSearchParams({
-      symbol, interval, limit: String(Math.min(limit, 1000))
+      symbol, interval, limit: String(Math.min(limit, 1000)),
+      ...(startTimeSec ? { startTime: String(Math.floor(startTimeSec * 1000)) } : {})
     }));
     return data.map(row => ({
       time: Number(row[0]) / 1000,

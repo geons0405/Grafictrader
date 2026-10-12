@@ -102,8 +102,17 @@ Descarregar: https://github.com/geons0405/Grafictrader/releases/download/android
   captura o ecrã com MediaProjection (serviço em primeiro plano), envia um frame a `/api/watch` só quando o gráfico muda
   e mostra COMPRAR / VENDER / NÃO OPERAR numa bolha flutuante por cima da corretora (toque para ver o que fazer, toque longo para abrir a app).
 - Pede as permissões "Mostrar por cima de outras apps" e "Começar a gravar ou transmitir".
-- O workflow `.github/workflows/android.yml` compila o APK e substitui a release `android-latest` a cada mudança em `android/`.
-- O APK é de teste (assinatura de debug): para atualizar, desinstala a versão anterior se o Android recusar a instalação.
+- O workflow `.github/workflows/android.yml` compila o APK em cada mudança em `android/`. Só os builds do `main` substituem a release `android-latest`; os de outros ramos servem apenas para confirmar que compila.
+- O plugin envia as imagens sempre para `https://grafictrader.vercel.app` (fixo no código) e as cópias de segurança do Android não incluem a sessão.
+
+**APK assinado (versão definitiva).** Enquanto os segredos abaixo não existirem, o workflow gera um APK de debug, só para testes. Para gerar a versão definitiva, sempre com a mesma assinatura:
+
+1. Num computador com Java: `keytool -genkeypair -v -keystore grafictrader.jks -alias grafictrader -keyalg RSA -keysize 4096 -validity 10000`. Guarda o ficheiro e as palavras-passe num lugar seguro: sem eles não podes atualizar a app.
+2. `base64 -w0 grafictrader.jks` (no macOS: `base64 -i grafictrader.jks`).
+3. No GitHub: **Settings › Secrets and variables › Actions › New repository secret**:
+   - `ANDROID_KEYSTORE_BASE64` (o texto do passo 2);
+   - `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`grafictrader`) e `ANDROID_KEY_PASSWORD`.
+4. Na primeira instalação da versão assinada, desinstala a de teste (as assinaturas são diferentes). Depois disso, as atualizações instalam por cima.
 
 ## Contas
 
@@ -142,8 +151,22 @@ Na Vercel, cada variável tem de estar ativa em **Production** (e Preview), com 
 | `KV_REST_API_URL` | `https://grafictrader-dados.floot.app/_api/kv` |
 | `KV_REST_API_TOKEN` | O mesmo token guardado no Floot (`GRAFICTRADER_KV_TOKEN`) |
 | `OPENAI_API_KEY`, `TWELVE_DATA_API_KEY`, `MARKETAUX_API_KEY`, `FINNHUB_API_KEY` | Opcionais |
+| `ADMIN_TOKEN` | Texto secreto (mín. 16 caracteres) para ver o estado detalhado em `/api/health` |
+| `AI_DAILY_PER_USER`, `AI_DAILY_GLOBAL` | Opcionais: análises por IA por dia, por conta (400) e para a app toda (20000) |
+| `CRON_SECRET` | Recomendado: ativa e protege o trabalho diário `/api/instructor?cron=1` (a Vercel envia-o sozinha) |
+| `INSTRUCTOR_COST_PCT` | Opcional: custo por operação do robô demo, ida e volta, em % (0.08) |
 
-Estado dos serviços: `GET /api/health` (o que está configurado) e `GET /api/health?probe=1` (faz uma chamada real a cada serviço; limitado a 5 por 10 minutos).
+Estado dos serviços: `GET /api/health` responde só se a API está no ar. Com o cabeçalho `x-admin-token: <ADMIN_TOKEN>` mostra que chaves estão configuradas e as cadeias de modelos; `?probe=1`, `?models=` e `?compare=` (chamadas reais, pagas) também exigem esse cabeçalho.
+
+As imagens (FOTO, ecrã, câmara, bolha) não vão para modelos gratuitos de proxies (`…:free`), que podem guardar ou reutilizar o que recebem. Para os usar mesmo assim, põe-nos em `AI_VISION_MODELS`.
+
+### Acerto real dos sinais
+
+Cada COMPRAR/VENDER mostrado na FOTO e em Minha corretora, num ativo cripto com dados ao vivo, fica registado com o preço real desse momento (no máximo um por mercado e vela). Depois de 24 velas é verificado contra o que o preço fez, com as regras do robô: stop a 1,5 ATR, alvo a 2R, e stop primeiro quando os dois são tocados na mesma vela. `GET /api/instructor?signals=1` mostra a taxa de acerto e o R médio por origem e timeframe nos últimos 14 dias, incluindo os erros (painel "Acerto real dos sinais" na Live Inteligente). Não guarda dados de utilizadores.
+
+O trabalho diário `/api/instructor?cron=1` (em `vercel.json`, precisa de `CRON_SECRET`) verifica os sinais pendentes e avança os robôs demo, para o histórico ter menos buracos quando ninguém abre a app.
+
+O robô demo desconta custos em cada operação (`INSTRUCTOR_COST_PCT`, 0,08% por defeito), ignora sinais em que os custos comeriam mais de 25% do risco, preenche stops com salto de preço ao preço de abertura e mostra o ganho médio por operação e a maior queda.
 
 ### Motor de Inteligência de Mercado
 

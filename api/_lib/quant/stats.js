@@ -183,8 +183,10 @@ export function volatilityRegime(candles, window = 20) {
   const rolling = [];
   for (let i = window; i <= gk.length; i++) rolling.push(mean(gk.slice(i - window, i)));
   const current = rolling.at(-1);
-  const below = rolling.filter(v => v <= current).length;
-  return { value: current, percentile: below / rolling.length };
+  // Mid-rank: ties count half, so a perfectly flat market sits at 0.5, not at 1 ("extreme").
+  const below = rolling.filter(v => v < current).length;
+  const equal = rolling.filter(v => v === current).length;
+  return { value: current, percentile: (below + equal / 2) / rolling.length };
 }
 
 /** Standard normal CDF (Abramowitz–Stegun approximation). */

@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.ComponentCallbacks;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -89,6 +90,24 @@ public class WatchService extends Service {
         listener = value;
     }
 
+    private static final String PREFS = "watch";
+    static final String KILLED = "O telemóvel fechou o Grafictrader em segundo plano. Em Definições › Apps › Grafictrader › Bateria, escolhe «Sem restrições» e liga a análise de novo.";
+
+    /**
+     * Why the last session ended, once, or null. A session still marked active
+     * while nothing runs means the system killed the app without telling it.
+     */
+    static String takeLastStop(Context context) {
+        SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String reason = running ? null : prefs.getBoolean("active", false) ? KILLED : prefs.getString("reason", null);
+        if (!running) prefs.edit().putBoolean("active", false).remove("reason").apply();
+        return reason;
+    }
+
+    private void remember(boolean active, String reason) {
+        getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("active", active).putString("reason", reason).apply();
+    }
+
     static boolean isRunning() {
         return running;
     }
@@ -119,7 +138,8 @@ public class WatchService extends Service {
     private volatile long minGap = MIN_GAP_MS;
     private long startedAt;
     private int analyses;
-    private JSONObject current;
+    private volatile JSONObject current;
+    private boolean blankShown;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -153,6 +173,7 @@ public class WatchService extends Service {
             return START_NOT_STICKY;
         }
         running = true;
+        remember(true, null);
         startedAt = System.currentTimeMillis();
         projection.registerCallback(new MediaProjection.Callback() {
             @Override
@@ -240,6 +261,14 @@ public class WatchService extends Service {
 
     /** The phone was rotated: keep capturing at the new orientation. */
     private void resizeDisplay() {
+        try {
+            resizeDisplayUnsafe();
+        } catch (Exception error) {
+            // Stopped on the main thread while rotating: nothing left to resize.
+        }
+    }
+
+    private void resizeDisplayUnsafe() {
         if (display == null || !running) return;
         int[] size = captureSize();
         if (reader != null && reader.getWidth() == size[0] && reader.getHeight() == size[1]) return;
@@ -323,10 +352,47 @@ public class WatchService extends Service {
         return (double) sum / a.length;
     }
 
+    /**
+     * A uniform frame (all black, for example) has nothing for the AI to read.
+     * Pure black pixels are skipped: that is how the bubble's area is masked,
+     * so the bubble never makes an empty frame look busy.
+     */
+    private static boolean blank(byte[] sig) {
+        int min = 255;
+        int max = 0;
+        for (byte b : sig) {
+            int v = b & 0xFF;
+            if (v == 0) continue;
+            if (v < min) min = v;
+            if (v > max) max = v;
+        }
+        return max == 0 || max - min < 12;
+    }
+
+    private void showBlank() {
+        if (!running || blankShown) return;
+        blankShown = true;
+        String title = "SEM IMAGEM";
+        if (bubble != null) bubble.update(title, "", "", "A partilha do ecrã chega vazia. Toca em Parar, volta a ligar e escolhe «Ecrã inteiro».");
+        setNotice(title + " · a partilha do ecrã chega vazia");
+    }
+
     private void tick() {
         if (!running) return;
         capture.postDelayed(this::tick, TICK_MS);
         if (inflight) return;
+        try {
+            step();
+        } catch (Throwable error) {
+            // A bad frame (or low memory) skips this tick instead of crashing the app.
+            inflight = false;
+            main.post(() -> {
+                if (bubble != null) bubble.setHidden(false);
+            });
+        }
+    }
+
+    private void step() {
         long now = System.currentTimeMillis();
         if (now - startedAt > SESSION_LIMIT_MS) {
             main.post(() -> finish("Sessão terminada ao fim de 45 minutos para poupar análises."));
@@ -336,7 +402,14 @@ public class WatchService extends Service {
         Bitmap bitmap = latestBitmap();
         if (bitmap == null) return;
         byte[] sig = signature(bitmap);
+        boolean empty = blank(sig);
         bitmap.recycle();
+        if (empty) {
+            // Don't spend an analysis on an empty frame; send the next real one at once.
+            lastSig = null;
+            main.post(this::showBlank);
+            return;
+        }
         double change = diff(sig, lastSig);
         if (lastSentAt != 0 && change < THRESHOLD && now - lastSentAt < MAX_GAP_MS) return;
 
@@ -454,6 +527,14 @@ public class WatchService extends Service {
             finish("Inicia sessão na app Grafictrader para usar a análise ao vivo.");
             return;
         }
+        if (status == 423 && data.optBoolean("paused")) {
+            finish(data.optString("error", "Estás em pausa: as análises voltam quando a pausa terminar."));
+            return;
+        }
+        if (status == 403 && data.optBoolean("termsRequired")) {
+            finish(data.optString("error", "Aceita os Termos de Uso e o Aviso de Risco na app Grafictrader para continuar."));
+            return;
+        }
         if (status >= 400 || !data.optBoolean("ok")) {
             if (status == 503 || data.optBoolean("setupRequired")) {
                 finish(data.optString("error", "A análise por IA não está configurada no servidor."));
@@ -464,12 +545,18 @@ public class WatchService extends Service {
         }
         minGap = MIN_GAP_MS;
         analyses += 1;
+        blankShown = false;
 
         JSONObject verdict = data.optJSONObject("verdict");
         String decision = verdict == null ? "AGUARDAR" : verdict.optString("decision", "AGUARDAR");
         // Only an explicit "true" from the server counts as a chart.
         boolean chartVisible = data.optBoolean("chartVisible", false);
-        Stabilizer.Step step = stabilizer.push(decision, chartVisible);
+        // The server names the market in one stable spelling; null when asset or timeframe is missing.
+        String context = chartVisible && !data.isNull("market") ? data.optString("market", "") : "";
+        if (context.isEmpty()) context = null;
+        Stabilizer.Step step = stabilizer.push(decision, chartVisible, context);
+        // A different market: the previous one's levels must not come back.
+        if (step.contextChanged) lastByDecision.clear();
         if (chartVisible) lastByDecision.put(decision, data);
         // No chart now: show this reading, never the last trade.
         JSONObject shown = chartVisible && step.shown != null && lastByDecision.containsKey(step.shown) ? lastByDecision.get(step.shown) : data;
@@ -508,10 +595,19 @@ public class WatchService extends Service {
         if (verdict != null) asset.append("· ").append(verdict.optInt("confidence")).append('%');
 
         StringBuilder detail = new StringBuilder();
-        if (!chartVisible) detail.append("Não vejo um gráfico. Mostra o gráfico da corretora inteiro.");
+        String readDecision = verdict == null ? "AGUARDAR" : verdict.optString("decision", "AGUARDAR");
+        // The advice shown is not this reading's (a new direction waiting for its confirmation).
+        boolean unconfirmed = chartVisible && !decision.equals(readDecision);
+        if (unconfirmed) {
+            detail.append("Não operes ainda: a IA confirma o sinal na próxima leitura.");
+        } else if (!chartVisible) {
+            String saw = vision == null || vision.isNull("summary") ? "" : vision.optString("summary", "").trim();
+            if (!saw.isEmpty()) detail.append("A IA vê: ").append(saw.length() > 120 ? saw.substring(0, 120) + "…" : saw).append('\n');
+            detail.append("Não vejo um gráfico. Mostra o gráfico da corretora inteiro.");
+        }
         else if (guidance != null) detail.append(guidance.optString("now", ""));
         JSONObject levels = guidance == null ? null : guidance.optJSONObject("levels");
-        if (chartVisible && levels != null && !"AGUARDAR".equals(decision)) {
+        if (chartVisible && !unconfirmed && levels != null && !"AGUARDAR".equals(decision)) {
             detail.append("\nEntrada ").append(levels.optString("entry", "—"))
                     .append(" · Stop ").append(levels.optString("stop", "—"))
                     .append(" · Alvo ").append(levels.optString("target", "—"));
@@ -578,6 +674,7 @@ public class WatchService extends Service {
     private void finish(String message) {
         boolean wasRunning = running;
         running = false;
+        if (wasRunning) remember(false, message);
         if (bubble != null) bubble.remove();
         bubble = null;
         if (tts != null) tts.shutdown();

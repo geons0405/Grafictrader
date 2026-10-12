@@ -1,6 +1,7 @@
 import { redis, redisConfigured } from './_lib/redis.js';
 import { getSessionUser, resolveBridgeKey } from './_lib/auth.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
+import { clientIp } from './_lib/validate.js';
 import { instructorFromCandles } from './_lib/quant/service.js';
 
 // MetaTrader 5 bridge.
@@ -38,6 +39,9 @@ async function readJson(key) {
 // command); a new bar appends to the history; a "full" post (on start and
 // every 10 minutes) rewrites the history and the symbol index.
 async function ingest(req, res) {
+  // Per IP first, so guessing keys costs a slot even when the key is wrong.
+  const perIp = await rateLimit('mt5-ip', clientIp(req), { limit: 600, windowSeconds: 60 });
+  if (!perIp.allowed) return sendRateLimited(res, perIp);
   const email = await resolveBridgeKey(String(req.headers['x-bridge-key'] || ''));
   if (!email) return res.status(401).json({ ok: false, error: 'Chave da ponte inválida.' });
   const limit = await rateLimit('mt5', email, { limit: 120, windowSeconds: 60 });
@@ -64,6 +68,11 @@ async function ingest(req, res) {
     const index = (await readJson(indexKey(email))) || {};
     const entry = index[symbol] || { timeframes: [] };
     if (!entry.timeframes.includes(tf)) entry.timeframes.push(tf);
+    // At most 40 symbols per account: the oldest one makes room for a new one.
+    if (!index[symbol] && Object.keys(index).length >= 40) {
+      const oldest = Object.entries(index).sort((a, b) => (a[1].updatedAt || 0) - (b[1].updatedAt || 0))[0];
+      if (oldest) delete index[oldest[0]];
+    }
     index[symbol] = { ...entry, broker: meta.broker, server: meta.server, updatedAt: meta.updatedAt };
     await redis(['SET', indexKey(email), JSON.stringify(index), 'EX', TTL]);
   } else if (kind === 'bar') {
@@ -95,7 +104,7 @@ async function read(req, res) {
   const mid = record.bid && record.ask ? (record.bid + record.ask) / 2 : record.candles.at(-1).close;
   let instructor = null;
   if (record.candles.length >= 260) {
-    try { instructor = await instructorFromCandles(symbol, TIMEFRAMES[tf], record.candles, mid); } catch { instructor = null; }
+    try { instructor = await instructorFromCandles(symbol, TIMEFRAMES[tf], record.candles, mid, user.email); } catch { instructor = null; }
   }
   res.setHeader('Cache-Control', 'no-store');
   return res.status(200).json({

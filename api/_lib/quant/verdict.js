@@ -11,12 +11,26 @@ const ASSET_ALIASES = [
   ['DOGEUSDT', ['DOGE', 'DOGECOIN']]
 ];
 
-/** Maps text like "BTC/USDT", "ETHUSD" or "Bitcoin" to a supported Binance symbol. */
+// Quotes that are not the US dollar: a pair like ETH/BTC or BTC/BRL is a
+// different market from ETHUSDT/BTCUSDT and its prices must not be mixed in.
+const OTHER_QUOTES = new Set(['BTC', 'XBT', 'BITCOIN', 'ETH', 'ETHEREUM', 'BNB', 'SOL', 'EUR', 'EURO', 'BRL', 'REAL', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF',
+  'TRY', 'RUB', 'INR', 'AOA', 'ZAR', 'NGN', 'MXN', 'ARS', 'IDR', 'KRW', 'CNY', 'UAH', 'PLN']);
+
+/** Maps text like "BTC/USDT", "ETHUSD" or "Bitcoin" to a supported Binance symbol; null for non-dollar pairs. */
 export function mapAsset(text) {
   if (!text) return null;
   const tokens = String(text).toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim().split(' ');
-  for (const [symbol, names] of ASSET_ALIASES) {
-    if (tokens.some(token => names.some(name => token === name || token.startsWith(name + 'USD') || token.startsWith(name + 'PERP')))) {
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    for (const [symbol, names] of ASSET_ALIASES) {
+      const name = names.find(n => token === n) || names.filter(n => token.startsWith(n)).sort((a, b) => b.length - a.length)[0];
+      if (!name) continue;
+      const rest = token.slice(name.length);
+      if (rest && !rest.startsWith('USD') && !rest.startsWith('PERP')) {
+        if (OTHER_QUOTES.has(rest)) return null; // ETHBTC, BTCEUR…
+        continue; // a longer word that only starts like the name
+      }
+      if (!rest && OTHER_QUOTES.has(tokens[i + 1])) return null; // "ETH / BTC", "Bitcoin / Euro"
       return symbol;
     }
   }

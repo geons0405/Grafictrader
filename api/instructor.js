@@ -2,17 +2,31 @@ import { runInstructor } from './_lib/quant/service.js';
 import { parseMarketQuery, SYMBOLS, clientIp } from './_lib/validate.js';
 import { runCouncil } from './_lib/council/service.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
+import { requireUserIfConfigured } from './_lib/auth.js';
+import { signalsHandler } from './_lib/signals-route.js';
+import { cronHandler } from './_lib/cron.js';
 
 // GET /api/instructor?symbol=BTCUSDT&interval=5m  → full instructor view
 // GET /api/instructor?desk=1&interval=5m          → one summary per asset
 // GET /api/instructor?council=1&symbol=…&interval=… → 7 analysts + AI judge verdict
+// GET /api/instructor?signals=1                  → real track record of the signals shown
+// GET /api/instructor?cron=1                     → daily job (CRON_SECRET)
+// (Several routes share one function: Vercel Hobby allows 12 per deployment.)
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
+  if (req.query?.cron) return cronHandler(req, res);
+  if (req.query?.signals) return signalsHandler(req, res);
 
   if (req.query?.council) {
     const market = parseMarketQuery(req.query);
     if (!market) return res.status(400).json({ ok: false, error: 'Parâmetros inválidos.' });
-    const limit = await rateLimit('council', clientIp(req), { limit: 40, windowSeconds: 600 });
+    // The council ends with a paid AI judge: signed-in users only, with the daily AI budget.
+    const access = await requireUserIfConfigured(req, res);
+    if (!access.ok) return;
+    const who = access.user?.email || clientIp(req);
+    // The judge's answer is cached per market, so the council is limited per user but
+    // does not spend the daily AI budget that FOTO and the live watch need.
+    const limit = await rateLimit('council', who, { limit: 40, windowSeconds: 600, failClosed: true });
     if (!limit.allowed) return sendRateLimited(res, limit);
     try {
       const data = await runCouncil(market.symbol, market.interval);
@@ -26,6 +40,8 @@ export default async function handler(req, res) {
   if (req.query?.desk) {
     const market = parseMarketQuery({ symbol: 'BTCUSDT', interval: req.query.interval });
     if (!market) return res.status(400).json({ ok: false, error: 'Parâmetros inválidos.' });
+    const limit = await rateLimit('desk', clientIp(req), { limit: 60, windowSeconds: 600 });
+    if (!limit.allowed) return sendRateLimited(res, limit);
     const settled = await Promise.allSettled(SYMBOLS.map(symbol => runInstructor(symbol, market.interval)));
     const desk = settled.map((result, i) => result.status === 'fulfilled'
       ? {
@@ -42,6 +58,9 @@ export default async function handler(req, res) {
 
   const market = parseMarketQuery(req.query);
   if (!market) return res.status(400).json({ ok: false, error: 'Parâmetros inválidos.' });
+  // Generous: many people share one mobile IP. It only stops scripted floods.
+  const limit = await rateLimit('instructor', clientIp(req), { limit: 400, windowSeconds: 600 });
+  if (!limit.allowed) return sendRateLimited(res, limit);
   try {
     const data = await runInstructor(market.symbol, market.interval);
     res.setHeader('Cache-Control', 's-maxage=5, stale-while-revalidate=10');

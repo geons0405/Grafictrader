@@ -75,6 +75,8 @@ export const shellTemplate = `
       <label class="field"><i data-lucide="user"></i><input type="text" name="name" placeholder="Nome" autocomplete="name" maxlength="60" required></label>
       <label class="field" data-server-only><i data-lucide="mail"></i><input type="email" name="email" placeholder="Email" autocomplete="email" required></label>
       <label class="field" data-server-only><i data-lucide="lock"></i><input type="password" name="password" placeholder="Palavra-passe (mín. 8)" minlength="8" autocomplete="new-password" required></label>
+      <label class="terms-check"><input type="checkbox" name="adult" value="1"><span>Tenho 18 anos ou mais.</span></label>
+      <label class="terms-check"><input type="checkbox" name="acceptTerms" value="1"><span>Li e aceito os <a href="/termos.html" target="_blank" rel="noopener">Termos de Uso e o Aviso de Risco</a> e a <a href="/privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>. Sei que a app só me auxilia com análises e cálculos, e que a decisão de operar e os resultados, positivos ou negativos, são da minha responsabilidade.</span></label>
       <button class="btn btn-primary" type="submit"><span data-register-cta>Criar conta</span><i data-lucide="arrow-right"></i></button>
       <p class="form-message" role="alert"></p>
     </form>
@@ -139,7 +141,7 @@ export const shellTemplate = `
         </div>
         <div class="watch-controls" id="watchStarts">
           <button class="btn btn-primary" type="button" id="watchNative" hidden><i data-lucide="smartphone"></i>Analisar a corretora neste telemóvel</button>
-          <p class="fine-print left" id="watchNativeHint" hidden>Abre depois a tua corretora: a IA vê o ecrã e mostra COMPRAR, VENDER ou NÃO OPERAR numa bolha por cima dela. Toca na bolha para ver o que fazer.</p>
+          <p class="fine-print left" id="watchNativeHint" hidden>Quando o telemóvel perguntar, escolhe partilhar o «Ecrã inteiro». Abre depois a tua corretora: a IA vê o ecrã e mostra COMPRAR, VENDER ou NÃO OPERAR numa bolha por cima dela. Toca na bolha para ver o que fazer.</p>
           <button class="btn btn-primary" type="button" id="watchShare"><i data-lucide="monitor"></i>Partilhar ecrã</button>
           <button class="btn btn-soft" type="button" id="watchCamera"><i data-lucide="camera"></i>Usar câmara</button>
           <label class="btn btn-ghost"><i data-lucide="upload"></i>Carregar vídeo<input type="file" id="watchFile" accept="video/*" hidden></label>
@@ -301,6 +303,13 @@ export const shellTemplate = `
     </div>
 
     <div class="term-box">
+      <div class="term-label"><span>// ACERTO REAL DOS SINAIS</span><span id="sigMeta">últimos 14 dias</span></div>
+      <p class="term-note">Cada COMPRAR ou VENDER mostrado na FOTO e em Minha corretora (cripto) é verificado depois com o preço real: stop a 1,5 ATR, alvo a 2R, no máximo 24 velas. Inclui os erros.</p>
+      <div class="signal-stats" id="sigStats"><p class="term-note">A carregar…</p></div>
+      <p class="term-note" id="robotHonest"></p>
+    </div>
+
+    <div class="term-box">
       <div class="term-label"><span>// BALANCE HISTORY</span><span id="tEquityMeta">—</span></div>
       <div id="equityChart" class="equity-chart"></div>
     </div>
@@ -380,6 +389,44 @@ export const shellTemplate = `
     <p class="fine-print">Conta demo simulada pela IA. Não executa ordens reais e não é aconselhamento financeiro.</p>
   </section>
 
+  <!-- DIÁRIO E CALCULADORA -->
+  <section id="diario" class="screen">
+    <header class="page-head">
+      <button class="round-btn" type="button" data-route="live" aria-label="Voltar"><i data-lucide="arrow-left"></i></button>
+      <div class="grow"><h1>Diário</h1><p>Calculadora de risco e as tuas operações</p></div>
+    </header>
+    <article class="card">
+      <header class="card-head"><b>Calculadora de risco</b><small>antes de entrar</small></header>
+      <form id="riskForm" class="calc-grid" novalidate>
+        <label><span>Saldo da conta</span><input type="number" name="balance" inputmode="decimal" min="0" step="any" placeholder="ex.: 500"></label>
+        <label><span>Risco por operação (%)</span><input type="number" name="riskPct" inputmode="decimal" min="0.1" max="100" step="0.1" value="1"></label>
+        <label><span>Preço de entrada</span><input type="number" name="entry" inputmode="decimal" step="any" placeholder="opcional"></label>
+        <label><span>Stop loss</span><input type="number" name="stop" inputmode="decimal" step="any" placeholder="opcional"></label>
+      </form>
+      <div class="calc-out" id="riskOut"><p class="muted-line">Escreve o saldo e o risco: a calculadora diz quanto podes arriscar.</p></div>
+      <p class="fine-print left">Regra de proteção: arriscar no máximo 1% a 2% da conta por operação. Em opções binárias perdes o valor inteiro da entrada quando erras, por isso a entrada não deve passar do valor em risco.</p>
+    </article>
+    <article class="card" data-server-only>
+      <header class="card-head"><b>Nova operação no diário</b><small>as tuas operações reais</small></header>
+      <form id="journalForm" class="form calc-grid" novalidate>
+        <label><span>Ativo</span><input type="text" name="asset" maxlength="30" placeholder="ex.: EUR/USD OTC" required></label>
+        <label><span>Direção</span><select name="side"><option value="BUY">Compra</option><option value="SELL">Venda</option></select></label>
+        <label><span>Valor investido</span><input type="number" name="amount" inputmode="decimal" min="0" step="any" required></label>
+        <label><span>Resultado (+ ganho, − perda)</span><input type="number" name="result" inputmode="decimal" step="any" required></label>
+        <label class="wide"><span>Nota</span><input type="text" name="note" maxlength="280" placeholder="porque entraste, o que aprendeste"></label>
+        <label class="terms-check wide"><input type="checkbox" name="followedApp"><span>Segui a orientação do Grafictrader nesta operação</span></label>
+        <button class="btn btn-primary wide" type="submit">Guardar no diário</button>
+        <p class="form-message wide" role="alert"></p>
+      </form>
+    </article>
+    <article class="card" data-server-only>
+      <header class="card-head"><b>O teu resultado real</b><small id="journalCount">—</small></header>
+      <div class="journal-totals" id="journalTotals"></div>
+      <div class="journal-list" id="journalList"><p class="muted-line">Ainda não há operações no diário.</p></div>
+    </article>
+    <p class="fine-print">Os teus números ficam só na tua conta. Servem para veres o que funciona para ti, com ou sem a app.</p>
+  </section>
+
   <!-- PERFIL -->
   <section id="perfil" class="screen">
     <header class="page-head">
@@ -414,23 +461,96 @@ export const shellTemplate = `
       <button class="btn btn-primary" type="button" id="mt5Generate">Gerar chave de ligação</button>
       <div class="mt5-symbols" id="mt5Symbols"></div>
     </article>
+    <article class="card terms-card">
+      <header class="card-head"><b>Termos e riscos</b><small data-terms-accepted>—</small></header>
+      <p class="reading-summary">O Grafictrader só te auxilia com análises e cálculos. A decisão de operar e os resultados, positivos ou negativos, são da tua responsabilidade.</p>
+      <a class="btn btn-soft" href="/termos.html"><i data-lucide="file-text"></i>Termos de Uso e Aviso de Risco</a>
+      <a class="btn btn-ghost" href="/privacidade.html"><i data-lucide="lock"></i>Política de Privacidade</a>
+    </article>
     <article class="card">
       <header class="card-head"><b>Sessão</b><small data-session-mode>—</small></header>
       <button class="btn btn-soft" type="button" id="logoutBtn"><i data-lucide="log-out"></i>Terminar sessão</button>
+      <button class="btn btn-ghost" type="button" id="logoutAllBtn" data-server-only><i data-lucide="log-out"></i>Terminar sessão em todos os dispositivos</button>
+    </article>
+    <article class="card pause-card" data-server-only>
+      <header class="card-head"><b>Pausa</b><small id="pauseStatus">sem pausa</small></header>
+      <p class="reading-summary">Precisas de parar? Durante a pausa a app não dá análises. A pausa não pode ser encurtada.</p>
+      <div class="segmented" id="pauseButtons">
+        <button type="button" data-pause="1">1 dia</button>
+        <button type="button" data-pause="7">7 dias</button>
+        <button type="button" data-pause="30">30 dias</button>
+      </div>
+      <p class="fine-print left">Se sentes que o trading está a afetar o teu dinheiro, o sono ou a família, pede ajuda a alguém de confiança ou a um profissional.</p>
+    </article>
+    <article class="card account-card" data-server-only>
+      <header class="card-head"><b>Conta</b></header>
+      <details class="account-action">
+        <summary>Mudar a palavra-passe</summary>
+        <form id="passwordForm" class="form" novalidate>
+          <label class="field"><i data-lucide="lock"></i><input type="password" name="password" placeholder="Palavra-passe atual" autocomplete="current-password" required></label>
+          <label class="field"><i data-lucide="lock"></i><input type="password" name="newPassword" placeholder="Nova palavra-passe (mín. 8)" minlength="8" autocomplete="new-password" required></label>
+          <button class="btn btn-primary" type="submit">Guardar a nova palavra-passe</button>
+          <p class="form-message" role="alert"></p>
+        </form>
+      </details>
+      <details class="account-action">
+        <summary>Apagar a minha conta</summary>
+        <form id="deleteForm" class="form" novalidate>
+          <p class="reading-summary">Apaga a conta, as sessões e a chave do MetaTrader 5. Não dá para desfazer.</p>
+          <label class="field"><i data-lucide="lock"></i><input type="password" name="password" placeholder="Palavra-passe atual" autocomplete="current-password" required></label>
+          <button class="btn btn-danger" type="submit">Apagar a conta para sempre</button>
+          <p class="form-message" role="alert"></p>
+        </form>
+      </details>
     </article>
     <article class="card credits">
       <header class="card-head"><b>Créditos</b></header>
       <p>TradingView Lightweight Charts™ · Copyright (c) 2025 TradingView, Inc. · <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">tradingview.com</a></p>
       <p>Dados: Binance, TradingView, MetaTrader 5 (via EA), Yahoo Finance, ForexFactory, alternative.me, GDELT, Finnhub, Marketaux.</p>
     </article>
-    <p class="fine-print">Grafictrader · análise e operações simuladas, sem execução de ordens reais.</p>
+    <p class="fine-print">Grafictrader · análise e operações simuladas, sem execução de ordens reais. Não é aconselhamento financeiro. <a href="/termos.html">Termos e riscos</a> · <a href="/privacidade.html">Privacidade</a></p>
   </section>
 
   <!-- MENU (top-right) -->
   <div class="menu-backdrop" id="menu" hidden>
     <div class="menu" role="menu" aria-label="Menu">
       <button type="button" role="menuitem" data-route="intel"><span class="menu-icon"><i data-lucide="activity"></i></span><span><b>Live Inteligente</b><small>Informação e estatística em tempo real</small></span></button>
+      <button type="button" role="menuitem" data-route="diario"><span class="menu-icon"><i data-lucide="calculator"></i></span><span><b>Diário e calculadora</b><small>Quanto arriscar e o teu resultado real</small></span></button>
       <button type="button" role="menuitem" data-route="perfil"><span class="menu-icon"><i data-lucide="user"></i></span><span><b>Perfil</b><small>Conta, tema e sessão</small></span></button>
+      <a role="menuitem" href="/termos.html"><span class="menu-icon"><i data-lucide="file-text"></i></span><span><b>Termos e riscos</b><small>Termos de Uso e Aviso de Risco</small></span></a>
+    </div>
+  </div>
+
+  <!-- CAPTURE NOTICE (Terms, section 13) -->
+  <div class="gate-backdrop" id="captureConsent" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="captureTitle">
+      <div class="sheet-grip"></div>
+      <header class="card-head"><b id="captureTitle">Antes de ligar</b></header>
+      <dl class="consent-list" id="captureList"></dl>
+      <a class="btn btn-ghost" href="/termos.html#t13" target="_blank" rel="noopener"><i data-lucide="file-text"></i>Ler a secção 13 dos Termos</a>
+      <button class="btn btn-primary" type="button" id="captureOk">Concordo, ligar</button>
+      <button class="btn btn-soft" type="button" id="captureCancel">Agora não</button>
+    </div>
+  </div>
+
+  <!-- TERMS GATE (cannot be dismissed: accept or sign out) -->
+  <div class="gate-backdrop" id="termsGate" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="termsGateTitle">
+      <div class="sheet-grip"></div>
+      <header class="card-head"><b id="termsGateTitle">Termos de Uso e Aviso de Risco</b><small data-terms-version>—</small></header>
+      <p class="reading-summary">Antes de continuar, confirma que compreendes como funciona o Grafictrader:</p>
+      <ul class="terms-points">
+        <li>A IA e a app <b>só te auxiliam</b> com análises e cálculos. Podem errar e não garantem lucro.</li>
+        <li><b>A decisão</b> de seguir uma análise e de a pôr em prática é <b>só tua</b>.</li>
+        <li>Os <b>resultados</b> das tuas operações, positivos ou negativos, são da <b>tua exclusiva responsabilidade</b>.</li>
+        <li>Operar pode fazer-te perder todo o dinheiro investido. Usa stop loss e só dinheiro que podes perder.</li>
+        <li>Tens 18 anos ou mais e operar é permitido no teu país.</li>
+      </ul>
+      <a class="btn btn-ghost" href="/termos.html" target="_blank" rel="noopener"><i data-lucide="file-text"></i>Ler os termos completos</a>
+      <label class="terms-check"><input type="checkbox" id="termsGateCheck"><span>Li e aceito os Termos de Uso e o Aviso de Risco.</span></label>
+      <button class="btn btn-primary" type="button" id="termsGateAccept" disabled>Aceitar e continuar</button>
+      <button class="btn btn-soft" type="button" id="termsGateLogout">Não aceito · terminar sessão</button>
+      <p class="form-message" role="alert" id="termsGateMessage"></p>
     </div>
   </div>
 

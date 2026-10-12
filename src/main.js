@@ -2,24 +2,27 @@ import './styles.css';
 import { $, $$ } from './lib/dom.js';
 import { renderIcons } from './lib/icons.js';
 import { applyTheme, toggleTheme, getThemePreference, onThemeChange } from './lib/theme.js';
-import { loadSession, currentUser, sessionMode, login, register, startLocalProfile, logout } from './lib/session.js';
+import { loadSession, currentUser, sessionMode, login, register, startLocalProfile, logout, acceptTerms, isOffline } from './lib/session.js';
+import { TERMS_VERSION, needsTerms } from './lib/terms.js';
 import { shellTemplate } from './views/shell.js';
 import { initLiveScreen, activateLiveScreen, deactivateLiveScreen } from './views/live-screen.js';
 import { stop as stopWatch } from './views/watch.js';
 import { initFoto, deactivateFoto } from './views/foto.js';
 import { initIntel, activateIntel, deactivateIntel } from './views/intel.js';
 import { initProfile, activateProfile } from './views/profile.js';
+import { initDiario, activateDiario } from './views/diario.js';
 import { initSheets, closeSheet } from './views/sheet.js';
 
 const PUBLIC_ROUTES = ['home', 'login', 'register'];
-const PRIVATE_ROUTES = ['live', 'foto', 'intel', 'perfil'];
-const TITLES = { home: 'Grafictrader', login: 'Entrar', register: 'Criar conta', live: 'Live', foto: 'Foto', intel: 'Live Inteligente', perfil: 'Perfil' };
+const PRIVATE_ROUTES = ['live', 'foto', 'intel', 'perfil', 'diario'];
+const TITLES = { home: 'Grafictrader', login: 'Entrar', register: 'Criar conta', live: 'Live', foto: 'Foto', intel: 'Live Inteligente', perfil: 'Perfil', diario: 'Diário' };
 
 const VIEWS = {
   live: { activate: activateLiveScreen, deactivate: deactivateLiveScreen },
   foto: { deactivate: deactivateFoto },
   intel: { activate: activateIntel, deactivate: deactivateIntel },
-  perfil: { activate: activateProfile }
+  perfil: { activate: activateProfile },
+  diario: { activate: activateDiario }
 };
 
 let currentRoute = null;
@@ -44,6 +47,14 @@ function renderUser() {
   $$('[data-user-initial]').forEach(el => { el.textContent = name.charAt(0).toUpperCase(); });
   $$('[data-user-email]').forEach(el => { el.textContent = user?.email || 'Perfil guardado neste dispositivo'; });
   $$('[data-session-mode]').forEach(el => { el.textContent = sessionMode() === 'server' ? 'Conta no servidor' : 'Modo local'; });
+  const accepted = user?.termsAcceptedAt ? new Date(user.termsAcceptedAt) : null;
+  $$('[data-terms-accepted]').forEach(el => {
+    el.textContent = needsTerms(user)
+      ? 'por aceitar'
+      : accepted && !Number.isNaN(accepted.getTime())
+        ? 'aceites em ' + accepted.toLocaleDateString('pt-PT')
+        : 'aceites · versão ' + TERMS_VERSION;
+  });
   const since = user?.createdAt ? new Date(user.createdAt) : null;
   $$('[data-user-since]').forEach(el => {
     el.textContent = since && !Number.isNaN(since.getTime())
@@ -80,7 +91,7 @@ function show(route) {
     closeSheet();
     $$('.screen').forEach(screen => screen.classList.toggle('active', screen.id === target));
     // Live Inteligente and Perfil are reached from the LIVE menu.
-    const tabTarget = target === 'intel' || target === 'perfil' ? 'live' : target;
+    const tabTarget = ['intel', 'perfil', 'diario'].includes(target) ? 'live' : target;
     $$('[data-tab]').forEach(tab => {
       const on = tab.dataset.tab === tabTarget;
       tab.classList.toggle('active', on);
@@ -104,16 +115,78 @@ function formMessage(form, text) {
   form.querySelector('.form-message').textContent = text || '';
 }
 
+/* ---------- terms of use ---------- */
+
+function showTermsGate() {
+  const gate = $('#termsGate');
+  if (!currentUser() || !gate.hidden) return;
+  $('#termsGateCheck').checked = false;
+  $('#termsGateAccept').disabled = true;
+  $('#termsGateMessage').textContent = '';
+  gate.hidden = false;
+  document.body.classList.add('terms-pending');
+}
+
+function hideTermsGate() {
+  $('#termsGate').hidden = true;
+  document.body.classList.remove('terms-pending');
+}
+
+/** Existing accounts (and older local profiles) accept the current terms before using the app. */
+function checkTerms() {
+  if (needsTerms(currentUser())) showTermsGate();
+  else hideTermsGate();
+}
+
+function initTermsGate() {
+  $$('[data-terms-version]').forEach(el => { el.textContent = 'versão ' + TERMS_VERSION; });
+  $('#termsGateCheck').addEventListener('change', event => { $('#termsGateAccept').disabled = !event.target.checked; });
+  $('#termsGateAccept').addEventListener('click', async event => {
+    const button = event.currentTarget;
+    if (!$('#termsGateCheck').checked) return;
+    button.disabled = true;
+    $('#termsGateMessage').textContent = '';
+    try {
+      await acceptTerms();
+      renderUser();
+      hideTermsGate();
+    } catch (error) {
+      $('#termsGateMessage').textContent = error.message;
+      button.disabled = false;
+    }
+  });
+  $('#termsGateLogout').addEventListener('click', async () => {
+    stopWatch();
+    await logout();
+    hideTermsGate();
+    renderUser();
+    navigate('home');
+  });
+  // An analysis was refused because the terms changed while the app was open.
+  window.addEventListener('grafictrader:terms-required', () => {
+    const user = currentUser();
+    if (user && !user.local) user.termsVersion = null;
+    showTermsGate();
+  });
+}
+
 async function submitAuth(form, action) {
   const button = form.querySelector('button[type="submit"]');
   formMessage(form, '');
   const data = Object.fromEntries(new FormData(form));
+  if (action === 'register' && !data.adult) {
+    return formMessage(form, 'O Grafictrader é só para maiores de 18 anos.');
+  }
+  if (action === 'register' && !data.acceptTerms) {
+    return formMessage(form, 'Para continuar, aceita os Termos de Uso e o Aviso de Risco.');
+  }
 
   if (sessionMode() === 'local') {
     if (!String(data.name || '').trim()) return formMessage(form, 'Indica o teu nome.');
-    startLocalProfile(data.name);
+    startLocalProfile(data.name, Boolean(data.acceptTerms));
     renderUser();
-    return navigate('live');
+    navigate('live');
+    return checkTerms();
   }
 
   if (action === 'register' && !String(data.name || '').trim()) return formMessage(form, 'Indica o teu nome.');
@@ -124,10 +197,11 @@ async function submitAuth(form, action) {
   button.disabled = true;
   try {
     if (action === 'login') await login(data.email, data.password);
-    else await register(data.name, data.email, data.password);
+    else await register(data.name, data.email, data.password, true, true);
     form.reset();
     renderUser();
     navigate('live');
+    checkTerms();
   } catch (error) {
     if (error.data?.setupRequired) {
       await loadSession();
@@ -181,6 +255,14 @@ function wire() {
     navigate('home');
   });
 
+  // Account deleted or every session ended (Perfil): back to the start, signed out.
+  window.addEventListener('grafictrader:signed-out', async () => {
+    stopWatch();
+    await logout();
+    renderUser();
+    navigate('home');
+  });
+
   onThemeChange(syncThemeControls);
   window.addEventListener('hashchange', () => show(location.hash.slice(1)));
 }
@@ -191,13 +273,17 @@ async function boot() {
   initFoto();
   initIntel();
   initProfile();
+  initDiario();
   wire();
+  initTermsGate();
   syncThemeControls();
   await loadSession();
   renderAuthMode();
   renderUser();
+  if (isOffline()) formMessage($('#loginForm'), 'Sem ligação ao servidor. Verifica a internet e volta a abrir a app.');
   document.body.classList.remove('booting');
   show(location.hash.slice(1) || 'home');
+  checkTerms();
 }
 
 boot();

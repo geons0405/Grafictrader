@@ -23,15 +23,15 @@ export const PROVIDERS = {
 // Groq qwen3.8-27b read all three charts right in under 1 s; Llama 3.2 Vision 90B
 // (NVIDIA) and Gemini 3.8 Flash also got them right but slower or often busy.
 // Groq gpt-oss-120b and qwen3.8-27b reasoned correctly in about 0.5 s.
+// Images (photos and whole-screen captures) never go to free proxy tiers: they
+// may keep or reuse what they receive. Add them back with AI_VISION_MODELS.
 const DEFAULT_CHAINS = {
   vision: [
     'groq:qwen/qwen3.8-27b',
     'nvidia:meta/llama-3.2-90b-vision-instruct',
     'gemini:gemini-3.8-flash',
-    'unorouter:gpt-4o:free',
     'openai:gpt-5.6-luna',
-    'nvidia:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
-    'unorouter:qwen2.5-vl-7b-instruct-awq:free'
+    'nvidia:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'
   ],
   judge: [
     'groq:openai/gpt-oss-120b',
@@ -46,8 +46,19 @@ const DEFAULT_CHAINS = {
 
 const ENV_CHAINS = { vision: 'AI_VISION_MODELS', judge: 'AI_JUDGE_MODELS' };
 const STEP_TIMEOUT_MS = 20_000;
-const COOLDOWN_MS = 60_000;
+// Whole chain, all models together: the user (and Vercel) should not wait longer.
+const CHAIN_BUDGET_MS = 45_000;
 const cooldown = new Map();
+
+/** How long to skip a model after this error: busy for a minute, slow or down for two, refused for ten. */
+export function cooldownFor(error) {
+  const message = String(error?.message || error || '');
+  const status = error?.status;
+  if (status === 401 || status === 403 || /denied|unauthori[sz]ed|forbidden|invalid api key|permission/i.test(message)) return 10 * 60_000;
+  if (status === 429 || /rate|too many|capacity|quota|high demand/i.test(message)) return 60_000;
+  if (status >= 500 || error?.name === 'AbortError' || /abort|timeout|timed out/i.test(message)) return 2 * 60_000;
+  return 0;
+}
 
 export function parseJson(text) {
   if (!text) return null;
@@ -92,7 +103,7 @@ export function chainFor(role) {
 }
 
 /** One OpenAI-style chat call (UnoRouter, Groq, NVIDIA). `content` is a string or content parts. */
-async function chatCompatible(provider, model, content, { maxTokens, temperature, json }) {
+async function chatCompatible(provider, model, content, { maxTokens, temperature, json, timeoutMs = STEP_TIMEOUT_MS }) {
   const { base, env } = PROVIDERS[provider];
   const result = await postJson(`${base}/chat/completions`, { Authorization: `Bearer ${apiKey(env)}` }, {
     model,
@@ -100,12 +111,12 @@ async function chatCompatible(provider, model, content, { maxTokens, temperature
     max_tokens: maxTokens,
     ...(json && provider === 'groq' && typeof content === 'string' ? { response_format: { type: 'json_object' } } : {}),
     messages: [{ role: 'user', content }]
-  }, STEP_TIMEOUT_MS);
+  }, timeoutMs);
   const message = result?.choices?.[0]?.message?.content;
   return Array.isArray(message) ? message.map(p => p?.text || '').join('\n') : message;
 }
 
-async function chatGemini(model, text, image, { maxTokens, temperature, json }) {
+async function chatGemini(model, text, image, { maxTokens, temperature, json, timeoutMs = STEP_TIMEOUT_MS }) {
   const parts = [{ text }];
   if (image) {
     const [, mime, data] = image.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s) || [];
@@ -115,22 +126,22 @@ async function chatGemini(model, text, image, { maxTokens, temperature, json }) 
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
     { 'x-goog-api-key': apiKey('GEMINI_API_KEY') },
     { contents: [{ role: 'user', parts }], generationConfig: { temperature, maxOutputTokens: maxTokens, ...(json ? { responseMimeType: 'application/json' } : {}) } },
-    STEP_TIMEOUT_MS
+    timeoutMs
   );
   return result?.candidates?.flatMap(c => c?.content?.parts?.map(p => p?.text).filter(Boolean) || []).join('\n');
 }
 
-async function chatOpenAI(model, text, image, { maxTokens }) {
+async function chatOpenAI(model, text, image, { maxTokens, timeoutMs = STEP_TIMEOUT_MS }) {
   const content = [{ type: 'input_text', text }];
   if (image) content.push({ type: 'input_image', image_url: image });
   const result = await postJson('https://api.openai.com/v1/responses', { Authorization: `Bearer ${apiKey('OPENAI_API_KEY')}` },
-    { model, max_output_tokens: maxTokens, input: [{ role: 'user', content }] }, STEP_TIMEOUT_MS);
+    { model, max_output_tokens: maxTokens, input: [{ role: 'user', content }] }, timeoutMs);
   return result?.output_text || result?.output?.flatMap(item => item?.content?.filter(p => p?.type === 'output_text').map(p => p?.text) || []).join('\n');
 }
 
 /** Runs one step: a prompt (and optional image) to one provider/model. Returns the text answer. */
-export async function runStep(step, text, image, { maxTokens = 1800, temperature = 0.2, json = true } = {}) {
-  const opts = { maxTokens, temperature, json };
+export async function runStep(step, text, image, { maxTokens = 1800, temperature = 0.2, json = true, timeoutMs = STEP_TIMEOUT_MS } = {}) {
+  const opts = { maxTokens, temperature, json, timeoutMs };
   if (step.provider === 'gemini') return chatGemini(step.model, text, image, opts);
   if (step.provider === 'openai') return chatOpenAI(step.model, text, image, opts);
   const content = image ? [{ type: 'text', text }, { type: 'image_url', image_url: { url: image } }] : text;
@@ -143,7 +154,7 @@ const label = step => `${PROVIDERS[step.provider].label} (${step.model})`;
  * Tries the role's chain until a model returns a usable answer.
  * `accept(text)` decides if an answer is usable (default: valid JSON).
  */
-export async function runChain(role, text, image, { accept = t => Boolean(parseJson(t)), steps, ...opts } = {}) {
+export async function runChain(role, text, image, { accept = t => Boolean(parseJson(t)), steps, budgetMs = CHAIN_BUDGET_MS, ...opts } = {}) {
   const chain = steps || chainFor(role);
   if (!chain.length) {
     const error = new Error('Nenhuma IA está configurada (UNOROUTER_API_KEY, GROQ_API_KEY, NVIDIA_API_KEY, GEMINI_API_KEY ou OPENAI_API_KEY).');
@@ -152,16 +163,24 @@ export async function runChain(role, text, image, { accept = t => Boolean(parseJ
     throw error;
   }
   const errors = [];
+  const deadline = Date.now() + budgetMs;
   for (const step of chain) {
     const id = `${step.provider}:${step.model}`;
     if ((cooldown.get(id) || 0) > Date.now()) continue;
+    const left = deadline - Date.now();
+    if (left < 3000) {
+      errors.push('sem tempo para mais modelos');
+      break;
+    }
     try {
-      const answer = await runStep(step, text, image, opts);
+      const answer = await runStep(step, text, image, { ...opts, timeoutMs: Math.min(STEP_TIMEOUT_MS, left) });
       if (answer && accept(answer)) return { text: answer, provider: label(step), step };
       errors.push(`${id}: resposta inválida`);
+      console.error('[AI]', id, 'resposta inválida');
     } catch (error) {
       errors.push(`${id}: ${error?.message || error}`);
-      if (error?.status === 429 || /rate|too many|capacity|quota|high demand/i.test(error?.message || '')) cooldown.set(id, Date.now() + COOLDOWN_MS);
+      const pause = cooldownFor(error);
+      if (pause) cooldown.set(id, Date.now() + pause);
       console.error('[AI]', id, error?.message || error);
     }
   }
@@ -171,10 +190,16 @@ export async function runChain(role, text, image, { accept = t => Boolean(parseJ
   throw error;
 }
 
+/** A usable vision answer is a JSON object with the chart flag or a decision, not just any JSON. */
+export function isVisionAnswer(text) {
+  const parsed = parseJson(text);
+  return Boolean(parsed) && typeof parsed === 'object' && !Array.isArray(parsed) && ('graficoVisivel' in parsed || 'decisao' in parsed);
+}
+
 /** Chart image → parsed JSON from the first vision model that answers well. */
 export async function runVision(image, prompt, { maxOutputTokens = 1800 } = {}) {
   try {
-    const { text, provider } = await runChain('vision', prompt, image, { maxTokens: maxOutputTokens });
+    const { text, provider } = await runChain('vision', prompt, image, { maxTokens: maxOutputTokens, accept: isVisionAnswer });
     return { raw: parseJson(text), provider };
   } catch (error) {
     if (error.setupRequired) throw error;

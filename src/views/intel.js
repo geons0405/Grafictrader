@@ -262,6 +262,10 @@ function renderTerminal(data) {
   }
   $('#tWinRate').textContent = s.winRate == null ? '—' : s.winRate + '%';
   $('#tWinSub').textContent = `${s.wins}W / ${s.losses}L · ${s.trades} operações`;
+  // The robot's honest numbers: costs are already taken out of every trade.
+  $('#robotHonest').textContent = s.trades
+    ? `Robô demo (${intervalName(market.interval)}): ganho médio ${s.expectancyR >= 0 ? '+' : ''}${s.expectancyR ?? '—'}R por operação, maior queda ${s.maxDrawdownPct ?? 0}%, já com ${s.costPct ?? '—'}% de custos por operação.`
+    : `Robô demo (${intervalName(market.interval)}): ainda sem operações com custos de ${s.costPct ?? '—'}% incluídos.`;
 
   ensureEquityChart();
   equitySeries.setData(equity.map(p => ({ time: p.time, value: p.value })));
@@ -464,7 +468,34 @@ async function loadEngine() {
   schedule('engine', loadEngine, ENGINE_MS);
 }
 
+const SOURCE_NAMES = { foto: 'FOTO', corretora: 'Minha corretora' };
+
+async function loadSignals() {
+  try {
+    const data = await api('/api/instructor?signals=1');
+    if (!data.available) {
+      $('#sigStats').innerHTML = '<p class="term-note">O histórico precisa da base de dados do servidor.</p>';
+      return;
+    }
+    const s = data.stats || {};
+    const row = (label, g) => g
+      ? `<div class="sig-row"><span>${escapeHtml(label)}</span><b>${g.winRate == null ? '—' : g.winRate + '%'}</b><small>${g.settled} verificados de ${g.signals} · ${g.avgR == null ? '—' : (g.avgR >= 0 ? '+' : '') + g.avgR + 'R'} por sinal</small></div>`
+      : '';
+    const rows = [
+      row('Todos os sinais', s.total),
+      ...Object.keys(s).filter(k => k.startsWith('source:')).map(k => row(SOURCE_NAMES[k.slice(7)] || k.slice(7), s[k])),
+      ...Object.keys(s).filter(k => k.startsWith('interval:')).sort().map(k => row('Timeframe ' + k.slice(9), s[k]))
+    ].join('');
+    $('#sigStats').innerHTML = rows || '<p class="term-note">Ainda não há sinais verificados. Aparecem aqui 24 velas depois de cada COMPRAR/VENDER.</p>';
+  } catch {
+    $('#sigStats').innerHTML = '<p class="term-note">Histórico indisponível agora.</p>';
+  } finally {
+    schedule('signals', loadSignals, 120_000);
+  }
+}
+
 function refreshAll() {
+  loadSignals();
   loadEngine();
   loadGlobal();
   loadTerminal();

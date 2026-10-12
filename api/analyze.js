@@ -1,9 +1,10 @@
 import { requireUserIfConfigured } from './_lib/auth.js';
-import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
-import { clientIp, parseMarketQuery } from './_lib/validate.js';
+import { rateLimit, sendRateLimited, aiQuota } from './_lib/rate-limit.js';
+import { clientIp, parseMarketQuery, crossSite } from './_lib/validate.js';
 import { marketReading } from './_lib/quant/service.js';
 import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance, guardImageQuality } from './_lib/quant/verdict.js';
 import { rulesBlock } from './_lib/ai-rules.js';
+import { recordSignal } from './_lib/signals.js';
 import { photoGuidance } from './_lib/quant/explain.js';
 
 import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
@@ -40,6 +41,7 @@ Responde APENAS com JSON válido neste formato:
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
+  if (crossSite(req)) return res.status(403).json({ ok: false, error: 'Pedido recusado.' });
   res.setHeader('Cache-Control', 'no-store');
 
   const { image, symbol: hintSymbol, interval: hintInterval } = req.body || {};
@@ -51,8 +53,10 @@ export default async function handler(req, res) {
   const access = await requireUserIfConfigured(req, res);
   if (!access.ok) return;
 
-  const limit = await rateLimit('analyze', access.user?.email || clientIp(req), { limit: 10, windowSeconds: 600 });
+  const limit = await rateLimit('analyze', access.user?.email || clientIp(req), { limit: 10, windowSeconds: 600, failClosed: true });
   if (!limit.allowed) return sendRateLimited(res, limit);
+  const quota = await aiQuota(access.user?.email || clientIp(req));
+  if (!quota.allowed) return sendRateLimited(res, quota);
 
   let vision;
   try {
@@ -81,9 +85,11 @@ export default async function handler(req, res) {
   // Cross-check with the live engine when the chart is a market we track.
   const hint = parseMarketQuery({ symbol: hintSymbol, interval: hintInterval });
   const symbol = mapAsset(normalized.asset) || null;
-  const interval = mapTimeframe(normalized.timeframe) || hint?.interval || '15m';
+  // A timeframe the engine does not run (30m, D1…) gets no live cross-check rather than a different one.
+  const readTimeframe = mapTimeframe(normalized.timeframe);
+  const interval = readTimeframe || hint?.interval || '15m';
   let reading = null;
-  if (symbol) {
+  if (symbol && (readTimeframe || !normalized.timeframe)) {
     try {
       reading = await marketReading(symbol, interval);
     } catch (error) {
@@ -91,6 +97,10 @@ export default async function handler(req, res) {
     }
   }
   const verdict = mergeVerdict(normalized, reading);
+  // Track record: the BUY/SELL shown is checked later against the real price.
+  if (reading && verdict.direction) {
+    await recordSignal({ source: 'foto', symbol, interval, side: verdict.direction, price: reading.price, atr: reading.snapshot?.atr, confidence: verdict.confidence });
+  }
 
   return res.status(200).json({
     ok: true,

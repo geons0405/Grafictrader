@@ -1,5 +1,6 @@
 import { $, $$, api, escapeHtml, fmtTime } from '../lib/dom.js';
 import { renderIcons } from '../lib/icons.js';
+import { confirmCapture } from '../lib/consent.js';
 import { frameSignature, frameDiff, shouldSend, createStabilizer } from '../lib/watch-core.js';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 
@@ -30,6 +31,8 @@ let startedAt = null;
 let analyses = 0;
 let history = [];
 let lastByDecision = {};
+// Bumped on every start and stop: an answer from an older session is ignored.
+let session = 0;
 let current = null;
 let pipWindow = null;
 let prefs = { voice: false, alerts: false };
@@ -115,17 +118,21 @@ async function tick() {
   setStatus('A analisar o gráfico…');
   const image = toJpeg(source);
   release();
+  const mine = session;
   try {
     const previous = current ? { decision: current.verdict.decision, asset: current.vision.asset, timeframe: current.vision.timeframe } : null;
-    const data = await api('/api/watch', { method: 'POST', body: { image, previous } });
+    const data = await api('/api/watch', { method: 'POST', body: { image, previous }, timeoutMs: 70_000 });
+    // Stopped (or restarted) while this frame was being analysed: drop it, say nothing.
+    if (mine !== session) return;
     analyses += 1;
     minGap = MIN_GAP_MS;
     handleResult(data);
   } catch (error) {
+    if (mine !== session) return;
     if (error.status === 429) {
       minGap = 20000;
       setStatus('Muitas análises seguidas: a abrandar para uma a cada 20 s.');
-    } else if (error.status === 401 || error.status === 503) {
+    } else if (error.status === 401 || error.status === 503 || error.data?.termsRequired || error.data?.paused) {
       stop(error.status === 401 ? 'Inicia sessão para usar a análise ao vivo.' : error.message);
     } else {
       setStatus('Falhou uma análise (' + error.message + '). A tentar de novo…');
@@ -163,6 +170,7 @@ function stopTicker() {
 
 async function begin(newStream, newKind, { keepSource = false } = {}) {
   if (!keepSource) stop();
+  session += 1;
   stream = newStream;
   kind = newKind;
   const video = $('#watchVideo');
@@ -200,6 +208,7 @@ async function begin(newStream, newKind, { keepSource = false } = {}) {
 }
 
 export function stop(message) {
+  session += 1;
   if (kind === 'native') Native?.stopWatch().catch(() => {});
   stopTicker();
   stream?.getTracks().forEach(t => t.stop());
@@ -230,7 +239,11 @@ function handleResult(data) {
     setStatus(`Ao vivo no telemóvel · ${analyses} análise(s) · a bolha mostra a orientação por cima da corretora`);
   }
   const decision = data.verdict.decision;
-  const step = stabilizer.push(decision, { chartVisible: data.chartVisible });
+  // Only a market named in full (asset and timeframe) can count as a different one.
+  const context = data.chartVisible ? data.market || null : null;
+  const step = stabilizer.push(decision, { chartVisible: data.chartVisible, context });
+  // A different market: levels and readings of the previous one must not come back.
+  if (step.contextChanged) lastByDecision = {};
   if (data.chartVisible) lastByDecision[decision] = data;
   // No chart now: show this reading (it explains what to do), not the last trade.
   const shownData = !step.noChart && step.shown ? lastByDecision[step.shown] || data : data;
@@ -252,13 +265,16 @@ function render(data, step, latest) {
   const vis = data.vision;
   // Without a chart on screen nothing is shown as a trade, not even the last one.
   const decision = step.noChart ? 'AGUARDAR' : step.shown || v.decision;
+  // Shown advice differs from this reading (a new direction still waiting for its
+  // confirmation): this reading's trade texts and levels must not be shown.
+  const unconfirmed = !step.noChart && decision !== v.decision;
   const badgeText = step.noChart ? 'SEM GRÁFICO' : LABEL[decision] || decision;
   const badge = $('#watchBadge');
   badge.textContent = badgeText;
   badge.dataset.side = SIDE[decision] || '';
   $('#watchOverlay').textContent = badgeText;
   $('#watchOverlay').dataset.side = SIDE[decision] || '';
-  $('#watchTitle').textContent = step.noChart ? 'Não vejo um gráfico no ecrã' : g.headline || v.headline;
+  $('#watchTitle').textContent = step.noChart ? 'Não vejo um gráfico no ecrã' : unconfirmed ? 'A confirmar o sinal…' : g.headline || v.headline;
   const bits = [vis.asset || 'ativo ?', vis.timeframe || 'timeframe ?', `confiança ${v.confidence}%`];
   if (latest.live) bits.push(v.agreement === 'confirma' ? 'mercado ao vivo confirma' : v.agreement === 'diverge' ? 'mercado ao vivo diverge' : 'mercado ao vivo sem sinal');
   $('#watchSub').textContent = bits.join(' · ');
@@ -266,14 +282,18 @@ function render(data, step, latest) {
   if (step.pending) $('#watchPending').textContent = `A IA começa a ver sinal de ${LABEL[step.pending]}. Vai confirmar na próxima leitura antes de mudar.`;
   // Exact engine levels when the market is tracked; otherwise what the AI read on screen.
   const levels = g.levels || { entry: vis.entry, stop: vis.stop, target: vis.targets?.join(' · ') };
-  const showLevels = !step.noChart && decision !== 'AGUARDAR' && Boolean(levels.entry || levels.stop || levels.target);
+  const showLevels = !step.noChart && !unconfirmed && decision !== 'AGUARDAR' && Boolean(levels.entry || levels.stop || levels.target);
   $('#watchLevels').hidden = !showLevels;
   if (showLevels) {
     $('#wlEntry').textContent = levels.entry || '—';
     $('#wlStop').textContent = levels.stop || '—';
     $('#wlTarget').textContent = levels.target || '—';
   }
-  $('#watchNow').textContent = step.noChart ? 'Enquadra o gráfico da corretora inteiro no ecrã partilhado ou na câmara.' : g.now || '—';
+  $('#watchNow').textContent = step.noChart
+    ? 'Enquadra o gráfico da corretora inteiro no ecrã partilhado ou na câmara.'
+    : unconfirmed
+      ? `Não operes ainda: a IA vê um possível sinal de ${LABEL[v.decision] || v.decision} e confirma-o na próxima leitura.`
+      : g.now || '—';
   $('#watchHudNow').textContent = $('#watchNow').textContent;
   $('#watchWhy').innerHTML = (g.why || []).map(p => `<p>${escapeHtml(p)}</p>`).join('');
   $('#watchSteps').innerHTML = (g.steps || []).map(p => `<li>${escapeHtml(p)}</li>`).join('');
@@ -351,6 +371,7 @@ function initNative() {
   $('#watchShare').hidden = true;
   $('#watchShareHint').hidden = true;
   $('#watchNative').onclick = async () => {
+    if (!(await confirmCapture('bubble'))) return;
     try {
       await Native.startWatch({ serverUrl: location.origin, voice: prefs.voice });
       await begin(null, 'native');
@@ -366,7 +387,10 @@ function initNative() {
     if (kind === 'native') { kind = null; stop(message || undefined); }
   });
   // The capture keeps running when the app is reopened.
-  Native.status().then(s => { if (s?.running && kind !== 'native') begin(null, 'native'); }).catch(() => {});
+  Native.status().then(s => {
+    if (s?.running && kind !== 'native') begin(null, 'native');
+    else if (s?.lastStop) setStatus('A análise parou: ' + s.lastStop);
+  }).catch(() => {});
 }
 
 export function initWatch() {
@@ -378,6 +402,7 @@ export function initWatch() {
   $('#watchPip').hidden = !('documentPictureInPicture' in window);
 
   $('#watchShare').onclick = async () => {
+    if (!(await confirmCapture('screen'))) return;
     try {
       const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 5 }, audio: false });
       await begin(s, 'screen');
@@ -386,6 +411,7 @@ export function initWatch() {
     }
   };
   $('#watchCamera').onclick = async () => {
+    if (!(await confirmCapture('camera'))) return;
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } }, audio: false });
       await begin(s, 'camera');

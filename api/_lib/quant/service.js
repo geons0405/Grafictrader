@@ -1,8 +1,9 @@
+import { randomBytes } from 'node:crypto';
 import { getBinanceCandles, getBinanceAggTrades, getBinanceOrderBook } from '../sources/binance.js';
 import { redis, redisConfigured } from '../redis.js';
 import { closedCandles } from '../mechanics/pattern-library.js';
 import { quantSnapshot, decide, regimeLabel } from './signal.js';
-import { emptyState, advance, summarize } from './instructor.js';
+import { emptyState, advance, summarize, STATE_VERSION } from './instructor.js';
 import { buildContext, recentNews } from './context.js';
 import { explainPlain, buildPlan } from './explain.js';
 import { getCalendar, eventRisk } from '../sources/calendar.js';
@@ -79,16 +80,7 @@ async function computeInstructor(symbol, interval) {
   if (redisConfigured()) {
     mode = 'persistent';
     try {
-      const stored = await redis(['GET', stateKey(symbol, interval)]);
-      state = stored ? JSON.parse(stored) : null;
-      const lock = await redis(['SET', lockKey(symbol, interval), '1', 'NX', 'EX', '10']);
-      if (lock === 'OK') {
-        state = advance(state || emptyState(symbol, interval), closed, { context: live.context });
-        await redis(['SET', stateKey(symbol, interval), JSON.stringify(state)]);
-        await redis(['DEL', lockKey(symbol, interval)]);
-      } else if (!state) {
-        state = advance(emptyState(symbol, interval), closed);
-      }
+      state = await advanceStored(stateKey(symbol, interval), lockKey(symbol, interval), symbol, interval, closed, live.context);
     } catch {
       mode = 'replay';
       state = null;
@@ -97,6 +89,42 @@ async function computeInstructor(symbol, interval) {
   if (!state) state = advance(emptyState(symbol, interval), closed, { context: live.context });
 
   return instructorView({ symbol, interval, mode, state, closed, livePrice, context: live.context, orderBook: live.orderBook });
+}
+
+/**
+ * Advances a persisted instructor state under a lock. The state is read only
+ * after the lock is taken (so two requests can never both advance an old
+ * copy), the lock carries a token so only its owner releases it, and a write
+ * that would go back in time is skipped. Without the lock the stored state is
+ * shown as it is.
+ */
+export async function advanceStored(key, lock, symbol, interval, closed, context, { ttl = null } = {}) {
+  const token = randomBytes(12).toString('hex');
+  const locked = (await redis(['SET', lock, token, 'NX', 'EX', '30'])) === 'OK';
+  try {
+    const stored = await redis(['GET', key]);
+    let state = stored ? JSON.parse(stored) : null;
+    // An account saved before costs and gap fills were counted starts again.
+    if (state && state.version !== STATE_VERSION) state = null;
+    if (!locked) return state || advance(emptyState(symbol, interval), closed);
+    const before = state?.lastTime ?? null;
+    state = advance(state || emptyState(symbol, interval), closed, { context });
+    if (before == null || state.lastTime > before) {
+      await redis(ttl ? ['SET', key, JSON.stringify(state), 'EX', String(ttl)] : ['SET', key, JSON.stringify(state)]);
+    }
+    return state;
+  } finally {
+    if (locked && (await redis(['GET', lock])) === token) await redis(['DEL', lock]);
+  }
+}
+
+/** At most `max` balance points, always keeping the changes and the last one: smaller answers on mobile data. */
+export function thinEquity(points, max = 200) {
+  if (points.length <= max) return points;
+  const changes = points.filter((p, i) => i === 0 || i === points.length - 1 || p.value !== points[i - 1].value);
+  if (changes.length <= max) return changes;
+  const step = changes.length / max;
+  return Array.from({ length: max }, (_, i) => changes[Math.min(changes.length - 1, Math.floor(i * step))]).concat(changes.at(-1));
 }
 
 /** Shapes the instructor response; shared by Binance and MetaTrader 5 feeds. */
@@ -117,7 +145,7 @@ export function instructorView({ symbol, interval, mode, state, closed, livePric
     guidance,
     plan,
     trades: state.trades.slice(-30),
-    equity: state.equity,
+    equity: thinEquity(state.equity),
     log: state.log.slice(-40),
     lastDecision: state.lastDecision,
     signal: { ...now, regime: snapshot?.regime ?? null, regimeLabel: regimeLabel(snapshot?.regime) },
@@ -127,13 +155,22 @@ export function instructorView({ symbol, interval, mode, state, closed, livePric
   };
 }
 
-/** Replays the instructor on candles supplied by a MetaTrader 5 bridge. */
-export async function instructorFromCandles(symbol, interval, candles, livePrice) {
+/**
+ * Instructor on candles supplied by a MetaTrader 5 bridge. With `owner` (the
+ * account email) and Redis, the state is kept like the Binance one, so past
+ * trades never change when the candle window slides.
+ */
+export async function instructorFromCandles(symbol, interval, candles, livePrice, owner = null) {
   const rows = normalize(candles);
   const closed = closedCandles(rows, interval);
   const macro = await macroContext(symbol).catch(() => ({}));
   const context = { score: 0, flow: null, book: null, news: { score: 0, total: 0 }, available: false, ...macro };
-  const state = advance(emptyState(symbol, interval), closed, { context });
+  let state = null;
+  if (owner && redisConfigured()) {
+    const base = `grafictrader:mt5state:${owner}:${symbol}:${interval}`;
+    try { state = await advanceStored(base, base + ':lock', symbol, interval, closed, context, { ttl: 14 * 24 * 3600 }); } catch { state = null; }
+  }
+  if (!state) state = advance(emptyState(symbol, interval), closed, { context });
   return instructorView({ symbol, interval, mode: 'mt5', state, closed, livePrice: livePrice ?? rows.at(-1)?.close, context });
 }
 

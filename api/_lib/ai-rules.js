@@ -13,7 +13,8 @@ export const SHARED_RULES = [
 /** Gate that vision prompts run before reading any chart. */
 export const CHART_GATE = [
   'Primeiro confirma se a imagem mostra um gráfico de preços (velas, barras ou linha de preço com eixos).',
-  'Se não for um gráfico de preços (foto de pessoa, documento, menu, conversa, ecrã preto, imagem desfocada ou cortada), responde graficoVisivel false, decisao AGUARDAR, confianca 0 e deixa ativo, timeframe, precoAtual, entrada, stop e alvos a null.',
+  'Uma captura do ecrã de uma corretora (Pocket Option, Quotex, IQ Option, MetaTrader, Binance…) com o gráfico conta como gráfico, mesmo com saldo, botões, menus, foto de perfil ou imagem de fundo à volta.',
+  'Se não houver gráfico de preços (só uma foto de pessoa, documento, menu, conversa, ecrã preto, ou imagem tão desfocada ou cortada que não se vêem as velas), responde graficoVisivel false, decisao AGUARDAR, confianca 0 e deixa ativo, timeframe, precoAtual, entrada, stop e alvos a null.',
   'Nesse caso usa o resumo para dizer em poucas palavras o que vês e pede para mostrar o gráfico inteiro.',
   'Só lês valores que consegues ver na imagem; se um valor não estiver legível, usa null.'
 ];

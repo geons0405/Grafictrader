@@ -30,7 +30,7 @@ export function rsi(values, period = 14) {
     gain = (gain * (period - 1) + Math.max(d, 0)) / period;
     loss = (loss * (period - 1) + Math.max(-d, 0)) / period;
   }
-  if (loss === 0) return 100;
+  if (loss === 0) return gain === 0 ? 50 : 100; // a flat series is neutral, not overbought
   return 100 - 100 / (1 + gain / loss);
 }
 

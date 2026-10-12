@@ -564,9 +564,14 @@ async function load() {
       renderNoGuidance('Neste ativo a IA precisa dos preços da tua corretora: liga o MetaTrader 5 no Perfil e abre o mesmo ativo no MT5. Para cripto, a IA usa os dados da Binance.');
     }
   } catch (error) {
-    if (token === loadToken) setConnection('Sem dados · ' + (error.message || 'fontes indisponíveis'));
+    if (token !== loadToken) return;
+    setConnection('Sem dados · ' + (error.message || 'fontes indisponíveis') + ' · nova tentativa em 15 s');
+    // The first load failed (network, source down): try again instead of staying empty.
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => { if (token === loadToken) load(); }, 15_000);
   }
 }
+let retryTimer = null;
 
 function syncControls() {
   $$('#sources [data-source]').forEach(btn => btn.classList.toggle('active', btn.dataset.source === market.source));

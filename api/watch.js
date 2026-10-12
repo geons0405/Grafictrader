@@ -1,10 +1,11 @@
 import { requireUserIfConfigured } from './_lib/auth.js';
-import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
-import { clientIp } from './_lib/validate.js';
+import { rateLimit, sendRateLimited, aiQuota } from './_lib/rate-limit.js';
+import { clientIp, crossSite } from './_lib/validate.js';
 import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
 import { marketReading } from './_lib/quant/service.js';
 import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance, guardImageQuality } from './_lib/quant/verdict.js';
 import { rulesBlock } from './_lib/ai-rules.js';
+import { recordSignal } from './_lib/signals.js';
 import { photoGuidance } from './_lib/quant/explain.js';
 
 // Live analysis of the user's broker: the app sends one frame of the shared
@@ -17,7 +18,8 @@ Decide a orientação para a próxima fase:
 - "COMPRAR" se a estrutura e o momentum favorecem subida;
 - "VENDER" se favorecem descida;
 - "AGUARDAR" se está lateral, confuso, sem confirmação, ou se não há um gráfico visível.
-Se a imagem não mostrar um gráfico de preços (outro ecrã, menu, imagem tremida), indica graficoVisivel false.
+O ecrã de uma corretora (Pocket Option, Quotex, IQ Option, MetaTrader…) tem o gráfico rodeado de saldo, botões, menus e foto de perfil: isso é um gráfico visível.
+Só indica graficoVisivel false se não houver velas, barras nem linha de preço (outra app, menu sem gráfico, ecrã preto, imagem tão tremida que não se vêem as velas).
 ${rulesBlock({ chart: true })}
 {CONTINUITY}
 Responde em português de Angola.
@@ -66,8 +68,16 @@ function continuity(previous) {
   return parts.join(', ') + '. Só muda a decisão se o gráfico mostrar uma razão clara.';
 }
 
+/** "BTCUSDT|5m" from whatever spelling the model used; null when the asset or timeframe is missing. */
+export function marketKey(vision) {
+  const asset = mapAsset(vision.asset) || String(vision.asset || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const timeframe = mapTimeframe(vision.timeframe) || String(vision.timeframe || '').toLowerCase().replace(/\s+/g, '');
+  return asset && timeframe ? asset + '|' + timeframe : null;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
+  if (crossSite(req)) return res.status(403).json({ ok: false, error: 'Pedido recusado.' });
   res.setHeader('Cache-Control', 'no-store');
 
   const { image, previous } = req.body || {};
@@ -80,8 +90,10 @@ export default async function handler(req, res) {
   if (!access.ok) return;
 
   // About one analysis every 10 s on average per user.
-  const limit = await rateLimit('watch', access.user?.email || clientIp(req), { limit: 60, windowSeconds: 600 });
+  const limit = await rateLimit('watch', access.user?.email || clientIp(req), { limit: 60, windowSeconds: 600, failClosed: true });
   if (!limit.allowed) return sendRateLimited(res, limit);
+  const quota = await aiQuota(access.user?.email || clientIp(req));
+  if (!quota.allowed) return sendRateLimited(res, quota);
 
   let vision;
   try {
@@ -91,15 +103,25 @@ export default async function handler(req, res) {
   }
 
   const chartVisible = isChartVisible(vision.raw);
+  if (!chartVisible) {
+    // Only the model and its flag: what the model saw may be private screen content.
+    console.info('[watch] sem gráfico', vision.provider, JSON.stringify({ flag: vision.raw?.graficoVisivel ?? null }));
+  }
   const normalized = chartVisible ? guardImageQuality(normalizeVision(vision.raw)) : noChartVision(vision.raw);
   const symbol = chartVisible ? mapAsset(normalized.asset) : null;
-  const interval = mapTimeframe(normalized.timeframe) || '5m';
+  // A timeframe the engine does not run (30m, D1…) gets no live cross-check rather than a different one.
+  const readTimeframe = mapTimeframe(normalized.timeframe);
+  const interval = readTimeframe || '5m';
   let reading = null;
-  if (symbol) {
+  if (symbol && (readTimeframe || !normalized.timeframe)) {
     try { reading = await cachedReading(symbol, interval); } catch { reading = null; }
   }
   // Not a chart: neutral verdict, no levels, no live market mixed in.
   const verdict = chartVisible ? mergeVerdict(normalized, reading) : noChartVerdict();
+  // Track record: at most one BUY/SELL per market and candle is checked later against the real price.
+  if (reading && verdict.direction) {
+    await recordSignal({ source: 'corretora', symbol, interval, side: verdict.direction, price: reading.price, atr: reading.snapshot?.atr, confidence: verdict.confidence });
+  }
   const guidance = chartVisible ? photoGuidance(verdict, normalized, reading) : { ...noChartGuidance(normalized, 'ecrã'), headline: 'Não vejo um gráfico no ecrã' };
 
   return res.status(200).json({
@@ -107,6 +129,8 @@ export default async function handler(req, res) {
     provider: vision.provider,
     at: new Date().toISOString(),
     chartVisible,
+    // Stable name of the market on screen, so "BTC/USDT M5" and "BTCUSDT 5m" are the same one.
+    market: chartVisible ? marketKey(normalized) : null,
     change: chartVisible && vision.raw?.mudanca ? String(vision.raw.mudanca).slice(0, 200) : null,
     vision: normalized,
     verdict,
