@@ -40,6 +40,8 @@ function renderJournal({ entries = [], totals } = {}) {
 
 async function loadJournal() {
   if (sessionMode() !== 'server') return;
+  // Never keep showing a previous account's trades while loading (or if loading fails).
+  renderJournal();
   try { renderJournal(await api('/api/journal')); } catch { /* shown empty */ }
 }
 
