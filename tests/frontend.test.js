@@ -34,3 +34,15 @@ test('safeUrl blocks script URLs and escapeHtml escapes markup', () => {
   assert.equal(safeUrl('https://example.com/a?b=1'), 'https://example.com/a?b=1');
   assert.equal(escapeHtml('<img onerror="x">'), '&lt;img onerror=&quot;x&quot;&gt;');
 });
+
+test('risk calculator sizes the position from balance, risk and stop distance', async () => {
+  const { positionSize } = await import('../src/lib/risk.js');
+  const r = positionSize({ balance: 500, riskPct: 1, entry: 100, stop: 98 });
+  assert.equal(r.riskAmount, 5);
+  assert.equal(r.binaryStake, 5);
+  assert.equal(r.units, 2.5);
+  assert.equal(r.notional, 250);
+  assert.equal(r.stopPct, 2);
+  assert.equal(positionSize({ balance: 500, riskPct: 0, entry: 1, stop: 2 }), null);
+  assert.equal(positionSize({ balance: 500, riskPct: 2, entry: '', stop: '' }).units, null, 'binary only: no stop');
+});

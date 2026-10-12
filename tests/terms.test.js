@@ -79,7 +79,7 @@ test('an account can only be created after accepting the terms', async () => {
   assert.equal(refused.status, 400);
   assert.match(refused.body.error, /Termos de Uso/);
 
-  const created = await call(auth, { method: 'POST', query: { action: 'register' }, body: { name: 'Ana', email: 'ana@terms.test', password: 'segredo123', acceptTerms: true } });
+  const created = await call(auth, { method: 'POST', query: { action: 'register' }, body: { name: 'Ana', email: 'ana@terms.test', password: 'segredo123', acceptTerms: true, adult: true } });
   assert.equal(created.status, 201);
   assert.equal(created.body.user.termsVersion, TERMS_VERSION);
   assert.ok(created.body.user.termsAcceptedAt);
@@ -117,4 +117,11 @@ test('capture notices cover every point section 13 of the terms promises', async
     }
   }
   assert.match(CAPTURE_NOTICES.bubble.items[0][1], /ECRÃ INTEIRO/);
+});
+
+test('the privacy policy is its own page, linked from the terms, and says how to delete the account', () => {
+  const privacy = readFileSync(new URL('../public/privacidade.html', import.meta.url), 'utf8');
+  assert.match(privacy, /Apagar a minha conta/);
+  assert.match(privacy, /nunca vendemos dados/);
+  assert.ok(page.includes('/privacidade.html'));
 });

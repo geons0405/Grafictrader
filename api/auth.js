@@ -2,7 +2,8 @@ import {
   authConfigured, normalizeEmail, validEmail, createUser,
   createSession, destroySession, sessionToken, getSessionUser, setSessionCookie,
   clearSessionCookie, publicUser, rotateBridgeKey, acceptTerms,
-  checkCredentials, changePassword, deleteAccount, destroyAllSessions
+  checkCredentials, changePassword, deleteAccount, destroyAllSessions,
+  startPause, pausedUntil, PAUSE_DAYS
 } from './_lib/auth.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 import { clientIp, crossSite } from './_lib/validate.js';
@@ -21,7 +22,8 @@ export default async function handler(req, res) {
     if (action === 'me' && req.method === 'GET') {
       if (!authConfigured()) return notConfigured(res);
       const user = await getSessionUser(req);
-      return user ? res.status(200).json({ ok: true, user }) : res.status(401).json({ ok: false, user: null });
+      if (!user) return res.status(401).json({ ok: false, user: null });
+      return res.status(200).json({ ok: true, user: { ...user, pausedUntil: await pausedUntil(user.email) } });
     }
 
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
@@ -51,6 +53,14 @@ export default async function handler(req, res) {
       await destroySession(sessionToken(req));
       setSessionCookie(res, req, await createSession(user));
       return res.status(200).json({ ok: true, user: publicUser(user) });
+    }
+
+    if (action === 'pause') {
+      const current = await getSessionUser(req);
+      if (!current) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
+      const days = Number(req.body?.days);
+      if (!PAUSE_DAYS.includes(days)) return res.status(400).json({ ok: false, error: 'Escolhe 1, 7 ou 30 dias.' });
+      return res.status(200).json({ ok: true, pausedUntil: await startPause(current.email, days) });
     }
 
     if (action === 'logout-all' || action === 'password' || action === 'delete') {
@@ -96,6 +106,9 @@ export default async function handler(req, res) {
       }
       if (body.acceptTerms !== true) {
         return res.status(400).json({ ok: false, error: 'Para criar conta tens de aceitar os Termos de Uso e o Aviso de Risco.' });
+      }
+      if (body.adult !== true) {
+        return res.status(400).json({ ok: false, error: 'O Grafictrader é só para maiores de 18 anos.' });
       }
       const user = await createUser({ name, email, password, acceptTerms: true });
       if (!user) return res.status(409).json({ ok: false, error: 'Já existe uma conta com este email.' });

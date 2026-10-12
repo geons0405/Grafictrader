@@ -521,6 +521,10 @@ public class WatchService extends Service {
             finish("Inicia sessão na app Grafictrader para usar a análise ao vivo.");
             return;
         }
+        if (status == 423 && data.optBoolean("paused")) {
+            finish(data.optString("error", "Estás em pausa: as análises voltam quando a pausa terminar."));
+            return;
+        }
         if (status == 403 && data.optBoolean("termsRequired")) {
             finish(data.optString("error", "Aceita os Termos de Uso e o Aviso de Risco na app Grafictrader para continuar."));
             return;

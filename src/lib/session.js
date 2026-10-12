@@ -61,8 +61,8 @@ export async function login(email, password) {
   return data.user;
 }
 
-export async function register(name, email, password, acceptTerms) {
-  const data = await api('/api/auth?action=register', { method: 'POST', body: { name, email, password, acceptTerms } });
+export async function register(name, email, password, acceptTerms, adult) {
+  const data = await api('/api/auth?action=register', { method: 'POST', body: { name, email, password, acceptTerms, adult } });
   state.user = data.user;
   return data.user;
 }

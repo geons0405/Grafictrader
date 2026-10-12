@@ -119,6 +119,7 @@ export async function deleteAccount(email) {
   if (!user) return false;
   await destroyAllSessions(email);
   if (user.mt5KeyHash) await redis(['DEL', 'grafictrader:mt5key:' + user.mt5KeyHash]);
+  await redis(['DEL', 'grafictrader:journal:' + email]);
   await redis(['DEL', userKey(email)]);
   return true;
 }
@@ -180,7 +181,14 @@ export async function requireUserIfConfigured(req, res) {
   }
   try {
     const user = await getSessionUser(req);
-    if (user && termsAccepted(user)) return { ok: true, user };
+    if (user && termsAccepted(user)) {
+      const until = await pausedUntil(user.email);
+      if (until) {
+        res.status(423).json({ ok: false, paused: true, pausedUntil: until, error: `Estás em pausa até ${new Date(until).toLocaleDateString('pt-PT')}. As análises voltam nesse dia.` });
+        return { ok: false };
+      }
+      return { ok: true, user };
+    }
     if (user) {
       res.status(403).json({ ok: false, termsRequired: true, error: 'Aceita os Termos de Uso e o Aviso de Risco na app Grafictrader para continuar a usar as análises.' });
       return { ok: false };
@@ -214,4 +222,24 @@ export async function rotateBridgeKey(email) {
 export async function resolveBridgeKey(key) {
   if (!key || !/^gtb_[A-Za-z0-9_-]{20,64}$/.test(key)) return null;
   return redis(['GET', bridgeKey(sha(key))]);
+}
+
+/* ---------- pause / self-exclusion ---------- */
+
+const pauseKey = email => 'grafictrader:pause:' + email;
+export const PAUSE_DAYS = [1, 7, 30];
+
+/** Blocks the account's analyses for some days. It cannot be undone early: that is the point. */
+export async function startPause(email, days) {
+  const until = Date.now() + days * 86_400_000;
+  const current = await pausedUntil(email);
+  if (current && current > until) return current;
+  await redis(['SET', pauseKey(email), String(until), 'EX', String(days * 86_400)]);
+  return until;
+}
+
+/** End of the account's pause (ms), or null. */
+export async function pausedUntil(email) {
+  const value = Number(await redis(['GET', pauseKey(email)]));
+  return Number.isFinite(value) && value > Date.now() ? value : null;
 }

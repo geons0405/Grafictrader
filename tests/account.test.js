@@ -41,7 +41,7 @@ const cookieOf = res => String(res.headers['Set-Cookie'] || '').split(';')[0];
 const signedIn = async cookie => Boolean(await getSessionUser({ headers: { cookie } }));
 
 async function register(email) {
-  const res = await call(auth, { query: { action: 'register' }, body: { name: 'Ana', email, password: 'segredo123', acceptTerms: true } });
+  const res = await call(auth, { query: { action: 'register' }, body: { name: 'Ana', email, password: 'segredo123', acceptTerms: true, adult: true } });
   assert.equal(res.status, 201);
   return cookieOf(res);
 }
@@ -93,4 +93,48 @@ test('requests from other sites and plain HTML forms are refused', async () => {
   assert.equal(crossSite({ method: 'POST', headers: { 'content-type': 'application/json' } }), false);
   const forged = await call(auth, { query: { action: 'logout' }, headers: { origin: 'https://evil.example', host: 'grafictrader.vercel.app' } });
   assert.equal(forged.status, 403);
+});
+
+test('sign-up needs the 18+ confirmation', async () => {
+  const res = await call(auth, { query: { action: 'register' }, body: { name: 'Teo', email: 'teo@acc.test', password: 'segredo123', acceptTerms: true } });
+  assert.equal(res.status, 400);
+  assert.match(res.body.error, /18 anos/);
+});
+
+test('a pause blocks the AI analyses until it ends and cannot be shortened', async () => {
+  const { requireUserIfConfigured } = await import('../api/_lib/auth.js');
+  const cookie = await register('zoe@acc.test');
+  const gate = () => new Promise(resolve => {
+    let status = 200;
+    const res = { status(c) { status = c; return this; }, json(b) { resolve({ status, body: b }); return this; } };
+    requireUserIfConfigured({ headers: { cookie } }, res).then(a => { if (a.ok) resolve({ status: 200 }); });
+  });
+  assert.equal((await gate()).status, 200);
+  const bad = await call(auth, { query: { action: 'pause' }, body: { days: 3 }, headers: { cookie } });
+  assert.equal(bad.status, 400);
+  const week = await call(auth, { query: { action: 'pause' }, body: { days: 7 }, headers: { cookie } });
+  assert.equal(week.status, 200);
+  const blocked = await gate();
+  assert.equal(blocked.status, 423);
+  assert.equal(blocked.body.paused, true);
+  const shorter = await call(auth, { query: { action: 'pause' }, body: { days: 1 }, headers: { cookie } });
+  assert.equal(shorter.body.pausedUntil, week.body.pausedUntil, 'a shorter pause does not replace a longer one');
+});
+
+test('the trading journal keeps the user own trades and compares following the app with not', async () => {
+  const { default: journal } = await import('../api/journal.js');
+  const cookie = await register('ivo@acc.test');
+  const post = body => call(journal, { body, headers: { cookie, 'content-type': 'application/json' } });
+  assert.equal((await post({ asset: '', side: 'BUY', amount: 10, result: 5 })).status, 400);
+  await post({ asset: 'EUR/USD OTC', side: 'BUY', amount: 10, result: 8.5, followedApp: true });
+  await post({ asset: 'EUR/USD OTC', side: 'SELL', amount: 10, result: -10, followedApp: false });
+  const last = await post({ asset: 'BTC/USDT', side: 'SELL', amount: 20, result: -20, followedApp: true });
+  assert.equal(last.body.entries.length, 3);
+  assert.deepEqual(last.body.totals.followedApp, { trades: 2, wins: 1, losses: 1, winRate: 50, net: -11.5 });
+  assert.equal(last.body.totals.ownCall.net, -10);
+  const removed = await call(journal, { method: 'DELETE', query: { id: last.body.entries[0].id }, headers: { cookie } });
+  assert.equal(removed.body.entries.length, 2);
+  const other = await register('ana2@acc.test');
+  const empty = await call(journal, { method: 'GET', headers: { cookie: other } });
+  assert.equal(empty.body.entries.length, 0, 'each account only sees its own journal');
 });

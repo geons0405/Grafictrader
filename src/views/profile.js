@@ -1,6 +1,6 @@
 import { $, api, escapeHtml, fmtTime } from '../lib/dom.js';
 import { Capacitor } from '@capacitor/core';
-import { sessionMode, setUser } from '../lib/session.js';
+import { sessionMode, setUser, currentUser } from '../lib/session.js';
 
 async function loadStatus() {
   const status = $('#mt5Status');
@@ -29,7 +29,30 @@ function formMessage(form, text) {
   form.querySelector('.form-message').textContent = text || '';
 }
 
+function renderPause(until) {
+  const on = until && until > Date.now();
+  $('#pauseStatus').textContent = on ? 'em pausa até ' + new Date(until).toLocaleDateString('pt-PT', { day: 'numeric', month: 'long' }) : 'sem pausa';
+  $('#pauseStatus').dataset.sign = on ? 'down' : '';
+}
+
+function initPause() {
+  $('#pauseButtons').addEventListener('click', async event => {
+    const days = Number(event.target.closest('[data-pause]')?.dataset.pause);
+    if (!days) return;
+    if (!confirm(`Pausar as análises durante ${days} dia(s)? Não vais conseguir desfazer.`)) return;
+    try {
+      const { pausedUntil } = await api('/api/auth?action=pause', { method: 'POST', body: { days } });
+      const user = currentUser();
+      if (user) setUser({ ...user, pausedUntil });
+      renderPause(pausedUntil);
+    } catch (error) {
+      $('#pauseStatus').textContent = error.message;
+    }
+  });
+}
+
 function initAccount() {
+  initPause();
   $('#logoutAllBtn').onclick = async () => {
     if (!confirm('Terminar a sessão em todos os dispositivos, incluindo este?')) return;
     try {
@@ -104,6 +127,7 @@ export function initProfile() {
 }
 
 export function activateProfile() {
+  renderPause(currentUser()?.pausedUntil);
   $('#mt5Origin').textContent = location.origin;
   $('#mt5Url').textContent = location.origin + '/api/mt5';
   $('#mt5Copy').textContent = 'Copiar';

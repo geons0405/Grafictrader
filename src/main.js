@@ -10,17 +10,19 @@ import { stop as stopWatch } from './views/watch.js';
 import { initFoto, deactivateFoto } from './views/foto.js';
 import { initIntel, activateIntel, deactivateIntel } from './views/intel.js';
 import { initProfile, activateProfile } from './views/profile.js';
+import { initDiario, activateDiario } from './views/diario.js';
 import { initSheets, closeSheet } from './views/sheet.js';
 
 const PUBLIC_ROUTES = ['home', 'login', 'register'];
-const PRIVATE_ROUTES = ['live', 'foto', 'intel', 'perfil'];
-const TITLES = { home: 'Grafictrader', login: 'Entrar', register: 'Criar conta', live: 'Live', foto: 'Foto', intel: 'Live Inteligente', perfil: 'Perfil' };
+const PRIVATE_ROUTES = ['live', 'foto', 'intel', 'perfil', 'diario'];
+const TITLES = { home: 'Grafictrader', login: 'Entrar', register: 'Criar conta', live: 'Live', foto: 'Foto', intel: 'Live Inteligente', perfil: 'Perfil', diario: 'Diário' };
 
 const VIEWS = {
   live: { activate: activateLiveScreen, deactivate: deactivateLiveScreen },
   foto: { deactivate: deactivateFoto },
   intel: { activate: activateIntel, deactivate: deactivateIntel },
-  perfil: { activate: activateProfile }
+  perfil: { activate: activateProfile },
+  diario: { activate: activateDiario }
 };
 
 let currentRoute = null;
@@ -89,7 +91,7 @@ function show(route) {
     closeSheet();
     $$('.screen').forEach(screen => screen.classList.toggle('active', screen.id === target));
     // Live Inteligente and Perfil are reached from the LIVE menu.
-    const tabTarget = target === 'intel' || target === 'perfil' ? 'live' : target;
+    const tabTarget = ['intel', 'perfil', 'diario'].includes(target) ? 'live' : target;
     $$('[data-tab]').forEach(tab => {
       const on = tab.dataset.tab === tabTarget;
       tab.classList.toggle('active', on);
@@ -172,6 +174,9 @@ async function submitAuth(form, action) {
   const button = form.querySelector('button[type="submit"]');
   formMessage(form, '');
   const data = Object.fromEntries(new FormData(form));
+  if (action === 'register' && !data.adult) {
+    return formMessage(form, 'O Grafictrader é só para maiores de 18 anos.');
+  }
   if (action === 'register' && !data.acceptTerms) {
     return formMessage(form, 'Para continuar, aceita os Termos de Uso e o Aviso de Risco.');
   }
@@ -192,7 +197,7 @@ async function submitAuth(form, action) {
   button.disabled = true;
   try {
     if (action === 'login') await login(data.email, data.password);
-    else await register(data.name, data.email, data.password, true);
+    else await register(data.name, data.email, data.password, true, true);
     form.reset();
     renderUser();
     navigate('live');
@@ -268,6 +273,7 @@ async function boot() {
   initFoto();
   initIntel();
   initProfile();
+  initDiario();
   wire();
   initTermsGate();
   syncThemeControls();
