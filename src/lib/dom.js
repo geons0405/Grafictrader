@@ -59,15 +59,23 @@ export class ApiError extends Error {
   }
 }
 
-export async function api(path, { method = 'GET', body, signal } = {}) {
-  const response = await fetch(path, {
-    method,
-    signal,
-    cache: 'no-store',
-    credentials: 'same-origin',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined
-  });
+export async function api(path, { method = 'GET', body, signal, timeoutMs = 65_000 } = {}) {
+  // Never wait forever: a request that hangs ends with a clear message.
+  const timeout = !signal && typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined;
+  let response;
+  try {
+    response = await fetch(path, {
+      method,
+      signal: signal || timeout,
+      cache: 'no-store',
+      credentials: 'same-origin',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined
+    });
+  } catch (error) {
+    if (error?.name === 'TimeoutError') throw new ApiError('O servidor demorou demasiado a responder. Tenta de novo.', 0, { timeout: true });
+    throw error;
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.ok === false) {
     // The server asks for the current terms: the app shows the acceptance sheet.

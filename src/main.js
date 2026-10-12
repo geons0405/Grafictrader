@@ -2,7 +2,7 @@ import './styles.css';
 import { $, $$ } from './lib/dom.js';
 import { renderIcons } from './lib/icons.js';
 import { applyTheme, toggleTheme, getThemePreference, onThemeChange } from './lib/theme.js';
-import { loadSession, currentUser, sessionMode, login, register, startLocalProfile, logout, acceptTerms } from './lib/session.js';
+import { loadSession, currentUser, sessionMode, login, register, startLocalProfile, logout, acceptTerms, isOffline } from './lib/session.js';
 import { TERMS_VERSION, needsTerms } from './lib/terms.js';
 import { shellTemplate } from './views/shell.js';
 import { initLiveScreen, activateLiveScreen, deactivateLiveScreen } from './views/live-screen.js';
@@ -274,6 +274,7 @@ async function boot() {
   await loadSession();
   renderAuthMode();
   renderUser();
+  if (isOffline()) formMessage($('#loginForm'), 'Sem ligação ao servidor. Verifica a internet e volta a abrir a app.');
   document.body.classList.remove('booting');
   show(location.hash.slice(1) || 'home');
   checkTerms();

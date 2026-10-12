@@ -38,15 +38,38 @@ export function createStabilizer({ confirmations = 2 } = {}) {
   let shown = null;
   let pending = null;
   let count = 0;
+  let lastContext = null;
   return {
-    push(decision, { chartVisible = true } = {}) {
+    /**
+     * `context` names the market on screen (asset + timeframe). When it
+     * changes, everything starts again: a new market's first trade also
+     * needs its confirmations, and the caller must forget the old levels.
+     */
+    push(decision, { chartVisible = true, context = null } = {}) {
       if (!chartVisible) return { shown, changed: false, pending: null, noChart: true };
-      if (shown === null || decision === shown) {
-        const changed = shown === null;
-        shown = decision;
+      let contextChanged = false;
+      if (context && lastContext && context !== lastContext) {
+        shown = null;
         pending = null;
         count = 0;
-        return { shown, changed, pending: null };
+        contextChanged = true;
+      }
+      if (context) lastContext = context;
+      if (shown === null) {
+        // The very first trade direction is not shown at once either: it waits like any change.
+        shown = 'AGUARDAR';
+        if (decision === 'AGUARDAR' || confirmations <= 1) {
+          shown = decision;
+          return { shown, changed: true, pending: null, contextChanged };
+        }
+        pending = decision;
+        count = 1;
+        return { shown, changed: true, pending, contextChanged };
+      }
+      if (decision === shown) {
+        pending = null;
+        count = 0;
+        return { shown, changed: false, pending: null };
       }
       if (decision === 'AGUARDAR') {
         shown = decision;
@@ -68,6 +91,7 @@ export function createStabilizer({ confirmations = 2 } = {}) {
       shown = null;
       pending = null;
       count = 0;
+      lastContext = null;
     },
     get shown() {
       return shown;

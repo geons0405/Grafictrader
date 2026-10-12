@@ -31,6 +31,8 @@ let startedAt = null;
 let analyses = 0;
 let history = [];
 let lastByDecision = {};
+// Bumped on every start and stop: an answer from an older session is ignored.
+let session = 0;
 let current = null;
 let pipWindow = null;
 let prefs = { voice: false, alerts: false };
@@ -116,9 +118,12 @@ async function tick() {
   setStatus('A analisar o gráfico…');
   const image = toJpeg(source);
   release();
+  const mine = session;
   try {
     const previous = current ? { decision: current.verdict.decision, asset: current.vision.asset, timeframe: current.vision.timeframe } : null;
-    const data = await api('/api/watch', { method: 'POST', body: { image, previous } });
+    const data = await api('/api/watch', { method: 'POST', body: { image, previous }, timeoutMs: 70_000 });
+    // Stopped (or restarted) while this frame was being analysed: drop it, say nothing.
+    if (mine !== session) return;
     analyses += 1;
     minGap = MIN_GAP_MS;
     handleResult(data);
@@ -164,6 +169,7 @@ function stopTicker() {
 
 async function begin(newStream, newKind, { keepSource = false } = {}) {
   if (!keepSource) stop();
+  session += 1;
   stream = newStream;
   kind = newKind;
   const video = $('#watchVideo');
@@ -201,6 +207,7 @@ async function begin(newStream, newKind, { keepSource = false } = {}) {
 }
 
 export function stop(message) {
+  session += 1;
   if (kind === 'native') Native?.stopWatch().catch(() => {});
   stopTicker();
   stream?.getTracks().forEach(t => t.stop());
@@ -231,7 +238,10 @@ function handleResult(data) {
     setStatus(`Ao vivo no telemóvel · ${analyses} análise(s) · a bolha mostra a orientação por cima da corretora`);
   }
   const decision = data.verdict.decision;
-  const step = stabilizer.push(decision, { chartVisible: data.chartVisible });
+  const context = data.chartVisible ? [data.vision?.asset, data.vision?.timeframe].filter(Boolean).join('|') || null : null;
+  const step = stabilizer.push(decision, { chartVisible: data.chartVisible, context });
+  // A different market: levels and readings of the previous one must not come back.
+  if (step.contextChanged) lastByDecision = {};
   if (data.chartVisible) lastByDecision[decision] = data;
   // No chart now: show this reading (it explains what to do), not the last trade.
   const shownData = !step.noChart && step.shown ? lastByDecision[step.shown] || data : data;
@@ -253,13 +263,16 @@ function render(data, step, latest) {
   const vis = data.vision;
   // Without a chart on screen nothing is shown as a trade, not even the last one.
   const decision = step.noChart ? 'AGUARDAR' : step.shown || v.decision;
+  // Shown advice differs from this reading (a new direction still waiting for its
+  // confirmation): this reading's trade texts and levels must not be shown.
+  const unconfirmed = !step.noChart && decision !== v.decision;
   const badgeText = step.noChart ? 'SEM GRÁFICO' : LABEL[decision] || decision;
   const badge = $('#watchBadge');
   badge.textContent = badgeText;
   badge.dataset.side = SIDE[decision] || '';
   $('#watchOverlay').textContent = badgeText;
   $('#watchOverlay').dataset.side = SIDE[decision] || '';
-  $('#watchTitle').textContent = step.noChart ? 'Não vejo um gráfico no ecrã' : g.headline || v.headline;
+  $('#watchTitle').textContent = step.noChart ? 'Não vejo um gráfico no ecrã' : unconfirmed ? 'A confirmar o sinal…' : g.headline || v.headline;
   const bits = [vis.asset || 'ativo ?', vis.timeframe || 'timeframe ?', `confiança ${v.confidence}%`];
   if (latest.live) bits.push(v.agreement === 'confirma' ? 'mercado ao vivo confirma' : v.agreement === 'diverge' ? 'mercado ao vivo diverge' : 'mercado ao vivo sem sinal');
   $('#watchSub').textContent = bits.join(' · ');
@@ -267,14 +280,18 @@ function render(data, step, latest) {
   if (step.pending) $('#watchPending').textContent = `A IA começa a ver sinal de ${LABEL[step.pending]}. Vai confirmar na próxima leitura antes de mudar.`;
   // Exact engine levels when the market is tracked; otherwise what the AI read on screen.
   const levels = g.levels || { entry: vis.entry, stop: vis.stop, target: vis.targets?.join(' · ') };
-  const showLevels = !step.noChart && decision !== 'AGUARDAR' && Boolean(levels.entry || levels.stop || levels.target);
+  const showLevels = !step.noChart && !unconfirmed && decision !== 'AGUARDAR' && Boolean(levels.entry || levels.stop || levels.target);
   $('#watchLevels').hidden = !showLevels;
   if (showLevels) {
     $('#wlEntry').textContent = levels.entry || '—';
     $('#wlStop').textContent = levels.stop || '—';
     $('#wlTarget').textContent = levels.target || '—';
   }
-  $('#watchNow').textContent = step.noChart ? 'Enquadra o gráfico da corretora inteiro no ecrã partilhado ou na câmara.' : g.now || '—';
+  $('#watchNow').textContent = step.noChart
+    ? 'Enquadra o gráfico da corretora inteiro no ecrã partilhado ou na câmara.'
+    : unconfirmed
+      ? `Não operes ainda: a IA vê um possível sinal de ${LABEL[v.decision] || v.decision} e confirma-o na próxima leitura.`
+      : g.now || '—';
   $('#watchHudNow').textContent = $('#watchNow').textContent;
   $('#watchWhy').innerHTML = (g.why || []).map(p => `<p>${escapeHtml(p)}</p>`).join('');
   $('#watchSteps').innerHTML = (g.steps || []).map(p => `<li>${escapeHtml(p)}</li>`).join('');

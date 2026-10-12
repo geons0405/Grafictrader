@@ -54,7 +54,8 @@ async function computeCouncil(symbol, interval) {
   const analysts = [
     structureAnalyst(engine),
     algorithmAnalyst(view.signal, view.summary),
-    trendAnalyst({ base, mid: rows(midRaw), high: rows(highRaw), labels: { base: interval, mid, high } }),
+    // Only closed bars on the higher timeframes, so this reading does not change until the bar closes.
+    trendAnalyst({ base, mid: closedCandles(rows(midRaw), mid), high: closedCandles(rows(highRaw), high), labels: { base: interval, mid, high } }),
     statsAnalyst(view.quant),
     mathAnalyst(base),
     behaviourAnalyst(view.quant, view.context, fearGreed),

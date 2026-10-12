@@ -151,3 +151,11 @@ test('summary reports expectancy, drawdown and the cost used', () => {
   assert.ok(s.maxDrawdownPct >= 0);
   assert.equal(s.costPct, 0.08);
 });
+
+test('a flat market is neither extreme volatility nor overbought', async () => {
+  const { volatilityRegime } = await import('../api/_lib/quant/stats.js');
+  const { rsi } = await import('../api/_lib/council/math.js');
+  const flat = Array.from({ length: 100 }, (_, i) => ({ time: i, open: 100, high: 100.1, low: 99.9, close: 100, volume: 1 }));
+  assert.equal(volatilityRegime(flat).percentile, 0.5);
+  assert.equal(rsi(Array(30).fill(100)), 50);
+});

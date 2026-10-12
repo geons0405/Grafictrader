@@ -138,7 +138,7 @@ public class WatchService extends Service {
     private volatile long minGap = MIN_GAP_MS;
     private long startedAt;
     private int analyses;
-    private JSONObject current;
+    private volatile JSONObject current;
     private boolean blankShown;
 
     @Override
@@ -261,6 +261,14 @@ public class WatchService extends Service {
 
     /** The phone was rotated: keep capturing at the new orientation. */
     private void resizeDisplay() {
+        try {
+            resizeDisplayUnsafe();
+        } catch (Exception error) {
+            // Stopped on the main thread while rotating: nothing left to resize.
+        }
+    }
+
+    private void resizeDisplayUnsafe() {
         if (display == null || !running) return;
         int[] size = captureSize();
         if (reader != null && reader.getWidth() == size[0] && reader.getHeight() == size[1]) return;
@@ -533,7 +541,16 @@ public class WatchService extends Service {
         String decision = verdict == null ? "AGUARDAR" : verdict.optString("decision", "AGUARDAR");
         // Only an explicit "true" from the server counts as a chart.
         boolean chartVisible = data.optBoolean("chartVisible", false);
-        Stabilizer.Step step = stabilizer.push(decision, chartVisible);
+        JSONObject vision = data.optJSONObject("vision");
+        String context = null;
+        if (chartVisible && vision != null) {
+            String asset = vision.isNull("asset") ? "" : vision.optString("asset", "");
+            String timeframe = vision.isNull("timeframe") ? "" : vision.optString("timeframe", "");
+            if (!asset.isEmpty() || !timeframe.isEmpty()) context = asset + "|" + timeframe;
+        }
+        Stabilizer.Step step = stabilizer.push(decision, chartVisible, context);
+        // A different market: the previous one's levels must not come back.
+        if (step.contextChanged) lastByDecision.clear();
         if (chartVisible) lastByDecision.put(decision, data);
         // No chart now: show this reading, never the last trade.
         JSONObject shown = chartVisible && step.shown != null && lastByDecision.containsKey(step.shown) ? lastByDecision.get(step.shown) : data;
@@ -572,14 +589,19 @@ public class WatchService extends Service {
         if (verdict != null) asset.append("· ").append(verdict.optInt("confidence")).append('%');
 
         StringBuilder detail = new StringBuilder();
-        if (!chartVisible) {
+        String readDecision = verdict == null ? "AGUARDAR" : verdict.optString("decision", "AGUARDAR");
+        // The advice shown is not this reading's (a new direction waiting for its confirmation).
+        boolean unconfirmed = chartVisible && !decision.equals(readDecision);
+        if (unconfirmed) {
+            detail.append("Não operes ainda: a IA confirma o sinal na próxima leitura.");
+        } else if (!chartVisible) {
             String saw = vision == null || vision.isNull("summary") ? "" : vision.optString("summary", "").trim();
             if (!saw.isEmpty()) detail.append("A IA vê: ").append(saw.length() > 120 ? saw.substring(0, 120) + "…" : saw).append('\n');
             detail.append("Não vejo um gráfico. Mostra o gráfico da corretora inteiro.");
         }
         else if (guidance != null) detail.append(guidance.optString("now", ""));
         JSONObject levels = guidance == null ? null : guidance.optJSONObject("levels");
-        if (chartVisible && levels != null && !"AGUARDAR".equals(decision)) {
+        if (chartVisible && !unconfirmed && levels != null && !"AGUARDAR".equals(decision)) {
             detail.append("\nEntrada ").append(levels.optString("entry", "—"))
                     .append(" · Stop ").append(levels.optString("stop", "—"))
                     .append(" · Alvo ").append(levels.optString("target", "—"));
