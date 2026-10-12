@@ -108,6 +108,20 @@ export async function createSession(user, { checkedAt = null, revokedAt: seen } 
   return token;
 }
 
+// Places (email + IP, hashed) that signed in successfully: while someone
+// guesses an account's password from many IPs, its owner can still sign in
+// from where they usually do.
+const knownPlaceKey = (email, ip) => 'grafictrader:known:' + createHash('sha256').update(email + '|' + ip).digest('hex');
+const KNOWN_PLACE_SECONDS = 90 * 86_400;
+
+export async function rememberPlace(email, ip) {
+  await redis(['SET', knownPlaceKey(email, ip), '1', 'EX', String(KNOWN_PLACE_SECONDS)]);
+}
+
+export async function knownPlace(email, ip) {
+  return Boolean(await redis(['GET', knownPlaceKey(email, ip)]));
+}
+
 /** Ends every session of the account (all devices). */
 export async function destroyAllSessions(email) {
   await redis(['SET', revokedKey(email), String(Date.now()), 'EX', String(SESSION_TTL_SECONDS)]);

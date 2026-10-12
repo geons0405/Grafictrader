@@ -190,3 +190,16 @@ test('a login whose password check races a password change or deletion never sig
   assert.equal(ok.status, 200);
   assert.ok(await signedIn(cookieOf(ok)));
 });
+
+test('guessing from many IPs cannot lock the owner out of the place they usually sign in from', async () => {
+  await register('eva@acc.test');
+  const home = await call(auth, { query: { action: 'login' }, body: { email: 'eva@acc.test', password: 'segredo123' }, headers: { 'x-forwarded-for': '7.7.7.7' } });
+  assert.equal(home.status, 200);
+  for (let i = 0; i < 55; i++) {
+    await call(auth, { query: { action: 'login' }, body: { email: 'eva@acc.test', password: 'errada' + i }, headers: { 'x-forwarded-for': '6.6.' + Math.floor(i / 8) + '.' + i } });
+  }
+  const stranger = await call(auth, { query: { action: 'login' }, body: { email: 'eva@acc.test', password: 'outra' }, headers: { 'x-forwarded-for': '5.5.5.5' } });
+  assert.equal(stranger.status, 429, 'a new place is stopped once the account is under attack');
+  const owner = await call(auth, { query: { action: 'login' }, body: { email: 'eva@acc.test', password: 'segredo123' }, headers: { 'x-forwarded-for': '7.7.7.7' } });
+  assert.equal(owner.status, 200, 'the owner still signs in from home');
+});

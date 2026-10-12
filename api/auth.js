@@ -3,6 +3,7 @@ import {
   createSession, destroySession, sessionToken, getSessionUser, setSessionCookie,
   clearSessionCookie, publicUser, rotateBridgeKey, acceptTerms,
   checkCredentials, changePassword, deleteAccount, destroyAllSessions, revokedSince,
+  rememberPlace, knownPlace,
   startPause, pausedUntil, PAUSE_DAYS
 } from './_lib/auth.js';
 import { rateLimit, sendRateLimited, peekLimit } from './_lib/rate-limit.js';
@@ -119,19 +120,22 @@ export default async function handler(req, res) {
       }
       const user = await createUser({ name, email, password, acceptTerms: true });
       if (!user) return res.status(409).json({ ok: false, error: 'Já existe uma conta com este email.' });
+      await rememberPlace(email, clientIp(req));
       setSessionCookie(res, req, await createSession(user));
       return res.status(201).json({ ok: true, user: publicUser(user) });
     }
 
     if (action === 'login') {
       // Only failed passwords count, so nobody can lock a user out just by knowing the email:
-      // 10 failures per account and IP, 50 per account from everywhere (spread guessing).
+      // 10 failures per account and IP; after 50 per account from everywhere (spread
+      // guessing) only places this account already signed in from may still try.
       const who = email || 'none';
       const ip = clientIp(req);
       const failures = { here: { limit: 10, windowSeconds: 900 }, everywhere: { limit: 50, windowSeconds: 900 } };
-      for (const check of [await peekLimit('login-fail', who + ':' + ip, failures.here), await peekLimit('login-fail-all', who, failures.everywhere)]) {
-        if (!check.allowed) return sendRateLimited(res, check);
-      }
+      const here = await peekLimit('login-fail', who + ':' + ip, failures.here);
+      if (!here.allowed) return sendRateLimited(res, here);
+      const everywhere = await peekLimit('login-fail-all', who, failures.everywhere);
+      if (!everywhere.allowed && !(validEmail(email) && await knownPlace(email, ip))) return sendRateLimited(res, everywhere);
       // Taken before the password check: a password change or account deletion
       // that lands while this login is in flight makes the new session void.
       const checkedAt = Date.now();
@@ -144,6 +148,7 @@ export default async function handler(req, res) {
       }
       const token = await createSession(user, { checkedAt, revokedAt });
       if (!token) return res.status(401).json({ ok: false, error: 'A palavra-passe mudou entretanto. Tenta outra vez.' });
+      await rememberPlace(email, ip);
       setSessionCookie(res, req, token);
       return res.status(200).json({ ok: true, user: publicUser(user) });
     }
