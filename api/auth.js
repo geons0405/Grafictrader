@@ -89,9 +89,12 @@ export default async function handler(req, res) {
       if (action === 'password') {
         const next = String(req.body?.newPassword || '');
         if (next.length < 8 || next.length > 200) return res.status(400).json({ ok: false, error: 'A nova palavra-passe deve ter pelo menos 8 caracteres.' });
-        const updated = await changePassword(current.email, next);
-        setSessionCookie(res, req, await createSession(updated));
-        return res.status(200).json({ ok: true, user: publicUser(updated) });
+        const changed = await changePassword(current.email, next);
+        if (!changed) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
+        const token = await createSession(changed.user, { checkedAt: changed.revokedAt, revokedAt: changed.revokedAt });
+        if (!token) return res.status(401).json({ ok: false, error: 'A sessão terminou entretanto. Inicia sessão com a nova palavra-passe.' });
+        setSessionCookie(res, req, token);
+        return res.status(200).json({ ok: true, user: publicUser(changed.user) });
       }
       await deleteAccount(current.email);
       clearSessionCookie(res, req);

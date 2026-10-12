@@ -185,6 +185,13 @@ test('a login whose password check races a password change or deletion never sig
   await destroyAllSessions(user.email);
   assert.equal(await signedIn('gt_session=' + encodeURIComponent(token)), false);
 
+  // A password change's own fresh session loses to a revocation right after it, even in the same millisecond.
+  const { changePassword } = await import('../api/_lib/auth.js');
+  const changed = await changePassword(user.email, 'segredo123');
+  const later = await destroyAllSessions(user.email);
+  assert.ok(later > changed.revokedAt, 'each revocation is later than the one before');
+  assert.equal(await createSession(changed.user, { checkedAt: changed.revokedAt, revokedAt: changed.revokedAt }), null);
+
   // Nothing in between: the login works.
   const ok = await call(auth, { query: { action: 'login' }, body: { email: 'race@acc.test', password: 'segredo123' } });
   assert.equal(ok.status, 200);

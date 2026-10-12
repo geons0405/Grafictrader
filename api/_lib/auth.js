@@ -122,11 +122,13 @@ export async function knownPlace(email, ip) {
   return Boolean(await redis(['GET', knownPlaceKey(email, ip)]));
 }
 
-/** Ends every session of the account (all devices). */
+/** Ends every session of the account (all devices). Returns the revocation time, always later than the previous one. */
 export async function destroyAllSessions(email) {
-  await redis(['SET', revokedKey(email), String(Date.now()), 'EX', String(SESSION_TTL_SECONDS)]);
+  const at = Math.max(Date.now(), (await revokedSince(email)) + 1);
+  await redis(['SET', revokedKey(email), String(at), 'EX', String(SESSION_TTL_SECONDS)]);
   for (const key of await readSessionList(email)) await redis(['DEL', key]);
   await redis(['DEL', sessionsKey(email)]);
+  return at;
 }
 
 /** Checks the password; runs scrypt even for unknown accounts so timing does not reveal which emails exist. */
@@ -140,15 +142,19 @@ export async function checkCredentials(email, password) {
 }
 const DUMMY_SALT = 'grafictrader-dummy-salt';
 
-/** New password for the account. Ends all sessions; the caller starts a fresh one. */
+/**
+ * New password for the account. Ends all sessions and returns the user with
+ * the revocation it made, for the caller's fresh session: any later
+ * revocation (account deleted, sign out everywhere) still ends that one.
+ */
 export async function changePassword(email, password) {
   const user = await findUser(email);
   if (!user) return null;
   const { salt, hash } = await hashPassword(password);
   const updated = { ...user, salt, hash, passwordChangedAt: new Date().toISOString() };
   await redis(['SET', userKey(email), JSON.stringify(updated)]);
-  await destroyAllSessions(email);
-  return updated;
+  const revokedAt = await destroyAllSessions(email);
+  return { user: updated, revokedAt };
 }
 
 /** Deletes the account, its sessions and its MetaTrader 5 key. Market data it sent expires on its own. */
