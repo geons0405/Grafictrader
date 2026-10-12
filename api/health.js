@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { apiKey } from './_lib/env.js';
 import { redis, redisConfigured } from './_lib/redis.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
@@ -7,7 +8,8 @@ import { getTwelveDataTicker } from './_lib/sources/twelvedata.js';
 import { getMarketauxEvents } from './_lib/sources/marketaux.js';
 import { getRssNews, getYahooNews } from './_lib/sources/news-feeds.js';
 
-// Service status. Never returns key values: only whether each one is set and,
+// Service status. Public callers only learn that the API is up. With the
+// x-admin-token header (= ADMIN_TOKEN) it also shows which keys are set and,
 // with ?probe=1, whether a small real call to each service works.
 //   ?models=groq            lists the models a provider exposes (q= filters)
 //   ?compare=groq:model,... gives the same test chart to each model (accuracy + speed)
@@ -35,9 +37,19 @@ async function check(run) {
   }
 }
 
+/** True when the request carries the admin token. Without ADMIN_TOKEN set, nobody is admin. */
+export function isAdmin(req) {
+  const expected = process.env.ADMIN_TOKEN || '';
+  const given = String(req.headers?.['x-admin-token'] || '');
+  if (expected.length < 16 || given.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
   res.setHeader('Cache-Control', 'no-store');
+  // Configuration, model lists and paid test calls are for the owner only.
+  if (!isAdmin(req)) return res.status(200).json({ ok: true, at: new Date().toISOString() });
 
   const configured = Object.fromEntries(KEYS.map(name => [name, Boolean(apiKey(name))]));
   configured.KV_REST_API_URL = Boolean(process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL);

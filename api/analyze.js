@@ -1,5 +1,5 @@
 import { requireUserIfConfigured } from './_lib/auth.js';
-import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
+import { rateLimit, sendRateLimited, aiQuota } from './_lib/rate-limit.js';
 import { clientIp, parseMarketQuery } from './_lib/validate.js';
 import { marketReading } from './_lib/quant/service.js';
 import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance, guardImageQuality } from './_lib/quant/verdict.js';
@@ -51,8 +51,10 @@ export default async function handler(req, res) {
   const access = await requireUserIfConfigured(req, res);
   if (!access.ok) return;
 
-  const limit = await rateLimit('analyze', access.user?.email || clientIp(req), { limit: 10, windowSeconds: 600 });
+  const limit = await rateLimit('analyze', access.user?.email || clientIp(req), { limit: 10, windowSeconds: 600, failClosed: true });
   if (!limit.allowed) return sendRateLimited(res, limit);
+  const quota = await aiQuota(access.user?.email || clientIp(req));
+  if (!quota.allowed) return sendRateLimited(res, quota);
 
   let vision;
   try {

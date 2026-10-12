@@ -1,5 +1,5 @@
 import { requireUserIfConfigured } from './_lib/auth.js';
-import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
+import { rateLimit, sendRateLimited, aiQuota } from './_lib/rate-limit.js';
 import { clientIp } from './_lib/validate.js';
 import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
 import { marketReading } from './_lib/quant/service.js';
@@ -81,8 +81,10 @@ export default async function handler(req, res) {
   if (!access.ok) return;
 
   // About one analysis every 10 s on average per user.
-  const limit = await rateLimit('watch', access.user?.email || clientIp(req), { limit: 60, windowSeconds: 600 });
+  const limit = await rateLimit('watch', access.user?.email || clientIp(req), { limit: 60, windowSeconds: 600, failClosed: true });
   if (!limit.allowed) return sendRateLimited(res, limit);
+  const quota = await aiQuota(access.user?.email || clientIp(req));
+  if (!quota.allowed) return sendRateLimited(res, quota);
 
   let vision;
   try {
@@ -93,8 +95,8 @@ export default async function handler(req, res) {
 
   const chartVisible = isChartVisible(vision.raw);
   if (!chartVisible) {
-    // No image or key in the log: just enough to tell a model misread from an empty capture.
-    console.info('[watch] sem gráfico', vision.provider, JSON.stringify({ flag: vision.raw?.graficoVisivel ?? null, summary: String(vision.raw?.resumo || '').slice(0, 160) }));
+    // Only the model and its flag: what the model saw may be private screen content.
+    console.info('[watch] sem gráfico', vision.provider, JSON.stringify({ flag: vision.raw?.graficoVisivel ?? null }));
   }
   const normalized = chartVisible ? guardImageQuality(normalizeVision(vision.raw)) : noChartVision(vision.raw);
   const symbol = chartVisible ? mapAsset(normalized.asset) : null;

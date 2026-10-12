@@ -120,7 +120,14 @@ export function clearSessionCookie(res, req) {
  * endpoint stays open and relies on rate limiting (local mode).
  */
 export async function requireUserIfConfigured(req, res) {
-  if (!authConfigured()) return { ok: true, user: null };
+  if (!authConfigured()) {
+    // Local mode is for development. In production paid AI never runs without accounts.
+    if (process.env.VERCEL_ENV === 'production') {
+      res.status(503).json({ ok: false, setupRequired: true, error: 'As contas não estão configuradas no servidor.' });
+      return { ok: false };
+    }
+    return { ok: true, user: null };
+  }
   try {
     const user = await getSessionUser(req);
     if (user && termsAccepted(user)) return { ok: true, user };

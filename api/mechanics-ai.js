@@ -1,9 +1,13 @@
 import { buildMechanicsSnapshot } from './_lib/mechanics/snapshot.js';
 import { parseMarketQuery, clientIp } from './_lib/validate.js';
 import { requireUserIfConfigured } from './_lib/auth.js';
-import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
+import { rateLimit, sendRateLimited, aiQuota } from './_lib/rate-limit.js';
 import { runText, chainFor } from './_lib/vision.js';
 import { rulesBlock } from './_lib/ai-rules.js';
+
+// One interpretation per market and minute, shared by everyone on this instance.
+const CACHE_MS = 60_000;
+const cache = new Map();
 
 const SYSTEM_PROMPT = `És o motor de interpretação do Grafictrader.
 Recebes métricas calculadas pelo código a partir de OHLCV, trades e/ou order book.
@@ -89,8 +93,10 @@ export default async function handler(req, res) {
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.at < CACHE_MS) return res.status(200).json(cached.body);
 
-  const limit = await rateLimit('mechanics-ai', access.user?.email || clientIp(req), { limit: 20, windowSeconds: 600 });
+  const limit = await rateLimit('mechanics-ai', access.user?.email || clientIp(req), { limit: 20, windowSeconds: 600, failClosed: true });
   if (!limit.allowed) return sendRateLimited(res, limit);
+  const quota = await aiQuota(access.user?.email || clientIp(req));
+  if (!quota.allowed) return sendRateLimited(res, quota);
 
   try {
     const snapshot = await buildMechanicsSnapshot(market.symbol, market.interval);

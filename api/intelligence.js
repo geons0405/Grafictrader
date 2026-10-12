@@ -3,6 +3,9 @@ import { isBinanceSymbol, parseMarketQuery, clientIp } from './_lib/validate.js'
 import { runEngine } from './_lib/engine/index.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 
+const FEED_CACHE_MS = 60_000;
+const feedCache = new Map();
+
 // GET /api/intelligence?symbol=BTCUSDT                       → news and events feed
 // GET /api/intelligence?engine=1&symbol=BTCUSDT&interval=5m  → Market Intelligence Engine
 
@@ -24,8 +27,16 @@ export default async function handler(req, res) {
   }
   const symbol = String(req.query?.symbol || 'BTCUSDT').toUpperCase();
   if (!isBinanceSymbol(symbol)) return res.status(400).json({ ok: false, error: 'Ativo inválido.' });
+  const limit = await rateLimit('feed', clientIp(req), { limit: 120, windowSeconds: 600 });
+  if (!limit.allowed) return sendRateLimited(res, limit);
   try {
-    const result = await getAllIntelligence(symbol);
+    // News quotas are paid: one fetch per asset and minute per instance.
+    const hit = feedCache.get(symbol);
+    const result = hit && Date.now() - hit.at < FEED_CACHE_MS ? hit.result : await getAllIntelligence(symbol);
+    if (!hit || hit.result !== result) {
+      if (feedCache.size > 200) feedCache.clear();
+      feedCache.set(symbol, { at: Date.now(), result });
+    }
     res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=30');
     return res.status(200).json({
       ok: true,

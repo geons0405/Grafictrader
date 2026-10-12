@@ -124,9 +124,8 @@ public class GrafictraderNativePlugin extends Plugin {
             call.reject("A captura do ecrã foi cancelada.", "CANCELLED");
             return;
         }
-        String server = call.getString("serverUrl", DEFAULT_SERVER);
-        if (server == null || !server.startsWith("https://")) server = DEFAULT_SERVER;
-        if (server.endsWith("/")) server = server.substring(0, server.length() - 1);
+        // Whole-screen frames only ever go to the Grafictrader server, whatever the page asks.
+        String server = DEFAULT_SERVER;
         Intent intent = new Intent(getContext(), WatchService.class)
                 .setAction(WatchService.ACTION_START)
                 .putExtra(WatchService.EXTRA_RESULT_CODE, result.getResultCode())
