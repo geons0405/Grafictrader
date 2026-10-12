@@ -166,31 +166,28 @@ test('knowing an email is not enough to lock its owner out of login', async () =
 });
 
 test('a login whose password check races a password change or deletion never signs in', async () => {
-  const { createSession, revokedSince, destroyAllSessions, findUser } = await import('../api/_lib/auth.js');
+  const { createSession, sessionGeneration, destroyAllSessions, changePassword, findUser } = await import('../api/_lib/auth.js');
   await register('race@acc.test');
   const user = await findUser('race@acc.test');
 
   // The old password was checked, then the password changed before the session was written.
-  let checkedAt = Date.now();
-  let seen = await revokedSince(user.email);
+  let seen = await sessionGeneration(user.email);
   await destroyAllSessions(user.email);
-  assert.equal(await createSession(user, { checkedAt, revokedAt: seen }), null);
+  assert.equal(await createSession(user, { generation: seen }), null);
 
   // The session was written first, then the revocation landed: it is void at once.
-  await new Promise(resolve => setTimeout(resolve, 2));
-  checkedAt = Date.now();
-  seen = await revokedSince(user.email);
-  const token = await createSession(user, { checkedAt, revokedAt: seen });
+  seen = await sessionGeneration(user.email);
+  const token = await createSession(user, { generation: seen });
   assert.ok(token);
+  store.delete('grafictrader:sessions:race@acc.test'); // even if the index lost it
   await destroyAllSessions(user.email);
   assert.equal(await signedIn('gt_session=' + encodeURIComponent(token)), false);
 
-  // A password change's own fresh session loses to a revocation right after it, even in the same millisecond.
-  const { changePassword } = await import('../api/_lib/auth.js');
+  // A password change's own fresh session loses to any revocation right after it.
   const changed = await changePassword(user.email, 'segredo123');
   const later = await destroyAllSessions(user.email);
-  assert.ok(later > changed.revokedAt, 'each revocation is later than the one before');
-  assert.equal(await createSession(changed.user, { checkedAt: changed.revokedAt, revokedAt: changed.revokedAt }), null);
+  assert.ok(later > changed.generation, 'each revocation moves the counter on');
+  assert.equal(await createSession(changed.user, { generation: changed.generation }), null);
 
   // Nothing in between: the login works.
   const ok = await call(auth, { query: { action: 'login' }, body: { email: 'race@acc.test', password: 'segredo123' } });

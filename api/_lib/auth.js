@@ -68,10 +68,12 @@ export async function acceptTerms(email) {
 }
 
 const sessionsKey = email => 'grafictrader:sessions:' + email;
-// Sessions issued before this time (ms) are no longer valid: "sign out
-// everywhere" also covers sessions missing from the index (older ones, or
-// lost to two logins at the same instant).
-const revokedKey = email => 'grafictrader:revoked:' + email;
+// Revocation counter of the account, raised atomically (INCR) by every "end
+// every session". Each session keeps the counter it was issued under and dies
+// once the counter moves past it, so sessions missing from the index (older
+// ones, or lost to two logins at once) are ended too. It never expires: a
+// counter that restarted at 0 would bring old sessions back.
+const generationKey = email => 'grafictrader:revgen:' + email;
 const MAX_SESSIONS = 50;
 
 async function readSessionList(email) {
@@ -80,27 +82,25 @@ async function readSessionList(email) {
   try { return JSON.parse(value || '[]'); } catch { return []; }
 }
 
-/** Time (ms) of the account's last "end every session", or 0. */
-export async function revokedSince(email) {
-  return Number(await redis(['GET', revokedKey(email)])) || 0;
+/** How many times every session of the account was ended (0 if never). */
+export async function sessionGeneration(email) {
+  return Number(await redis(['GET', generationKey(email)])) || 0;
 }
 
 /**
- * Starts a session for the user. `checkedAt` is when the password or session
- * proving who the user is began to be checked, and `revokedAt` what
- * revokedSince() said just before. A revocation since then (password changed,
- * account deleted, "sign out everywhere") wins: no session, null returned, so
- * a login racing with it never ends up signed in. Without them the caller has
- * just revoked on purpose and starts afresh.
+ * Starts a session for the user. `generation` is what sessionGeneration() said
+ * before the password or session proving who the user is was checked (or what
+ * destroyAllSessions() returned to a caller starting afresh). If any
+ * revocation happened since (password changed, account deleted, sign out
+ * everywhere) there is no session and null is returned, so a sign-in racing
+ * with it never ends up signed in; one landing after this ends it as usual.
  */
-export async function createSession(user, { checkedAt = null, revokedAt: seen } = {}) {
+export async function createSession(user, { generation } = {}) {
   const token = randomBytes(32).toString('base64url');
   const key = sessionKey(token);
-  const revokedAt = await revokedSince(user.email);
-  if (checkedAt != null && (seen !== undefined ? revokedAt !== seen : revokedAt >= checkedAt)) return null;
-  // Always after the last revocation, even within the same millisecond.
-  const issuedAt = Math.max(checkedAt ?? Date.now(), revokedAt + 1);
-  await redis(['SET', key, JSON.stringify({ ...publicUser(user), issuedAt }), 'EX', String(SESSION_TTL_SECONDS)]);
+  const current = await sessionGeneration(user.email);
+  if (generation !== undefined && current !== generation) return null;
+  await redis(['SET', key, JSON.stringify({ ...publicUser(user), generation: current }), 'EX', String(SESSION_TTL_SECONDS)]);
   // Index of the account's sessions, so "sign out everywhere" can end them all.
   const list = (await readSessionList(user.email)).filter(k => k !== key);
   list.push(key);
@@ -122,13 +122,12 @@ export async function knownPlace(email, ip) {
   return Boolean(await redis(['GET', knownPlaceKey(email, ip)]));
 }
 
-/** Ends every session of the account (all devices). Returns the revocation time, always later than the previous one. */
+/** Ends every session of the account (all devices). Returns the new revocation counter. */
 export async function destroyAllSessions(email) {
-  const at = Math.max(Date.now(), (await revokedSince(email)) + 1);
-  await redis(['SET', revokedKey(email), String(at), 'EX', String(SESSION_TTL_SECONDS)]);
+  const generation = Number(await redis(['INCR', generationKey(email)]));
   for (const key of await readSessionList(email)) await redis(['DEL', key]);
   await redis(['DEL', sessionsKey(email)]);
-  return at;
+  return generation;
 }
 
 /** Checks the password; runs scrypt even for unknown accounts so timing does not reveal which emails exist. */
@@ -144,7 +143,7 @@ const DUMMY_SALT = 'grafictrader-dummy-salt';
 
 /**
  * New password for the account. Ends all sessions and returns the user with
- * the revocation it made, for the caller's fresh session: any later
+ * the revocation counter it made, for the caller's fresh session: any later
  * revocation (account deleted, sign out everywhere) still ends that one.
  */
 export async function changePassword(email, password) {
@@ -153,8 +152,8 @@ export async function changePassword(email, password) {
   const { salt, hash } = await hashPassword(password);
   const updated = { ...user, salt, hash, passwordChangedAt: new Date().toISOString() };
   await redis(['SET', userKey(email), JSON.stringify(updated)]);
-  const revokedAt = await destroyAllSessions(email);
-  return { user: updated, revokedAt };
+  const generation = await destroyAllSessions(email);
+  return { user: updated, generation };
 }
 
 /** Deletes the account, its sessions and its MetaTrader 5 key. Market data it sent expires on its own. */
@@ -195,12 +194,15 @@ export async function getSessionUser(req) {
   if (!raw) return null;
   let session;
   try { session = JSON.parse(raw); } catch { return null; }
-  const revokedAt = Number(await redis(['GET', revokedKey(session.email)]));
-  if (revokedAt && (session.issuedAt || 0) <= revokedAt) {
+  // Sessions from before the counter existed count as issued under 0.
+  const issuedUnder = Number(session.generation) || 0;
+  if (issuedUnder < await sessionGeneration(session.email)) {
     await redis(['DEL', sessionKey(token)]);
     return null;
   }
-  const { issuedAt, ...user } = session;
+  const { generation, issuedAt, ...user } = session;
+  // Kept off JSON and spreads: only createSession() needs it, to re-issue this session.
+  Object.defineProperty(user, 'generation', { value: issuedUnder, enumerable: false });
   return user;
 }
 

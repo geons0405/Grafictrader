@@ -2,7 +2,7 @@ import {
   authConfigured, normalizeEmail, validEmail, createUser,
   createSession, destroySession, sessionToken, getSessionUser, setSessionCookie,
   clearSessionCookie, publicUser, rotateBridgeKey, acceptTerms,
-  checkCredentials, changePassword, deleteAccount, destroyAllSessions, revokedSince,
+  checkCredentials, changePassword, deleteAccount, destroyAllSessions, sessionGeneration,
   rememberPlace, knownPlace,
   startPause, pausedUntil, PAUSE_DAYS
 } from './_lib/auth.js';
@@ -49,7 +49,6 @@ export default async function handler(req, res) {
     }
 
     if (action === 'terms') {
-      const checkedAt = Date.now();
       const current = await getSessionUser(req);
       if (!current) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
       if (req.body?.accept !== true) return res.status(400).json({ ok: false, error: 'Marca a caixa para aceitar os Termos de Uso e o Aviso de Risco.' });
@@ -57,7 +56,7 @@ export default async function handler(req, res) {
       if (!user) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
       // The session keeps a copy of the user: replace it so the acceptance counts at once.
       await destroySession(sessionToken(req));
-      const token = await createSession(user, { checkedAt });
+      const token = await createSession(user, { generation: current.generation });
       if (!token) return res.status(401).json({ ok: false, error: 'A sessão terminou. Inicia sessão outra vez.' });
       setSessionCookie(res, req, token);
       return res.status(200).json({ ok: true, user: publicUser(user) });
@@ -91,7 +90,7 @@ export default async function handler(req, res) {
         if (next.length < 8 || next.length > 200) return res.status(400).json({ ok: false, error: 'A nova palavra-passe deve ter pelo menos 8 caracteres.' });
         const changed = await changePassword(current.email, next);
         if (!changed) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
-        const token = await createSession(changed.user, { checkedAt: changed.revokedAt, revokedAt: changed.revokedAt });
+        const token = await createSession(changed.user, { generation: changed.generation });
         if (!token) return res.status(401).json({ ok: false, error: 'A sessão terminou entretanto. Inicia sessão com a nova palavra-passe.' });
         setSessionCookie(res, req, token);
         return res.status(200).json({ ok: true, user: publicUser(changed.user) });
@@ -139,17 +138,16 @@ export default async function handler(req, res) {
       if (!here.allowed) return sendRateLimited(res, here);
       const everywhere = await peekLimit('login-fail-all', who, failures.everywhere);
       if (!everywhere.allowed && !(validEmail(email) && await knownPlace(email, ip))) return sendRateLimited(res, everywhere);
-      // Taken before the password check: a password change or account deletion
-      // that lands while this login is in flight makes the new session void.
-      const checkedAt = Date.now();
-      const revokedAt = validEmail(email) ? await revokedSince(email) : 0;
+      // Read before the password check: a password change or account deletion
+      // that lands while this login is in flight means no session.
+      const generation = validEmail(email) ? await sessionGeneration(email) : 0;
       const user = await checkCredentials(email, password);
       if (!user) {
         await rateLimit('login-fail', who + ':' + ip, failures.here);
         await rateLimit('login-fail-all', who, failures.everywhere);
         return res.status(401).json({ ok: false, error: 'Email ou palavra-passe incorretos.' });
       }
-      const token = await createSession(user, { checkedAt, revokedAt });
+      const token = await createSession(user, { generation });
       if (!token) return res.status(401).json({ ok: false, error: 'A palavra-passe mudou entretanto. Tenta outra vez.' });
       await rememberPlace(email, ip);
       setSessionCookie(res, req, token);
