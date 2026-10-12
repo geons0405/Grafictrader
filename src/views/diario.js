@@ -55,6 +55,10 @@ export function initDiario() {
     const form = event.currentTarget;
     const data = Object.fromEntries(new FormData(form));
     form.querySelector('.form-message').textContent = '';
+    if (!String(data.asset || '').trim() || data.amount === '' || data.result === '') {
+      form.querySelector('.form-message').textContent = 'Preenche o ativo, o valor e o resultado.';
+      return;
+    }
     try {
       renderJournal(await api('/api/journal', { method: 'POST', body: { ...data, followedApp: Boolean(data.followedApp), date: new Date().toISOString() } }));
       form.reset();

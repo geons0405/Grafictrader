@@ -18,6 +18,9 @@ async function read(email) {
 /** Validates one entry from the client; returns null when it is not usable. */
 export function cleanEntry(body = {}) {
   const date = new Date(body.date || Date.now());
+  // Empty fields are missing, not zero: a blank result is not a break-even trade.
+  const given = v => v !== undefined && v !== null && String(v).trim() !== '';
+  if (!given(body.amount) || !given(body.result)) return null;
   const amount = Number(body.amount);
   const result = Number(body.result);
   if (Number.isNaN(date.getTime()) || !Number.isFinite(amount) || amount < 0 || !Number.isFinite(result)) return null;

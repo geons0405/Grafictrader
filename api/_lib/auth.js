@@ -241,20 +241,21 @@ export async function resolveBridgeKey(key) {
 
 /* ---------- pause / self-exclusion ---------- */
 
-const pauseKey = email => 'grafictrader:pause:' + email;
+// One key per length: a shorter pause never overwrites a longer one, even
+// when two requests arrive together; the pause in force is the latest end.
+const pauseKey = (email, days) => `grafictrader:pause:${days}:${email}`;
 export const PAUSE_DAYS = [1, 7, 30];
 
 /** Blocks the account's analyses for some days. It cannot be undone early: that is the point. */
 export async function startPause(email, days) {
   const until = Date.now() + days * 86_400_000;
-  const current = await pausedUntil(email);
-  if (current && current > until) return current;
-  await redis(['SET', pauseKey(email), String(until), 'EX', String(days * 86_400)]);
-  return until;
+  await redis(['SET', pauseKey(email, days), String(until), 'EX', String(days * 86_400)]);
+  return (await pausedUntil(email)) || until;
 }
 
 /** End of the account's pause (ms), or null. */
 export async function pausedUntil(email) {
-  const value = Number(await redis(['GET', pauseKey(email)]));
-  return Number.isFinite(value) && value > Date.now() ? value : null;
+  const ends = await Promise.all(PAUSE_DAYS.map(days => redis(['GET', pauseKey(email, days)])));
+  const latest = Math.max(0, ...ends.map(Number).filter(Number.isFinite));
+  return latest > Date.now() ? latest : null;
 }

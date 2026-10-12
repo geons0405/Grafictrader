@@ -126,6 +126,7 @@ test('the trading journal keeps the user own trades and compares following the a
   const cookie = await register('ivo@acc.test');
   const post = body => call(journal, { body, headers: { cookie, 'content-type': 'application/json' } });
   assert.equal((await post({ asset: '', side: 'BUY', amount: 10, result: 5 })).status, 400);
+  assert.equal((await post({ asset: 'BTC', side: 'BUY', amount: '', result: '' })).status, 400, 'blank is not a break-even trade');
   await post({ asset: 'EUR/USD OTC', side: 'BUY', amount: 10, result: 8.5, followedApp: true });
   await post({ asset: 'EUR/USD OTC', side: 'SELL', amount: 10, result: -10, followedApp: false });
   const last = await post({ asset: 'BTC/USDT', side: 'SELL', amount: 20, result: -20, followedApp: true });
