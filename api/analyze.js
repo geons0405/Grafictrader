@@ -4,6 +4,7 @@ import { clientIp, parseMarketQuery, crossSite } from './_lib/validate.js';
 import { marketReading } from './_lib/quant/service.js';
 import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance, guardImageQuality } from './_lib/quant/verdict.js';
 import { rulesBlock } from './_lib/ai-rules.js';
+import { recordSignal } from './_lib/signals.js';
 import { photoGuidance } from './_lib/quant/explain.js';
 
 import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
@@ -96,6 +97,10 @@ export default async function handler(req, res) {
     }
   }
   const verdict = mergeVerdict(normalized, reading);
+  // Track record: the BUY/SELL shown is checked later against the real price.
+  if (reading && verdict.direction) {
+    await recordSignal({ source: 'foto', symbol, interval, side: verdict.direction, price: reading.price, atr: reading.snapshot?.atr, confidence: verdict.confidence });
+  }
 
   return res.status(200).json({
     ok: true,

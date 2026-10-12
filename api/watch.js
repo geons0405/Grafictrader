@@ -5,6 +5,7 @@ import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
 import { marketReading } from './_lib/quant/service.js';
 import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance, guardImageQuality } from './_lib/quant/verdict.js';
 import { rulesBlock } from './_lib/ai-rules.js';
+import { recordSignal } from './_lib/signals.js';
 import { photoGuidance } from './_lib/quant/explain.js';
 
 // Live analysis of the user's broker: the app sends one frame of the shared
@@ -110,6 +111,10 @@ export default async function handler(req, res) {
   }
   // Not a chart: neutral verdict, no levels, no live market mixed in.
   const verdict = chartVisible ? mergeVerdict(normalized, reading) : noChartVerdict();
+  // Track record: at most one BUY/SELL per market and candle is checked later against the real price.
+  if (reading && verdict.direction) {
+    await recordSignal({ source: 'corretora', symbol, interval, side: verdict.direction, price: reading.price, atr: reading.snapshot?.atr, confidence: verdict.confidence });
+  }
   const guidance = chartVisible ? photoGuidance(verdict, normalized, reading) : { ...noChartGuidance(normalized, 'ecrã'), headline: 'Não vejo um gráfico no ecrã' };
 
   return res.status(200).json({

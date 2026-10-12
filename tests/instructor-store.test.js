@@ -44,3 +44,12 @@ test('an older candle window never rewinds the stored robot', async () => {
   await advanceStored('s1', 'l1', 'BTCUSDT', '5m', candles.slice(0, 500), null);
   assert.equal(JSON.parse(store.get('s1')).lastTime, newest);
 });
+
+test('the balance history sent to phones is small but keeps every change', async () => {
+  const { thinEquity } = await import('../api/_lib/quant/service.js');
+  const flat = Array.from({ length: 600 }, (_, i) => ({ time: i, value: i === 300 ? 1010 : i > 300 ? 1010 : 1000 }));
+  const thin = thinEquity(flat);
+  assert.ok(thin.length <= 201);
+  assert.ok(thin.some(p => p.value === 1010) && thin.some(p => p.value === 1000));
+  assert.equal(thin.at(-1).time, 599);
+});

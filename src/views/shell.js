@@ -302,6 +302,13 @@ export const shellTemplate = `
     </div>
 
     <div class="term-box">
+      <div class="term-label"><span>// ACERTO REAL DOS SINAIS</span><span id="sigMeta">últimos 14 dias</span></div>
+      <p class="term-note">Cada COMPRAR ou VENDER mostrado na FOTO e em Minha corretora (cripto) é verificado depois com o preço real: stop a 1,5 ATR, alvo a 2R, no máximo 24 velas. Inclui os erros.</p>
+      <div class="signal-stats" id="sigStats"><p class="term-note">A carregar…</p></div>
+      <p class="term-note" id="robotHonest"></p>
+    </div>
+
+    <div class="term-box">
       <div class="term-label"><span>// BALANCE HISTORY</span><span id="tEquityMeta">—</span></div>
       <div id="equityChart" class="equity-chart"></div>
     </div>

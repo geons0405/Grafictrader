@@ -118,6 +118,15 @@ export async function advanceStored(key, lock, symbol, interval, closed, context
   }
 }
 
+/** At most `max` balance points, always keeping the changes and the last one: smaller answers on mobile data. */
+export function thinEquity(points, max = 200) {
+  if (points.length <= max) return points;
+  const changes = points.filter((p, i) => i === 0 || i === points.length - 1 || p.value !== points[i - 1].value);
+  if (changes.length <= max) return changes;
+  const step = changes.length / max;
+  return Array.from({ length: max }, (_, i) => changes[Math.min(changes.length - 1, Math.floor(i * step))]).concat(changes.at(-1));
+}
+
 /** Shapes the instructor response; shared by Binance and MetaTrader 5 feeds. */
 export function instructorView({ symbol, interval, mode, state, closed, livePrice, context, orderBook = null }) {
   const snapshot = quantSnapshot(closed);
@@ -136,7 +145,7 @@ export function instructorView({ symbol, interval, mode, state, closed, livePric
     guidance,
     plan,
     trades: state.trades.slice(-30),
-    equity: state.equity,
+    equity: thinEquity(state.equity),
     log: state.log.slice(-40),
     lastDecision: state.lastDecision,
     signal: { ...now, regime: snapshot?.regime ?? null, regimeLabel: regimeLabel(snapshot?.regime) },

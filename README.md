@@ -153,10 +153,20 @@ Na Vercel, cada variável tem de estar ativa em **Production** (e Preview), com 
 | `OPENAI_API_KEY`, `TWELVE_DATA_API_KEY`, `MARKETAUX_API_KEY`, `FINNHUB_API_KEY` | Opcionais |
 | `ADMIN_TOKEN` | Texto secreto (mín. 16 caracteres) para ver o estado detalhado em `/api/health` |
 | `AI_DAILY_PER_USER`, `AI_DAILY_GLOBAL` | Opcionais: análises por IA por dia, por conta (400) e para a app toda (6000) |
+| `CRON_SECRET` | Recomendado: protege o trabalho diário `/api/cron` (a Vercel envia-o sozinha) |
+| `INSTRUCTOR_COST_PCT` | Opcional: custo por operação do robô demo, ida e volta, em % (0.08) |
 
 Estado dos serviços: `GET /api/health` responde só se a API está no ar. Com o cabeçalho `x-admin-token: <ADMIN_TOKEN>` mostra que chaves estão configuradas e as cadeias de modelos; `?probe=1`, `?models=` e `?compare=` (chamadas reais, pagas) também exigem esse cabeçalho.
 
 As imagens (FOTO, ecrã, câmara, bolha) não vão para modelos gratuitos de proxies (`…:free`), que podem guardar ou reutilizar o que recebem. Para os usar mesmo assim, põe-nos em `AI_VISION_MODELS`.
+
+### Acerto real dos sinais
+
+Cada COMPRAR/VENDER mostrado na FOTO e em Minha corretora, num ativo cripto com dados ao vivo, fica registado com o preço real desse momento (no máximo um por mercado e vela). Depois de 24 velas é verificado contra o que o preço fez, com as regras do robô: stop a 1,5 ATR, alvo a 2R, e stop primeiro quando os dois são tocados na mesma vela. `GET /api/signals` mostra a taxa de acerto e o R médio por origem e timeframe nos últimos 14 dias, incluindo os erros (painel "Acerto real dos sinais" na Live Inteligente). Não guarda dados de utilizadores.
+
+O trabalho diário `/api/cron` (em `vercel.json`) verifica os sinais pendentes e avança os robôs demo, para o histórico ter menos buracos quando ninguém abre a app.
+
+O robô demo desconta custos em cada operação (`INSTRUCTOR_COST_PCT`, 0,08% por defeito), ignora sinais em que os custos comeriam mais de 25% do risco, preenche stops com salto de preço ao preço de abertura e mostra o ganho médio por operação e a maior queda.
 
 ### Motor de Inteligência de Mercado
 
