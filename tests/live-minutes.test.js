@@ -100,3 +100,15 @@ test('a failed analysis does not use a live minute', async () => {
     Date.now = realNow;
   }
 });
+
+test('an analysis that ends in the next minute is charged to the minute it was admitted in', async () => {
+  const base = Date.UTC(2026, 9, 20, 12, 0);
+  for (let m = 0; m < 9; m++) await liveMinutes('eva', 10, { charge: true, at: base + m * 60_000 });
+  const admittedAt = base + 20 * 60_000 + 59_000;
+  assert.equal((await liveMinutes('eva', 10, { at: admittedAt })).allowed, true);
+  const charged = await liveMinutes('eva', 10, { charge: true, at: admittedAt });
+  assert.equal(charged.used, 10);
+  // A frame admitted in that same minute, finishing even later, is not charged again.
+  assert.equal((await liveMinutes('eva', 10, { charge: true, at: admittedAt + 500 })).used, 10);
+  assert.equal((await liveMinutes('eva', 10, { at: base + 22 * 60_000 })).allowed, false);
+});

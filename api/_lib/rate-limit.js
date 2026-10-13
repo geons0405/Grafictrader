@@ -72,11 +72,13 @@ export async function aiQuota(id) {
  * screen sends no frames and a failed analysis is not charged. `limit` 0 or
  * less means no limit. Resets at 00:00 UTC.
  * `charge: false` only checks (before the AI runs); `charge: true` counts the
- * current minute (after an answer was given).
+ * minute it was checked in (after an answer was given).
  */
-export async function liveMinutes(id, limit, { charge = false } = {}) {
+export async function liveMinutes(id, limit, { charge = false, at = Date.now() } = {}) {
   if (!(limit > 0)) return { allowed: true, used: 0, left: null };
-  const now = Date.now();
+  // `at`: when the request was checked, so an analysis that ends in the next
+  // minute is charged to the minute it was admitted in.
+  const now = at;
   const day = new Date(now).toISOString().slice(0, 10);
   const minuteKey = `grafictrader:live:${id}:${Math.floor(now / 60_000)}`;
   const dayKey = `grafictrader:live-day:${id}:${day}`;

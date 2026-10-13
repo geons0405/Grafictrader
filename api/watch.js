@@ -91,9 +91,10 @@ export default async function handler(req, res) {
 
   // Daily minutes of live analysis for the plan (free: 10): checked before any AI is spent.
   const who = access.user?.email || clientIp(req);
+  const admittedAt = Date.now();
   let live;
   try {
-    live = await liveMinutes(who, liveMinutesFor(access.user));
+    live = await liveMinutes(who, liveMinutesFor(access.user), { at: admittedAt });
   } catch {
     return res.status(503).json({ ok: false, error: 'Serviço indisponível. Tenta de novo dentro de instantes.' });
   }
@@ -121,7 +122,7 @@ export default async function handler(req, res) {
   }
   // Only a minute with an answer counts towards the daily live minutes.
   try {
-    live = await liveMinutes(who, liveMinutesFor(access.user), { charge: true });
+    live = await liveMinutes(who, liveMinutesFor(access.user), { charge: true, at: admittedAt });
   } catch { /* the answer is ready: give it, the minute is just not counted */ }
 
   const chartVisible = isChartVisible(vision.raw);
