@@ -65,3 +65,43 @@ export async function aiQuota(id) {
   if (!all.allowed) return { ...all, message: 'As análises por IA atingiram o limite de hoje. Tenta mais tarde.' };
   return user;
 }
+
+/**
+ * Daily allowance of live analysis (Minha corretora and the Android bubble),
+ * counted in minutes that had at least one analysis: a quiet screen sends no
+ * frames, so it costs nothing. `limit` 0 or less means no limit. Resets at
+ * 00:00 UTC.
+ */
+export async function liveMinutes(id, limit) {
+  if (!(limit > 0)) return { allowed: true, used: 0, left: null };
+  const now = Date.now();
+  const day = new Date(now).toISOString().slice(0, 10);
+  const minuteKey = `grafictrader:live:${id}:${Math.floor(now / 60_000)}`;
+  const dayKey = `grafictrader:live-day:${id}:${day}`;
+  const retryAfter = 86_400 - Math.floor((now / 1000) % 86_400);
+  const result = used => ({ allowed: used <= limit, used, left: Math.max(0, limit - used), retryAfter });
+  if (redisConfigured()) {
+    // Errors surface: this limit protects paid AI, so it never falls back to "no limit".
+    if (await redis(['GET', minuteKey])) return result(Number(await redis(['GET', dayKey])) || 0);
+    const used = Number(await redis(['GET', dayKey])) || 0;
+    if (used >= limit) return { ...result(used), allowed: false };
+    if (await redis(['SET', minuteKey, '1', 'NX', 'EX', '120']) !== 'OK') return result(used);
+    const counted = Number(await redis(['INCR', dayKey]));
+    if (counted === 1) await redis(['EXPIRE', dayKey, String(2 * 86_400)]);
+    return result(counted);
+  }
+  if (memory.size > 5000) memory.clear();
+  if (memory.has(minuteKey)) return result(memory.get(dayKey) || 0);
+  const used = memory.get(dayKey) || 0;
+  if (used >= limit) return { ...result(used), allowed: false };
+  memory.set(minuteKey, 1);
+  memory.set(dayKey, used + 1);
+  return result(used + 1);
+}
+
+/** Live minutes a day for the account's plan (free: 10). Paid plans have no minute limit yet. */
+export function liveMinutesFor(user) {
+  const plan = user?.plan || 'free';
+  if (plan !== 'free') return envLimit('LIVE_MINUTES_PAID', 0);
+  return envLimit('LIVE_MINUTES_FREE', 10);
+}

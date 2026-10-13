@@ -1,5 +1,5 @@
 import { requireUserIfConfigured } from './_lib/auth.js';
-import { rateLimit, sendRateLimited, aiQuota } from './_lib/rate-limit.js';
+import { rateLimit, sendRateLimited, aiQuota, liveMinutes, liveMinutesFor } from './_lib/rate-limit.js';
 import { clientIp, crossSite } from './_lib/validate.js';
 import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
 import { marketReading } from './_lib/quant/service.js';
@@ -89,10 +89,28 @@ export default async function handler(req, res) {
   const access = await requireUserIfConfigured(req, res);
   if (!access.ok) return;
 
+  // Daily minutes of live analysis for the plan (free: 10). Counted before any AI is spent.
+  const who = access.user?.email || clientIp(req);
+  let live;
+  try {
+    live = await liveMinutes(who, liveMinutesFor(access.user));
+  } catch {
+    return res.status(503).json({ ok: false, error: 'Serviço indisponível. Tenta de novo dentro de instantes.' });
+  }
+  if (!live.allowed) {
+    res.setHeader('Retry-After', String(live.retryAfter));
+    return res.status(429).json({
+      ok: false,
+      liveLimit: true,
+      minutesLeft: 0,
+      error: `Usaste os ${liveMinutesFor(access.user)} minutos de análise ao vivo de hoje (plano gratuito). Voltam amanhã; até lá podes usar o FOTO.`
+    });
+  }
+
   // About one analysis every 10 s on average per user.
-  const limit = await rateLimit('watch', access.user?.email || clientIp(req), { limit: 60, windowSeconds: 600, failClosed: true });
+  const limit = await rateLimit('watch', who, { limit: 60, windowSeconds: 600, failClosed: true });
   if (!limit.allowed) return sendRateLimited(res, limit);
-  const quota = await aiQuota(access.user?.email || clientIp(req));
+  const quota = await aiQuota(who);
   if (!quota.allowed) return sendRateLimited(res, quota);
 
   let vision;
@@ -128,6 +146,8 @@ export default async function handler(req, res) {
     ok: true,
     provider: vision.provider,
     at: new Date().toISOString(),
+    // Live minutes left today (null: no limit on this plan).
+    minutesLeft: live.left,
     chartVisible,
     // Stable name of the market on screen, so "BTC/USDT M5" and "BTCUSDT 5m" are the same one.
     market: chartVisible ? marketKey(normalized) : null,

@@ -12,7 +12,7 @@ export const CAPTURE_NOTICES = {
     title: 'Antes de ligar a câmara',
     items: [
       ['O que é captado', 'A imagem da câmara. Na FOTO só é enviada a foto que tirares; em “Minha corretora”, uma imagem a cada poucos segundos, só quando o gráfico muda.'],
-      ['Durante quanto tempo', 'Até fechares a câmara ou tocares em Parar (no máximo 45 minutos em “Minha corretora”).'],
+      ['Durante quanto tempo', 'Até fechares a câmara ou tocares em Parar (no máximo 45 minutos seguidos em “Minha corretora”; no plano gratuito, 10 minutos de análise ao vivo por dia).'],
       ['Para quê', 'Para a IA ler o gráfico e dar a Análise. Nada mais.'],
       ['Para onde vai', 'Para o servidor do Grafictrader, por ligação cifrada, e daí para ' + PROVIDERS + ', que podem estar fora do teu país.'],
       ['O que guardamos', 'Não guardamos as imagens depois da Análise. Cada fornecedor de IA segue a sua própria política.'],
@@ -23,7 +23,7 @@ export const CAPTURE_NOTICES = {
     title: 'Antes de partilhar o ecrã',
     items: [
       ['O que é captado', 'O separador, a janela ou o ecrã que escolheres na partilha. Uma imagem a cada poucos segundos, só quando o gráfico muda.'],
-      ['Durante quanto tempo', 'Até tocares em Parar ou terminares a partilha (no máximo 45 minutos).'],
+      ['Durante quanto tempo', 'Até tocares em Parar ou terminares a partilha (no máximo 45 minutos seguidos; no plano gratuito, 10 minutos de análise ao vivo por dia).'],
       ['Para quê', 'Para a IA ler o gráfico da tua corretora e dar a Análise.'],
       ['Para onde vai', 'Para o servidor do Grafictrader, por ligação cifrada, e daí para ' + PROVIDERS + ', que podem estar fora do teu país.'],
       ['O que guardamos', 'Não guardamos as imagens depois da Análise. Cada fornecedor de IA segue a sua própria política.'],
@@ -34,7 +34,7 @@ export const CAPTURE_NOTICES = {
     title: 'Antes de ligar a bolha',
     items: [
       ['O que é captado', 'O ECRÃ INTEIRO do telemóvel, incluindo notificações e qualquer app que abras durante a sessão. É enviada uma imagem quando o gráfico muda (no máximo uma a cada 8 segundos).'],
-      ['Durante quanto tempo', 'Até tocares em “Parar análise” (na bolha ou na notificação), no máximo 45 minutos.'],
+      ['Durante quanto tempo', 'Até tocares em “Parar análise” (na bolha ou na notificação), no máximo 45 minutos seguidos; no plano gratuito, 10 minutos de análise ao vivo por dia.'],
       ['Para quê', 'Para a IA ler o gráfico da tua corretora e mostrar a Análise na bolha.'],
       ['Para onde vai', 'Para o servidor do Grafictrader, por ligação cifrada, e daí para ' + PROVIDERS + ', que podem estar fora do teu país.'],
       ['O que guardamos', 'Não guardamos as imagens depois da Análise. Cada fornecedor de IA segue a sua própria política.'],

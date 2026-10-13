@@ -518,6 +518,10 @@ public class WatchService extends Service {
         } catch (Exception error) {
             data = new JSONObject();
         }
+        if (status == 429 && data.optBoolean("liveLimit")) {
+            finish(data.optString("error", "Usaste os minutos de análise ao vivo de hoje. Voltam amanhã."));
+            return;
+        }
         if (status == 429) {
             minGap = SLOW_GAP_MS;
             setNotice("Muitas análises seguidas: a abrandar.");

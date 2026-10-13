@@ -49,6 +49,10 @@ function savePrefs() {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* ignore */ }
 }
 
+// Live minutes left today on the free plan (null: no limit).
+let minutesLeft = null;
+const minutesText = () => minutesLeft == null ? '' : ` · restam ${minutesLeft} min hoje`;
+
 function setStatus(text) {
   $('#watchStatus').textContent = text;
   $('#watchHudStatus').textContent = text;
@@ -129,7 +133,9 @@ async function tick() {
     handleResult(data);
   } catch (error) {
     if (mine !== session) return;
-    if (error.status === 429) {
+    if (error.data?.liveLimit) {
+      stop(error.message);
+    } else if (error.status === 429) {
       minGap = 20000;
       setStatus('Muitas análises seguidas: a abrandar para uma a cada 20 s.');
     } else if (error.status === 401 || error.status === 503 || error.data?.termsRequired || error.data?.paused) {
@@ -145,7 +151,7 @@ async function tick() {
 function updateClock() {
   if (!lastSentAt || inflight) return;
   const ago = Math.round((Date.now() - lastSentAt) / 1000);
-  setStatus(`Ao vivo · ${analyses} análise(s) · última há ${ago}s · analisa quando o gráfico muda`);
+  setStatus(`Ao vivo · ${analyses} análise(s) · última há ${ago}s · analisa quando o gráfico muda${minutesText()}`);
 }
 
 function startTicker() {
@@ -233,10 +239,11 @@ export function stop(message) {
 /* ---------- results ---------- */
 
 function handleResult(data) {
+  if (data.minutesLeft !== undefined) minutesLeft = data.minutesLeft;
   if (kind === 'native') {
     analyses += 1;
     lastSentAt = Date.now();
-    setStatus(`Ao vivo no telemóvel · ${analyses} análise(s) · a bolha mostra a orientação por cima da corretora`);
+    setStatus(`Ao vivo no telemóvel · ${analyses} análise(s) · a bolha mostra a orientação por cima da corretora${minutesText()}`);
   }
   const decision = data.verdict.decision;
   // Only a market named in full (asset and timeframe) can count as a different one.
