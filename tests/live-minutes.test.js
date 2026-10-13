@@ -24,6 +24,14 @@ test('the free plan gets 10 live minutes a day; paid plans have no minute limit'
   assert.equal(liveMinutesFor(null), 10);
   assert.equal(liveMinutesFor({ plan: 'free' }), 10);
   assert.equal(liveMinutesFor({ plan: 'pro' }), 0);
+  process.env.LIVE_MINUTES_FREE = '0';
+  assert.equal(liveMinutesFor(null), 0, '0 turns the limit off');
+  process.env.LIVE_MINUTES_FREE = '25';
+  assert.equal(liveMinutesFor(null), 25);
+  process.env.LIVE_MINUTES_PAID = '120';
+  assert.equal(liveMinutesFor({ plan: 'pro' }), 120);
+  delete process.env.LIVE_MINUTES_FREE;
+  delete process.env.LIVE_MINUTES_PAID;
 });
 
 test('only minutes with an analysis count, and the day resets at midnight UTC', async () => {

@@ -105,9 +105,16 @@ export async function liveMinutes(id, limit, { charge = false, at = Date.now() }
   return result(used + 1);
 }
 
-/** Live minutes a day for the account's plan (free: 10). Paid plans have no minute limit yet. */
+// Live minutes setting: a number of minutes, or 0 for no limit.
+const liveSetting = (name, fallback) => {
+  const raw = process.env[name];
+  const value = Number(raw);
+  return raw !== undefined && raw !== '' && Number.isFinite(value) && value >= 0 ? value : fallback;
+};
+
+/** Live minutes a day for the account's plan (free: 10; paid: no limit). 0 means no limit. */
 export function liveMinutesFor(user) {
   const plan = user?.plan || 'free';
-  if (plan !== 'free') return envLimit('LIVE_MINUTES_PAID', 0);
-  return envLimit('LIVE_MINUTES_FREE', 10);
+  if (plan !== 'free') return liveSetting('LIVE_MINUTES_PAID', 0);
+  return liveSetting('LIVE_MINUTES_FREE', 10);
 }

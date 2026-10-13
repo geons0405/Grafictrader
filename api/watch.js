@@ -104,7 +104,7 @@ export default async function handler(req, res) {
       ok: false,
       liveLimit: true,
       minutesLeft: 0,
-      error: `Usaste os ${liveMinutesFor(access.user)} minutos de análise ao vivo de hoje (plano gratuito). Voltam amanhã; até lá podes usar o FOTO.`
+      error: `Usaste os ${liveMinutesFor(access.user)} minutos de análise ao vivo de hoje${(access.user?.plan || 'free') === 'free' ? ' (plano gratuito)' : ''}. Voltam amanhã; até lá podes usar o FOTO.`
     });
   }
 
