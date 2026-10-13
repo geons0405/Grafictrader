@@ -40,7 +40,8 @@ test('a signal is judged by what the price did next, stop first when both are hi
 });
 
 test('the live watch records one signal per market and candle, then settles it', async () => {
-  const at = Math.floor(Date.now() / 1000) - 3 * 3600;
+  // Start of a 5-minute candle, so "5 s later" is always the same candle.
+  const at = Math.floor((Date.now() / 1000 - 3 * 3600) / 300) * 300;
   assert.equal(await recordSignal({ source: 'corretora', symbol: 'BTCUSDT', interval: '5m', side: 1, price: 100, atr: 2, at }), true);
   assert.equal(await recordSignal({ source: 'corretora', symbol: 'BTCUSDT', interval: '5m', side: 1, price: 100.1, atr: 2, at: at + 5 }), false, 'same candle: counted once');
   assert.equal(await recordSignal({ source: 'foto', symbol: 'BTCUSDT', interval: '5m', side: -1, price: 100, atr: 0, at }), false, 'no ATR: nothing to measure');
