@@ -241,6 +241,8 @@ function runHedged(chain, text, image, { accept, budgetMs, hedgeMs, ...opts }) {
       }
       const step = steps[next++];
       const id = `${step.provider}:${step.model}`;
+      // Paused meanwhile by another request (busy, refused): skip it.
+      if ((cooldown.get(id) || 0) > Date.now()) return launch();
       const controller = new AbortController();
       controllers.push(controller);
       running += 1;

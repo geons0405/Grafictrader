@@ -68,32 +68,36 @@ export async function aiQuota(id) {
 
 /**
  * Daily allowance of live analysis (Minha corretora and the Android bubble),
- * counted in minutes that had at least one analysis: a quiet screen sends no
- * frames, so it costs nothing. `limit` 0 or less means no limit. Resets at
- * 00:00 UTC.
+ * counted in minutes that had at least one successful analysis: a quiet
+ * screen sends no frames and a failed analysis is not charged. `limit` 0 or
+ * less means no limit. Resets at 00:00 UTC.
+ * `charge: false` only checks (before the AI runs); `charge: true` counts the
+ * current minute (after an answer was given).
  */
-export async function liveMinutes(id, limit) {
+export async function liveMinutes(id, limit, { charge = false } = {}) {
   if (!(limit > 0)) return { allowed: true, used: 0, left: null };
   const now = Date.now();
   const day = new Date(now).toISOString().slice(0, 10);
   const minuteKey = `grafictrader:live:${id}:${Math.floor(now / 60_000)}`;
   const dayKey = `grafictrader:live-day:${id}:${day}`;
   const retryAfter = 86_400 - Math.floor((now / 1000) % 86_400);
-  const result = used => ({ allowed: used <= limit, used, left: Math.max(0, limit - used), retryAfter });
+  const result = (used, allowed = true) => ({ allowed, used, left: Math.max(0, limit - used), retryAfter });
   if (redisConfigured()) {
     // Errors surface: this limit protects paid AI, so it never falls back to "no limit".
-    if (await redis(['GET', minuteKey])) return result(Number(await redis(['GET', dayKey])) || 0);
+    const counted = Boolean(await redis(['GET', minuteKey]));
     const used = Number(await redis(['GET', dayKey])) || 0;
-    if (used >= limit) return { ...result(used), allowed: false };
-    if (await redis(['SET', minuteKey, '1', 'NX', 'EX', '120']) !== 'OK') return result(used);
-    const counted = Number(await redis(['INCR', dayKey]));
-    if (counted === 1) await redis(['EXPIRE', dayKey, String(2 * 86_400)]);
-    return result(counted);
+    if (counted) return result(used);
+    if (used >= limit) return result(used, false);
+    if (!charge || await redis(['SET', minuteKey, '1', 'NX', 'EX', '120']) !== 'OK') return result(used);
+    const total = Number(await redis(['INCR', dayKey]));
+    if (total === 1) await redis(['EXPIRE', dayKey, String(2 * 86_400)]);
+    return result(total);
   }
   if (memory.size > 5000) memory.clear();
-  if (memory.has(minuteKey)) return result(memory.get(dayKey) || 0);
   const used = memory.get(dayKey) || 0;
-  if (used >= limit) return { ...result(used), allowed: false };
+  if (memory.has(minuteKey)) return result(used);
+  if (used >= limit) return result(used, false);
+  if (!charge) return result(used);
   memory.set(minuteKey, 1);
   memory.set(dayKey, used + 1);
   return result(used + 1);

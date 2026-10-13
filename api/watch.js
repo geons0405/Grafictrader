@@ -89,7 +89,7 @@ export default async function handler(req, res) {
   const access = await requireUserIfConfigured(req, res);
   if (!access.ok) return;
 
-  // Daily minutes of live analysis for the plan (free: 10). Counted before any AI is spent.
+  // Daily minutes of live analysis for the plan (free: 10): checked before any AI is spent.
   const who = access.user?.email || clientIp(req);
   let live;
   try {
@@ -119,6 +119,10 @@ export default async function handler(req, res) {
   } catch (error) {
     return res.status(error.status || 502).json({ ok: false, setupRequired: Boolean(error.setupRequired), error: error.message });
   }
+  // Only a minute with an answer counts towards the daily live minutes.
+  try {
+    live = await liveMinutes(who, liveMinutesFor(access.user), { charge: true });
+  } catch { /* the answer is ready: give it, the minute is just not counted */ }
 
   const chartVisible = isChartVisible(vision.raw);
   if (!chartVisible) {
