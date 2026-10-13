@@ -198,7 +198,8 @@ async function begin(newStream, newKind, { keepSource = false } = {}) {
   $('#watchStage').classList.add('active');
   $('#watchStage').dataset.kind = kind;
   $('#watchHudNow').textContent = 'A preparar a primeira análise…';
-  setExpanded(kind !== 'native');
+  // The screen is not shown back to the user (it would mirror itself): the analysis panel is what matters.
+  setExpanded(kind !== 'native' && kind !== 'screen');
   $('#watchEmpty').hidden = true;
   $('#watchStop').hidden = false;
   $('#watchStarts').hidden = true;
@@ -411,8 +412,19 @@ export function initWatch() {
   $('#watchShare').onclick = async () => {
     if (!(await confirmCapture('screen'))) return;
     try {
-      const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 5 }, audio: false });
+      // The Grafictrader tab itself is left out of the picker (Chrome): sharing it
+      // made a mirror of the app inside the app, with no chart to read.
+      const s = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 5, displaySurface: 'browser' },
+        audio: false,
+        selfBrowserSurface: 'exclude',
+        preferCurrentTab: false,
+        surfaceSwitching: 'include'
+      });
       await begin(s, 'screen');
+      const surface = s.getVideoTracks()[0]?.getSettings?.().displaySurface;
+      $('#watchScreenNote').dataset.surface = surface || '';
+      if (surface === 'monitor') setStatus('Partilhaste o ecrã inteiro: põe a corretora à frente, senão a IA vê o próprio Grafictrader.');
     } catch {
       setStatus('A partilha de ecrã foi cancelada ou bloqueada.');
     }

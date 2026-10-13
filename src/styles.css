@@ -1653,3 +1653,11 @@ body.stage-open .tabbar { display: none; }
 #pauseStatus[data-sign="down"] { color: var(--down); }
 @media (max-width: 380px) { .calc-grid, .calc-out, .journal-totals { grid-template-columns: 1fr; } }
 .calc-grid label.terms-check { display: flex; color: var(--text-2); font-size: 13px; }
+
+/* Screen share: the shared screen is not echoed back (it mirrored the app inside itself). */
+.watch-screen-note { display: none; position: absolute; inset: 0; padding: 24px; place-content: center; text-align: center; color: #e9e9ee; gap: 8px; }
+.watch-screen-note p { margin: 0 auto; max-width: 46ch; color: #b9b9c3; font-size: 14px; line-height: 1.5; }
+.watch-screen-note .watch-screen-monitor { display: none; color: #ffcf70; }
+.watch-screen-note[data-surface="monitor"] .watch-screen-monitor { display: block; }
+.watch-stage.active[data-kind="screen"] video { visibility: hidden; }
+.watch-stage.active[data-kind="screen"] .watch-screen-note { display: grid; }
