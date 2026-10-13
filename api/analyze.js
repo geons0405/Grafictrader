@@ -60,7 +60,7 @@ export default async function handler(req, res) {
 
   let vision;
   try {
-    vision = await runVision(image, ANALYSIS_PROMPT);
+    vision = await runVision(image, ANALYSIS_PROMPT, { maxOutputTokens: 1200 });
   } catch (error) {
     return res.status(error.status || 502).json({ ok: false, setupRequired: Boolean(error.setupRequired), error: error.message });
   }
@@ -91,7 +91,7 @@ export default async function handler(req, res) {
   let reading = null;
   if (symbol && (readTimeframe || !normalized.timeframe)) {
     try {
-      reading = await marketReading(symbol, interval);
+      reading = await marketReading(symbol, interval, { withContext: false });
     } catch (error) {
       console.warn('[Analyze] leitura ao vivo indisponível:', error?.message || error);
     }

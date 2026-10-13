@@ -175,8 +175,16 @@ export async function instructorFromCandles(symbol, interval, candles, livePrice
 }
 
 /** Quant reading + live context for one market, used to cross-check photo analysis. */
-export async function marketReading(symbol, interval) {
-  const [raw, live] = await Promise.all([getBinanceCandles(symbol, interval, 300), liveContext(symbol)]);
+/**
+ * Engine reading of a market. `withContext: false` skips the order flow, news and
+ * macro calendar: a quick chart-only cross-check for FOTO and the live screen,
+ * where the answer has to come fast.
+ */
+export async function marketReading(symbol, interval, { withContext = true } = {}) {
+  const [raw, live] = await Promise.all([
+    getBinanceCandles(symbol, interval, 300),
+    withContext ? liveContext(symbol) : Promise.resolve({ context: {} })
+  ]);
   const closed = closedCandles(normalize(raw), interval);
   const snapshot = quantSnapshot(closed);
   const signal = decide(snapshot, live.context);

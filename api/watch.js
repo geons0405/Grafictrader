@@ -54,7 +54,7 @@ async function cachedReading(symbol, interval) {
   const key = symbol + ':' + interval;
   const hit = readings.get(key);
   if (hit && Date.now() - hit.at < READING_TTL_MS) return hit.promise;
-  const promise = marketReading(symbol, interval);
+  const promise = marketReading(symbol, interval, { withContext: false });
   readings.set(key, { at: Date.now(), promise });
   promise.catch(() => readings.delete(key));
   return promise;

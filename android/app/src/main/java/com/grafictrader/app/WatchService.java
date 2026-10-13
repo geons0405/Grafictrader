@@ -72,7 +72,7 @@ public class WatchService extends Service {
 
     private static final String CHANNEL = "watch";
     private static final int NOTIFICATION_ID = 41;
-    private static final int MAX_SIDE = 1600;
+    private static final int MAX_SIDE = 1280;
     private static final long TICK_MS = 1000;
     private static final long MIN_GAP_MS = 8000;
     private static final long SLOW_GAP_MS = 20000;

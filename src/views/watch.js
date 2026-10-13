@@ -8,7 +8,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 // computer, camera on a phone, or a recorded video) and keeps its advice up
 // to date while the user trades there.
 
-const MAX_SIDE = 1600;
+const MAX_SIDE = 1280;
 const MIN_GAP_MS = 8000;
 const MAX_GAP_MS = 45000;
 const SESSION_LIMIT_MS = 45 * 60 * 1000;

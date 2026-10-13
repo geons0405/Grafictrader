@@ -20,6 +20,9 @@ const OTHER_QUOTES = new Set(['BTC', 'XBT', 'BITCOIN', 'ETH', 'ETHEREUM', 'BNB',
 export function mapAsset(text) {
   if (!text) return null;
   const tokens = String(text).toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim().split(' ');
+  // Broker OTC prices (binary options at weekends, "Bitcoin OTC") are the broker's own
+  // synthetic feed: the real market says nothing about them.
+  if (tokens.includes('OTC') || tokens.some(t => t.endsWith('OTC'))) return null;
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     for (const [symbol, names] of ASSET_ALIASES) {
