@@ -130,6 +130,7 @@ async function tick() {
     if (mine !== session) return;
     analyses += 1;
     minGap = MIN_GAP_MS;
+    lastError = null;
     handleResult(data);
   } catch (error) {
     if (mine !== session) return;
@@ -140,18 +141,35 @@ async function tick() {
       setStatus('Muitas análises seguidas: a abrandar para uma a cada 20 s.');
     } else if (error.status === 401 || error.status === 503 || error.data?.termsRequired || error.data?.paused) {
       stop(error.status === 401 ? 'Inicia sessão para usar a análise ao vivo.' : error.message);
+    } else if (error.data?.exhausted) {
+      // Out of AI quota: try again less often, and say so.
+      minGap = 60000;
+      showError(error.message);
     } else {
-      setStatus('Falhou uma análise (' + error.message + '). A tentar de novo…');
+      showError('Falhou uma análise (' + error.message + '). A tentar de novo…');
     }
   } finally {
     inflight = false;
   }
 }
 
+// Why the last analysis failed, kept on screen until one succeeds (the clock used to overwrite it).
+let lastError = null;
+
 function updateClock() {
   if (!lastSentAt || inflight) return;
   const ago = Math.round((Date.now() - lastSentAt) / 1000);
+  if (lastError) {
+    setStatus(`Ao vivo · ${analyses} análise(s) · ⚠ ${lastError}`);
+    return;
+  }
   setStatus(`Ao vivo · ${analyses} análise(s) · última há ${ago}s · analisa quando o gráfico muda${minutesText()}`);
+}
+
+function showError(message) {
+  lastError = message;
+  setStatus('⚠ ' + message);
+  if (!current) $('#watchHudNow').textContent = message;
 }
 
 function startTicker() {
@@ -189,6 +207,7 @@ async function begin(newStream, newKind, { keepSource = false } = {}) {
   if (kind !== 'native') await video.play().catch(() => {});
   startedAt = Date.now();
   analyses = 0;
+  lastError = null;
   lastSig = null;
   lastSentAt = null;
   history = [];
