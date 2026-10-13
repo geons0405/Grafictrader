@@ -1,5 +1,5 @@
 import { requireUserIfConfigured } from './_lib/auth.js';
-import { rateLimit, sendRateLimited, aiQuota } from './_lib/rate-limit.js';
+import { rateLimit, sendRateLimited, aiQuota, liveMinutes, liveMinutesFor } from './_lib/rate-limit.js';
 import { clientIp, crossSite } from './_lib/validate.js';
 import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
 import { marketReading } from './_lib/quant/service.js';
@@ -54,7 +54,7 @@ async function cachedReading(symbol, interval) {
   const key = symbol + ':' + interval;
   const hit = readings.get(key);
   if (hit && Date.now() - hit.at < READING_TTL_MS) return hit.promise;
-  const promise = marketReading(symbol, interval);
+  const promise = marketReading(symbol, interval, { withContext: false });
   readings.set(key, { at: Date.now(), promise });
   promise.catch(() => readings.delete(key));
   return promise;
@@ -89,10 +89,29 @@ export default async function handler(req, res) {
   const access = await requireUserIfConfigured(req, res);
   if (!access.ok) return;
 
+  // Daily minutes of live analysis for the plan (free: 10): checked before any AI is spent.
+  const who = access.user?.email || clientIp(req);
+  const admittedAt = Date.now();
+  let live;
+  try {
+    live = await liveMinutes(who, liveMinutesFor(access.user), { at: admittedAt });
+  } catch {
+    return res.status(503).json({ ok: false, error: 'Serviço indisponível. Tenta de novo dentro de instantes.' });
+  }
+  if (!live.allowed) {
+    res.setHeader('Retry-After', String(live.retryAfter));
+    return res.status(429).json({
+      ok: false,
+      liveLimit: true,
+      minutesLeft: 0,
+      error: `Usaste os ${liveMinutesFor(access.user)} minutos de análise ao vivo de hoje${(access.user?.plan || 'free') === 'free' ? ' (plano gratuito)' : ''}. Voltam amanhã; até lá podes usar o FOTO.`
+    });
+  }
+
   // About one analysis every 10 s on average per user.
-  const limit = await rateLimit('watch', access.user?.email || clientIp(req), { limit: 60, windowSeconds: 600, failClosed: true });
+  const limit = await rateLimit('watch', who, { limit: 60, windowSeconds: 600, failClosed: true });
   if (!limit.allowed) return sendRateLimited(res, limit);
-  const quota = await aiQuota(access.user?.email || clientIp(req));
+  const quota = await aiQuota(who);
   if (!quota.allowed) return sendRateLimited(res, quota);
 
   let vision;
@@ -101,6 +120,10 @@ export default async function handler(req, res) {
   } catch (error) {
     return res.status(error.status || 502).json({ ok: false, setupRequired: Boolean(error.setupRequired), error: error.message });
   }
+  // Only a minute with an answer counts towards the daily live minutes.
+  try {
+    live = await liveMinutes(who, liveMinutesFor(access.user), { charge: true, at: admittedAt });
+  } catch { /* the answer is ready: give it, the minute is just not counted */ }
 
   const chartVisible = isChartVisible(vision.raw);
   if (!chartVisible) {
@@ -128,6 +151,8 @@ export default async function handler(req, res) {
     ok: true,
     provider: vision.provider,
     at: new Date().toISOString(),
+    // Live minutes left today (null: no limit on this plan).
+    minutesLeft: live.left,
     chartVisible,
     // Stable name of the market on screen, so "BTC/USDT M5" and "BTCUSDT 5m" are the same one.
     market: chartVisible ? marketKey(normalized) : null,

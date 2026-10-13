@@ -3,7 +3,7 @@ import { market } from '../lib/store.js';
 import { renderIcons } from '../lib/icons.js';
 import { confirmCapture } from '../lib/consent.js';
 
-const MAX_SIDE = 1600;
+const MAX_SIDE = 1280;
 
 let stream = null;
 let busy = false;

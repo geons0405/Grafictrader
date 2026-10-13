@@ -65,3 +65,56 @@ export async function aiQuota(id) {
   if (!all.allowed) return { ...all, message: 'As análises por IA atingiram o limite de hoje. Tenta mais tarde.' };
   return user;
 }
+
+/**
+ * Daily allowance of live analysis (Minha corretora and the Android bubble),
+ * counted in minutes that had at least one successful analysis: a quiet
+ * screen sends no frames and a failed analysis is not charged. `limit` 0 or
+ * less means no limit. Resets at 00:00 UTC.
+ * `charge: false` only checks (before the AI runs); `charge: true` counts the
+ * minute it was checked in (after an answer was given).
+ */
+export async function liveMinutes(id, limit, { charge = false, at = Date.now() } = {}) {
+  if (!(limit > 0)) return { allowed: true, used: 0, left: null };
+  // `at`: when the request was checked, so an analysis that ends in the next
+  // minute is charged to the minute it was admitted in.
+  const now = at;
+  const day = new Date(now).toISOString().slice(0, 10);
+  const minuteKey = `grafictrader:live:${id}:${Math.floor(now / 60_000)}`;
+  const dayKey = `grafictrader:live-day:${id}:${day}`;
+  const retryAfter = 86_400 - Math.floor((now / 1000) % 86_400);
+  const result = (used, allowed = true) => ({ allowed, used, left: Math.max(0, limit - used), retryAfter });
+  if (redisConfigured()) {
+    // Errors surface: this limit protects paid AI, so it never falls back to "no limit".
+    const counted = Boolean(await redis(['GET', minuteKey]));
+    const used = Number(await redis(['GET', dayKey])) || 0;
+    if (counted) return result(used);
+    if (used >= limit) return result(used, false);
+    if (!charge || await redis(['SET', minuteKey, '1', 'NX', 'EX', '120']) !== 'OK') return result(used);
+    const total = Number(await redis(['INCR', dayKey]));
+    if (total === 1) await redis(['EXPIRE', dayKey, String(2 * 86_400)]);
+    return result(total);
+  }
+  if (memory.size > 5000) memory.clear();
+  const used = memory.get(dayKey) || 0;
+  if (memory.has(minuteKey)) return result(used);
+  if (used >= limit) return result(used, false);
+  if (!charge) return result(used);
+  memory.set(minuteKey, 1);
+  memory.set(dayKey, used + 1);
+  return result(used + 1);
+}
+
+// Live minutes setting: a number of minutes, or 0 for no limit.
+const liveSetting = (name, fallback) => {
+  const raw = process.env[name];
+  const value = Number(raw);
+  return raw !== undefined && raw !== '' && Number.isFinite(value) && value >= 0 ? value : fallback;
+};
+
+/** Live minutes a day for the account's plan (free: 10; paid: no limit). 0 means no limit. */
+export function liveMinutesFor(user) {
+  const plan = user?.plan || 'free';
+  if (plan !== 'free') return liveSetting('LIVE_MINUTES_PAID', 0);
+  return liveSetting('LIVE_MINUTES_FREE', 10);
+}

@@ -39,7 +39,8 @@ export function publicUser(user) {
     email: user.email,
     createdAt: user.createdAt || null,
     termsVersion: user.termsVersion || null,
-    termsAcceptedAt: user.termsAcceptedAt || null
+    termsAcceptedAt: user.termsAcceptedAt || null,
+    plan: user.plan || 'free'
   } : null;
 }
 
