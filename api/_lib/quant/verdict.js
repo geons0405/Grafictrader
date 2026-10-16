@@ -180,9 +180,9 @@ export function mergeVerdict(vision, reading) {
 
   const decision = direction > 0 ? 'COMPRAR' : direction < 0 ? 'VENDER' : 'AGUARDAR';
   const headline = direction > 0
-    ? 'Viés de compra: o gráfico tende a subir'
+    ? 'O gráfico tende a subir'
     : direction < 0
-      ? 'Viés de venda: o gráfico tende a descer'
+      ? 'O gráfico tende a descer'
       : 'Mercado instável: melhor aguardar';
   return { decision, direction, confidence: direction === 0 ? Math.min(confidence, 40) : confidence, agreement, headline, reasons };
 }

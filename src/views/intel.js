@@ -200,7 +200,8 @@ function renderContext(ctx, signal) {
   score.dataset.sign = sign(ctx?.score ?? 0);
 
   const decision = $('#tDecision');
-  decision.textContent = signal ? `${signal.action}${signal.confidence ? ' · ' + signal.confidence + '%' : ''}` : '—';
+  const ACTION = { COMPRAR: 'Boa oportunidade de compra', VENDER: 'Boa oportunidade de venda', AGUARDAR: 'Não operar' };
+  decision.textContent = signal ? `${ACTION[signal.action] || signal.action}${signal.confidence ? ' · ' + signal.confidence + '%' : ''}` : '—';
   decision.dataset.sign = signal?.action === 'COMPRAR' ? 'up' : signal?.action === 'VENDER' ? 'down' : '';
   $('#tDecisionReasons').innerHTML = (signal?.reasons || []).map(r => `<li>${escapeHtml(r)}</li>`).join('');
 }

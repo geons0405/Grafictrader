@@ -579,8 +579,8 @@ public class WatchService extends Service {
     /* ---------- output ---------- */
 
     private static String label(String decision) {
-        if ("COMPRAR".equals(decision)) return "COMPRAR";
-        if ("VENDER".equals(decision)) return "VENDER";
+        if ("COMPRAR".equals(decision)) return "BOA OPORTUNIDADE DE COMPRA";
+        if ("VENDER".equals(decision)) return "BOA OPORTUNIDADE DE VENDA";
         return "NÃO OPERAR";
     }
 

@@ -29,7 +29,7 @@ function showPanel(html) {
 }
 
 const DECISION_ICON = { COMPRAR: 'trending-up', VENDER: 'trending-down', AGUARDAR: 'pause' };
-const DECISION_LABEL = { COMPRAR: 'COMPRAR', VENDER: 'VENDER', AGUARDAR: 'NÃO OPERAR' };
+const DECISION_LABEL = { COMPRAR: 'BOA OPORTUNIDADE DE COMPRA', VENDER: 'BOA OPORTUNIDADE DE VENDA', AGUARDAR: 'NÃO OPERAR' };
 const AGREEMENT_LABEL = {
   confirma: 'Motor ao vivo confirma',
   diverge: 'Motor ao vivo diverge',

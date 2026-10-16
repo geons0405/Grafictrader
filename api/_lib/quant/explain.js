@@ -179,7 +179,7 @@ export function explainPlain({ decision, snapshot, context, plan }) {
   return {
     action: label,
     tone,
-    headline: up ? 'Aproveita para comprar: o mercado quer subir' : 'Aproveita para vender: o mercado quer descer',
+    headline: up ? 'Boa oportunidade de compra: o mercado quer subir' : 'Boa oportunidade de venda: o mercado quer descer',
     why,
     steps,
     now

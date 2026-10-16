@@ -13,7 +13,10 @@ const MIN_GAP_MS = 8000;
 const MAX_GAP_MS = 45000;
 const SESSION_LIMIT_MS = 45 * 60 * 1000;
 const PREFS_KEY = 'grafictrader.watchPrefs';
-const LABEL = { COMPRAR: 'COMPRAR', VENDER: 'VENDER', AGUARDAR: 'NÃO OPERAR' };
+const LABEL = { COMPRAR: 'BOA OPORTUNIDADE DE COMPRA', VENDER: 'BOA OPORTUNIDADE DE VENDA', AGUARDAR: 'NÃO OPERAR' };
+// For sentences and the compact history list.
+const CHANCE = { COMPRAR: 'uma oportunidade de compra', VENDER: 'uma oportunidade de venda' };
+const SHORT = { COMPRAR: 'COMPRA', VENDER: 'VENDA', AGUARDAR: 'NÃO OPERAR' };
 const SIDE = { COMPRAR: 'up', VENDER: 'down', AGUARDAR: '' };
 // Android app: native screen capture of the broker app with a floating bubble.
 const Native = Capacitor.isNativePlatform() ? registerPlugin('GrafictraderNative') : null;
@@ -306,7 +309,7 @@ function render(data, step, latest) {
   if (latest.live) bits.push(v.agreement === 'confirma' ? 'mercado ao vivo confirma' : v.agreement === 'diverge' ? 'mercado ao vivo diverge' : 'mercado ao vivo sem sinal');
   $('#watchSub').textContent = bits.join(' · ');
   $('#watchPending').hidden = !step.pending || step.noChart;
-  if (step.pending) $('#watchPending').textContent = `A IA começa a ver sinal de ${LABEL[step.pending]}. Vai confirmar na próxima leitura antes de mudar.`;
+  if (step.pending) $('#watchPending').textContent = `A IA começa a ver ${CHANCE[step.pending] || 'um sinal'}. Vai confirmar na próxima leitura antes de mudar.`;
   // Exact engine levels when the market is tracked; otherwise what the AI read on screen.
   const levels = g.levels || { entry: vis.entry, stop: vis.stop, target: vis.targets?.join(' · ') };
   const showLevels = !step.noChart && !unconfirmed && decision !== 'AGUARDAR' && Boolean(levels.entry || levels.stop || levels.target);
@@ -319,7 +322,7 @@ function render(data, step, latest) {
   $('#watchNow').textContent = step.noChart
     ? 'Enquadra o gráfico da corretora inteiro no ecrã partilhado ou na câmara.'
     : unconfirmed
-      ? `Não operes ainda: a IA vê um possível sinal de ${LABEL[v.decision] || v.decision} e confirma-o na próxima leitura.`
+      ? `Não operes ainda: a IA vê ${CHANCE[v.decision] || 'um possível sinal'} e confirma-a na próxima leitura.`
       : g.now || '—';
   $('#watchHudNow').textContent = $('#watchNow').textContent;
   $('#watchWhy').innerHTML = (g.why || []).map(p => `<p>${escapeHtml(p)}</p>`).join('');
@@ -332,7 +335,7 @@ function render(data, step, latest) {
 function renderHistory() {
   $('#watchHistory').innerHTML = history.map(h => `
     <div class="op">
-      <span class="op-side" data-side="${SIDE[h.decision] || ''}">${LABEL[h.decision] || h.decision}</span>
+      <span class="op-side" data-side="${SIDE[h.decision] || ''}">${SHORT[h.decision] || h.decision}</span>
       <span class="op-prices">${escapeHtml(h.asset || 'ativo ?')} ${escapeHtml(h.timeframe || '')}<small>confiança ${h.confidence}%</small></span>
       <small>${fmtTime(h.at)}</small>
     </div>`).join('') || '<p class="muted-line">As mudanças de orientação desta sessão aparecem aqui.</p>';

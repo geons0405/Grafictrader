@@ -1661,3 +1661,7 @@ body.stage-open .tabbar { display: none; }
 .watch-screen-note[data-surface="monitor"] .watch-screen-monitor { display: block; }
 .watch-stage.active[data-kind="screen"] video { visibility: hidden; }
 .watch-stage.active[data-kind="screen"] .watch-screen-note { display: grid; }
+
+/* "BOA OPORTUNIDADE DE COMPRA/VENDA" is long: badges wrap instead of overflowing. */
+.badge { height: auto; min-height: 40px; max-width: 200px; padding: 6px 12px; text-align: center; line-height: 1.2; }
+.verdict-main strong { font-size: clamp(20px, 5.5vw, 28px); line-height: 1.1; }
