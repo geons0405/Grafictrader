@@ -542,6 +542,10 @@ public class WatchService extends Service {
         if (status >= 400 || !data.optBoolean("ok")) {
             if (status == 503 || data.optBoolean("setupRequired")) {
                 finish(data.optString("error", "A análise por IA não está configurada no servidor."));
+            } else if (data.optBoolean("exhausted")) {
+                // Out of AI quota: say why, and try less often.
+                minGap = SLOW_GAP_MS;
+                setNotice(data.optString("error", "As IAs atingiram o limite de uso por agora."));
             } else {
                 setNotice("Falhou uma análise. A tentar de novo…");
             }
@@ -575,8 +579,8 @@ public class WatchService extends Service {
     /* ---------- output ---------- */
 
     private static String label(String decision) {
-        if ("COMPRAR".equals(decision)) return "COMPRAR";
-        if ("VENDER".equals(decision)) return "VENDER";
+        if ("COMPRAR".equals(decision)) return "BOA OPORTUNIDADE DE COMPRA";
+        if ("VENDER".equals(decision)) return "BOA OPORTUNIDADE DE VENDA";
         return "NÃO OPERAR";
     }
 

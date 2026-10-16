@@ -12,6 +12,8 @@ export const IMAGE_PATTERN = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]
 export const PROVIDERS = {
   unorouter: { label: 'UnoRouter', env: 'UNOROUTER_API_KEY', base: 'https://api.unorouter.com/v1' },
   groq: { label: 'Groq', env: 'GROQ_API_KEY', base: 'https://api.groq.com/openai/v1' },
+  // Paid credits; set its privacy settings to providers that keep no data (screens are private).
+  openrouter: { label: 'OpenRouter', env: 'OPENROUTER_API_KEY', base: 'https://openrouter.ai/api/v1' },
   nvidia: { label: 'NVIDIA', env: 'NVIDIA_API_KEY', base: 'https://integrate.api.nvidia.com/v1' },
   gemini: { label: 'Gemini', env: 'GEMINI_API_KEY' },
   openai: { label: 'OpenAI', env: 'OPENAI_API_KEY' }
@@ -28,6 +30,9 @@ export const PROVIDERS = {
 const DEFAULT_CHAINS = {
   vision: [
     'groq:qwen/qwen3.8-27b',
+    // Used only when OPENROUTER_API_KEY is set: steady when the free quotas run out.
+    'openrouter:meta-llama/llama-3.2-90b-vision-instruct',
+    'openrouter:qwen/qwen3.8-27b',
     'nvidia:meta/llama-3.2-90b-vision-instruct',
     'gemini:gemini-3.8-flash',
     'openai:gpt-5.6-luna',
@@ -165,7 +170,7 @@ const label = step => `${PROVIDERS[step.provider].label} (${step.model})`;
 export async function runChain(role, text, image, { accept = t => Boolean(parseJson(t)), steps, budgetMs = CHAIN_BUDGET_MS, hedgeMs = 0, ...opts } = {}) {
   const chain = steps || chainFor(role);
   if (!chain.length) {
-    const error = new Error('Nenhuma IA está configurada (UNOROUTER_API_KEY, GROQ_API_KEY, NVIDIA_API_KEY, GEMINI_API_KEY ou OPENAI_API_KEY).');
+    const error = new Error('Nenhuma IA está configurada (UNOROUTER_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, NVIDIA_API_KEY, GEMINI_API_KEY ou OPENAI_API_KEY).');
     error.status = 503;
     error.setupRequired = true;
     throw error;
@@ -203,6 +208,8 @@ function chainFailed(errors) {
   const error = new Error('Nenhum modelo de IA conseguiu responder agora. Tenta novamente dentro de instantes.');
   error.status = 502;
   error.details = errors.slice(-6);
+  // Every model out of quota or refused: the free allowances are used up for now.
+  error.exhausted = errors.length > 0 && errors.every(e => /rate|limit|quota|exhausted|denied|too many|sem tempo|aborted|timeout/i.test(e));
   return error;
 }
 
@@ -282,7 +289,10 @@ export async function runVision(image, prompt, { maxOutputTokens = 1800 } = {}) 
     return { raw: parseJson(text), provider };
   } catch (error) {
     if (error.setupRequired) throw error;
-    const wrapped = new Error('A IA não conseguiu analisar a imagem. Tenta uma imagem mais nítida ou espera um minuto.');
+    const wrapped = new Error(error.exhausted
+      ? 'As IAs gratuitas atingiram o limite de uso por agora. A análise volta sozinha quando o limite renovar (de minutos a algumas horas).'
+      : 'A IA não conseguiu analisar a imagem. Tenta uma imagem mais nítida ou espera um minuto.');
+    wrapped.exhausted = Boolean(error.exhausted);
     wrapped.status = 502;
     wrapped.cause = error;
     throw wrapped;

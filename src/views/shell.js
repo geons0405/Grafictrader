@@ -120,6 +120,11 @@ export const shellTemplate = `
       <article class="card watch-card">
         <div class="watch-stage" id="watchStage">
           <video id="watchVideo" autoplay playsinline muted></video>
+          <div class="watch-screen-note" id="watchScreenNote">
+            <b>A IA está a ver o ecrã que partilhaste</b>
+            <p>Abre agora o separador ou a janela da corretora. A análise continua em segundo plano: a orientação aparece aqui, na janela flutuante e nas notificações.</p>
+            <p class="watch-screen-monitor">Partilhaste o ecrã inteiro: deixa a corretora à frente, senão a IA vê o próprio Grafictrader.</p>
+          </div>
           <span class="watch-overlay" id="watchOverlay">—</span>
           <button class="stage-btn watch-expand" type="button" id="watchExpand" aria-label="Ver em ecrã inteiro"><i data-lucide="maximize-2"></i></button>
           <div class="watch-hud" id="watchHud">

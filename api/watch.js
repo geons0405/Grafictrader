@@ -118,7 +118,7 @@ export default async function handler(req, res) {
   try {
     vision = await runVision(image, WATCH_PROMPT.replace('{CONTINUITY}', continuity(previous)), { maxOutputTokens: 1000 });
   } catch (error) {
-    return res.status(error.status || 502).json({ ok: false, setupRequired: Boolean(error.setupRequired), error: error.message });
+    return res.status(error.status || 502).json({ ok: false, setupRequired: Boolean(error.setupRequired), exhausted: Boolean(error.exhausted), error: error.message });
   }
   // Only a minute with an answer counts towards the daily live minutes.
   try {

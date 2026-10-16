@@ -50,3 +50,11 @@ test('broker OTC charts are never cross-checked against the real market', async 
   assert.equal(mapAsset('BTCUSD-OTC'), null);
   assert.equal(mapAsset('Bitcoin'), 'BTCUSDT');
 });
+
+test('when every model is out of quota the error says so', async () => {
+  behaviour = { 'api.groq.com': { fail: true }, 'integrate.api.nvidia.com': { fail: true } };
+  // 500s are not a quota problem
+  await assert.rejects(runChain('vision', 'p', 'data:image/png;base64,AA', { steps: [{ provider: 'groq', model: 'e' }], accept: isVisionAnswer, hedgeMs: 50 }), err => err.exhausted === false);
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: { message: 'Rate limit reached on tokens per day' } }), { status: 429 });
+  await assert.rejects(runChain('vision', 'p', 'data:image/png;base64,AA', { steps: [{ provider: 'groq', model: 'f' }, { provider: 'nvidia', model: 'g' }], accept: isVisionAnswer, hedgeMs: 50 }), err => err.exhausted === true);
+});

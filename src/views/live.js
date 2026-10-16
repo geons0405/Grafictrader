@@ -338,7 +338,7 @@ async function loadInstructor() {
 /* ---------- Council: 7 analysts + AI judge ---------- */
 
 const LEAN = { COMPRAR: 'up', VENDER: 'down', AGUARDAR: '' };
-const LEAN_LABEL = { COMPRAR: 'COMPRAR', VENDER: 'VENDER', AGUARDAR: 'NÃO OPERAR' };
+const LEAN_LABEL = { COMPRAR: 'BOA OPORTUNIDADE DE COMPRA', VENDER: 'BOA OPORTUNIDADE DE VENDA', AGUARDAR: 'NÃO OPERAR' };
 
 function renderCouncil(data) {
   const v = data.verdict;
