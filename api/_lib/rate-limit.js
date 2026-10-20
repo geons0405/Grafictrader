@@ -114,7 +114,9 @@ const liveSetting = (name, fallback) => {
 
 /** Live minutes a day for the account's plan (free: 10; paid: no limit). 0 means no limit. */
 export function liveMinutesFor(user) {
-  const plan = user?.plan || 'free';
+  // Accounts listed in PLAN_PRO_EMAILS (the owner, testers) count as paid until plans are sold.
+  const pro = String(process.env.PLAN_PRO_EMAILS || '').toLowerCase().split(',').map(e => e.trim()).filter(Boolean);
+  const plan = user?.email && pro.includes(String(user.email).toLowerCase()) ? 'pro' : user?.plan || 'free';
   if (plan !== 'free') return liveSetting('LIVE_MINUTES_PAID', 0);
   return liveSetting('LIVE_MINUTES_FREE', 10);
 }

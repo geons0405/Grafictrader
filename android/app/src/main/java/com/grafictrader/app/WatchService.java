@@ -34,6 +34,7 @@ import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.widget.Toast;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
 import java.io.ByteArrayOutputStream;
@@ -553,6 +554,10 @@ public class WatchService extends Service {
         }
         minGap = MIN_GAP_MS;
         analyses += 1;
+        // Free plan: say when the day's live minutes are nearly used up.
+        int left = data.isNull("minutesLeft") ? -1 : data.optInt("minutesLeft", -1);
+        if (left >= 0 && left <= 3) setNotice(left == 0 ? "Último minuto de análise ao vivo de hoje." : "Restam " + left + " min de análise ao vivo hoje.");
+        else clearNotice();
         blankShown = false;
 
         JSONObject verdict = data.optJSONObject("verdict");
@@ -675,6 +680,35 @@ public class WatchService extends Service {
         if (!running) return;
         NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         manager.notify(NOTIFICATION_ID, notification(text));
+        // Also on the bubble: the notification alone was easy to miss.
+        Bubble shown = bubble;
+        if (shown != null) main.post(() -> shown.notice(text));
+    }
+
+    private void clearNotice() {
+        Bubble shown = bubble;
+        if (shown != null) main.post(() -> shown.notice(null));
+    }
+
+    /** The session ended for a reason: say it on screen and leave it in the notifications. */
+    private void announceStop(String message) {
+        try {
+            Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
+        } catch (Exception ignored) {
+            // no toast: the notification below still says it
+        }
+        int immutable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0;
+        PendingIntent open = PendingIntent.getActivity(this, 2, new Intent(this, MainActivity.class), immutable);
+        Notification ended = new NotificationCompat.Builder(this, CHANNEL)
+                .setSmallIcon(R.drawable.ic_stat_watch)
+                .setContentTitle("A análise ao vivo parou")
+                .setContentText(message)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(message))
+                .setAutoCancel(true)
+                .setContentIntent(open)
+                .build();
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        manager.notify(NOTIFICATION_ID + 1, ended);
     }
 
     /* ---------- teardown ---------- */
@@ -702,6 +736,7 @@ public class WatchService extends Service {
         if (captureThread != null) captureThread.quitSafely();
         captureThread = null;
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE);
+        if (wasRunning && message != null) announceStop(message);
         stopSelf();
         Listener target = listener;
         if (wasRunning && target != null) target.onStopped(message);

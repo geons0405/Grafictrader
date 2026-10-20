@@ -155,6 +155,7 @@ Na Vercel, cada variável tem de estar ativa em **Production** (e Preview), com 
 | `OPENROUTER_API_KEY` | Opcional, pago: leitura de imagens estável quando as quotas gratuitas acabam (Llama 3.2 90B Vision e Qwen). Nas definições de privacidade do OpenRouter, permite só fornecedores que não guardam dados |
 | `ADMIN_TOKEN` | Texto secreto (mín. 16 caracteres) para ver o estado detalhado em `/api/health` |
 | `AI_DAILY_PER_USER`, `AI_DAILY_GLOBAL` | Opcionais: análises por IA por dia, por conta (400) e para a app toda (20000) |
+| `PLAN_PRO_EMAILS` | Opcional: emails (separados por vírgula) tratados como plano pago, sem limite de minutos ao vivo — por exemplo o teu, para testares |
 | `LIVE_MINUTES_FREE`, `LIVE_MINUTES_PAID` | Opcionais: minutos de análise ao vivo por dia no plano gratuito (10) e nos pagos (sem limite); 0 = sem limite |
 | `CRON_SECRET` | Recomendado: ativa e protege o trabalho diário `/api/instructor?cron=1` (a Vercel envia-o sozinha) |
 | `INSTRUCTOR_COST_PCT` | Opcional: custo por operação do robô demo, ida e volta, em % (0.08) |
