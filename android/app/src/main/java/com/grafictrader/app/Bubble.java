@@ -31,6 +31,7 @@ final class Bubble {
     private LinearLayout root;
     private GradientDrawable background;
     private TextView badge;
+    private TextView notice;
     private TextView asset;
     private TextView detail;
     private TextView hint;
@@ -72,6 +73,11 @@ final class Bubble {
 
         badge = text(16, true);
         badge.setText("A ANALISAR…");
+        badge.setMaxWidth(dp(250));
+        notice = text(12, false);
+        notice.setTextColor(0xFFFFE08A);
+        notice.setMaxWidth(dp(250));
+        notice.setVisibility(View.GONE);
         asset = text(11, false);
         asset.setAlpha(0.85f);
         detail = text(13, false);
@@ -88,6 +94,7 @@ final class Bubble {
         stop.setOnClickListener(v -> onStop.run());
 
         root.addView(badge);
+        root.addView(notice);
         root.addView(asset);
         root.addView(detail);
         root.addView(hint);
@@ -129,6 +136,13 @@ final class Bubble {
         asset.setText(assetText == null ? "" : assetText);
         asset.setVisibility(assetText == null || assetText.isEmpty() ? View.GONE : View.VISIBLE);
         detail.setText(detailText == null ? "" : detailText);
+    }
+
+    /** A short line under the label: why nothing new is shown (no AI quota, minutes left…). Null hides it. */
+    void notice(String text) {
+        if (root == null) return;
+        notice.setText(text == null ? "" : text);
+        notice.setVisibility(text == null || text.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     void setHidden(boolean hidden) {
