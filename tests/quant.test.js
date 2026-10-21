@@ -86,7 +86,7 @@ test('advancing incrementally matches a single replay', () => {
 test('photo verdict merges vision with the live engine', () => {
   assert.equal(mapAsset('BTC/USDT'), 'BTCUSDT');
   assert.equal(mapAsset('ETHUSD perpétuo'), 'ETHUSDT');
-  assert.equal(mapAsset('EUR/USD'), null);
+  assert.equal(mapAsset('EUR/USD'), 'EURUSD', 'real forex is read from Yahoo');
   assert.equal(mapTimeframe('M15'), '15m');
   assert.equal(mapTimeframe('4H'), '4h');
 

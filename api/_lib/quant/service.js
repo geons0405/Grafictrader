@@ -3,6 +3,8 @@ import { getBinanceCandles, getBinanceAggTrades, getBinanceOrderBook } from '../
 import { redis, redisConfigured } from '../redis.js';
 import { closedCandles } from '../mechanics/pattern-library.js';
 import { lastCandlePatterns } from './patterns.js';
+import { getCandles } from '../sources/candles.js';
+import { isYahooMarket } from '../sources/yahoo.js';
 import { quantSnapshot, decide, regimeLabel } from './signal.js';
 import { emptyState, advance, summarize, STATE_VERSION } from './instructor.js';
 import { buildContext, recentNews } from './context.js';
@@ -185,8 +187,9 @@ export async function instructorFromCandles(symbol, interval, candles, livePrice
  */
 export async function marketReading(symbol, interval, { withContext = true } = {}) {
   const [raw, live] = await Promise.all([
-    getBinanceCandles(symbol, interval, 300),
-    withContext ? liveContext(symbol) : Promise.resolve({ context: {} })
+    getCandles(symbol, interval, 300),
+    // Order flow and the order book come from Binance: crypto only.
+    withContext && !isYahooMarket(symbol) ? liveContext(symbol) : Promise.resolve({ context: {} })
   ]);
   const closed = closedCandles(normalize(raw), interval);
   const snapshot = quantSnapshot(closed);
