@@ -1,0 +1,19 @@
+name: Opportunity alerts
+
+# Every 10 minutes, asks the app to check the markets people follow and send
+# the opportunity alerts (Web Push). The endpoint runs at most every 4 minutes
+# and sends each alert once, so a late or repeated run is harmless.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  alerts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Run an alert round
+        run: curl -fsS --max-time 90 "https://grafictrader.vercel.app/api/instructor?alerts=1" || true

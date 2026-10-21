@@ -1,6 +1,8 @@
 import { $, api, escapeHtml, fmtTime } from '../lib/dom.js';
 import { Capacitor } from '@capacitor/core';
 import { sessionMode, setUser, currentUser } from '../lib/session.js';
+import { renderIcons } from '../lib/icons.js';
+import { pushSupported, currentSubscription, enableAlerts, disableAlerts } from '../lib/push.js';
 
 async function loadStatus() {
   const status = $('#mt5Status');
@@ -21,6 +23,84 @@ async function loadStatus() {
     status.textContent = error.status === 503 ? 'indisponível no servidor' : 'não ligado';
     list.innerHTML = '';
   }
+}
+
+/* ---------- opportunity alerts ---------- */
+
+const MARKET_LABEL = { BTCUSDT: 'BTC', ETHUSDT: 'ETH', SOLUSDT: 'SOL', BNBUSDT: 'BNB', XRPUSDT: 'XRP', EURUSD: 'EUR/USD', GBPUSD: 'GBP/USD', USDJPY: 'USD/JPY', XAUUSD: 'Ouro' };
+const INTERVAL_LABEL = { '15m': '15 min', '1h': '1 hora', '4h': '4 horas' };
+let alertsKey = null;
+
+function alertsChoice() {
+  const markets = [...document.querySelectorAll('#alertsMarkets input:checked')].map(i => i.value);
+  const interval = document.querySelector('#alertsInterval button.active')?.dataset.interval || '1h';
+  return { markets, interval };
+}
+
+async function loadAlerts() {
+  const status = $('#alertsStatus');
+  const hint = $('#alertsHint');
+  $('#alertsForm').hidden = true;
+  if (!pushSupported()) {
+    status.textContent = 'indisponível aqui';
+    hint.textContent = Capacitor.isNativePlatform()
+      ? 'Dentro da app Android os alertas ainda não funcionam. Abre grafictrader.vercel.app no Chrome do telemóvel, entra na tua conta e ativa-os aqui.'
+      : 'Este navegador não suporta alertas. No iPhone, primeiro adiciona o Grafictrader ao ecrã principal (Partilhar › Adicionar ao ecrã principal) e abre-o a partir daí.';
+    return;
+  }
+  try {
+    const data = await api('/api/auth?action=push-status');
+    alertsKey = data.publicKey;
+    const subscription = await currentSubscription();
+    const on = Boolean(subscription && data.devices.includes(subscription.endpoint));
+    $('#alertsMarkets').innerHTML = data.choices.markets.map(m => `<label class="chip"><input type="checkbox" value="${m}" ${data.markets.includes(m) ? 'checked' : ''}><span>${MARKET_LABEL[m] || m}</span></label>`).join('');
+    $('#alertsInterval').innerHTML = data.choices.intervals.map(i => `<button type="button" data-interval="${i}" class="${i === data.interval ? 'active' : ''}">${INTERVAL_LABEL[i] || i}</button>`).join('');
+    $('#alertsForm').hidden = !alertsKey;
+    $('#alertsOn').innerHTML = on ? 'Guardar escolhas' : '<i data-lucide="bell"></i>Ativar alertas neste dispositivo';
+    $('#alertsOff').hidden = !on;
+    renderIcons();
+    status.textContent = on ? 'ligados neste dispositivo' : 'desligados';
+    status.dataset.sign = on ? 'up' : '';
+    hint.textContent = alertsKey
+      ? 'Escolhe até 5 mercados e o tempo gráfico. A IA verifica a cada 10 minutos e avisa uma vez por oportunidade. É uma orientação educativa, não uma ordem: confirma sempre antes de operar.'
+      : 'Os alertas ainda não estão disponíveis no servidor.';
+  } catch (error) {
+    status.textContent = 'indisponível';
+    hint.textContent = error.message;
+  }
+}
+
+function initAlerts() {
+  $('#alertsInterval').addEventListener('click', event => {
+    const button = event.target.closest('button[data-interval]');
+    if (!button) return;
+    document.querySelectorAll('#alertsInterval button').forEach(b => b.classList.toggle('active', b === button));
+  });
+  $('#alertsMarkets').addEventListener('change', event => {
+    const checked = document.querySelectorAll('#alertsMarkets input:checked');
+    if (checked.length > 5) event.target.checked = false;
+  });
+  $('#alertsOn').onclick = async () => {
+    const choice = alertsChoice();
+    if (!choice.markets.length) return ($('#alertsHint').textContent = 'Escolhe pelo menos um mercado.');
+    $('#alertsOn').disabled = true;
+    try {
+      await enableAlerts({ ...choice, publicKey: alertsKey });
+      await loadAlerts();
+    } catch (error) {
+      $('#alertsHint').textContent = error.message;
+    } finally {
+      $('#alertsOn').disabled = false;
+    }
+  };
+  $('#alertsOff').onclick = async () => {
+    try {
+      await disableAlerts();
+    } catch (error) {
+      $('#alertsHint').textContent = error.message;
+    }
+    loadAlerts();
+  };
 }
 
 const signedOut = () => window.dispatchEvent(new CustomEvent('grafictrader:signed-out'));
@@ -96,6 +176,7 @@ function initAccount() {
 
 export function initProfile() {
   initAccount();
+  initAlerts();
   // Already inside the Android app: no need to offer the download.
   $('#apkCard').hidden = Capacitor.isNativePlatform();
   $('#mt5Generate').onclick = async () => {
@@ -133,4 +214,5 @@ export function activateProfile() {
   $('#mt5Url').textContent = location.origin + '/api/mt5';
   $('#mt5Copy').textContent = 'Copiar';
   loadStatus();
+  if (sessionMode() === 'server') loadAlerts();
 }

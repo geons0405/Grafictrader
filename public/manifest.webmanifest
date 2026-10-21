@@ -1,0 +1,10 @@
+{
+  "name": "Grafictrader",
+  "short_name": "Grafictrader",
+  "description": "Análise de gráficos por IA: orientação educativa, não é aconselhamento financeiro.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0e0e11",
+  "theme_color": "#0e0e11",
+  "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+}
