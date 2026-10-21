@@ -1,4 +1,5 @@
 import { getTwelveDataTicker, getTwelveDataSparkline, getTwelveDataCandles } from './twelvedata.js';
+import { getCcxtCandles } from './ccxt.js';
 
 const BINANCE_BASE = 'https://data-api.binance.vision/api/v3';
 
@@ -143,8 +144,9 @@ export async function getBinanceCandles(symbol = 'BTCUSDT', interval = '5m', lim
       volume: Number(row[5])
     }));
   } catch (error) {
-    console.warn(`[Binance] candles indisponíveis; a usar Twelve Data: ${error?.message || error}`);
-    return getTwelveDataCandles(symbol, interval, limit);
+    console.warn(`[Binance] candles indisponíveis; a usar outras exchanges: ${error?.message || error}`);
+    const backup = await getCcxtCandles(symbol, interval, limit, startTimeSec);
+    return backup.length ? backup : getTwelveDataCandles(symbol, interval, limit);
   }
 }
 
