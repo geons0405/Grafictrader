@@ -1,3 +1,4 @@
+import { track } from '../lib/analytics.js';
 import { $, api, escapeHtml, fmtPrice, pairLabel } from '../lib/dom.js';
 import { market } from '../lib/store.js';
 import { renderIcons } from '../lib/icons.js';
@@ -123,7 +124,9 @@ async function analyze(image) {
   try {
     const data = await api('/api/analyze', { method: 'POST', body: { image, symbol: market.symbol, interval: market.interval } });
     showPanel(renderResult(image, data));
+    track('photo_result', { decision: data.verdict?.decision, chart: Boolean(data.chartVisible), provider: data.provider, engine: Boolean(data.live) });
   } catch (error) {
+    track('analysis_failed', { mode: 'foto', status: error.status || 0, exhausted: Boolean(error.data?.exhausted) });
     const hint = error.status === 401 ? 'Inicia sessão novamente para usar a IA.'
       : error.status === 429 ? 'Atingiste o limite de análises. Aguarda uns minutos.'
       : error.status === 503 ? 'A IA não está configurada no servidor.'

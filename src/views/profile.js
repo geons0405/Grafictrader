@@ -2,6 +2,7 @@ import { $, api, escapeHtml, fmtTime } from '../lib/dom.js';
 import { Capacitor } from '@capacitor/core';
 import { sessionMode, setUser, currentUser } from '../lib/session.js';
 import { renderIcons } from '../lib/icons.js';
+import { track } from '../lib/analytics.js';
 import { pushSupported, currentSubscription, enableAlerts, disableAlerts } from '../lib/push.js';
 
 async function loadStatus() {
@@ -86,6 +87,7 @@ function initAlerts() {
     $('#alertsOn').disabled = true;
     try {
       await enableAlerts({ ...choice, publicKey: alertsKey });
+      track('alerts_enabled', { markets: choice.markets.length, interval: choice.interval });
       await loadAlerts();
     } catch (error) {
       $('#alertsHint').textContent = error.message;
