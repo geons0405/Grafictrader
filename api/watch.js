@@ -165,6 +165,7 @@ export default async function handler(req, res) {
       interval,
       price: reading.price,
       signal: { action: reading.signal.action, confidence: reading.signal.confidence, regimeLabel: reading.signal.regimeLabel },
+      patterns: reading.patterns || [],
       eventRisk: reading.context?.eventRisk || null
     }
   });

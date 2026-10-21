@@ -114,6 +114,7 @@ export default async function handler(req, res) {
       interval,
       price: reading.price,
       signal: { action: reading.signal.action, confidence: reading.signal.confidence, regimeLabel: reading.signal.regimeLabel, reasons: reading.signal.reasons },
+      patterns: reading.patterns || [],
       context: reading.context,
       quant: reading.snapshot && {
         hurst: reading.snapshot.hurst,

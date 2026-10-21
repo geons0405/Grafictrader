@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { getBinanceCandles, getBinanceAggTrades, getBinanceOrderBook } from '../sources/binance.js';
 import { redis, redisConfigured } from '../redis.js';
 import { closedCandles } from '../mechanics/pattern-library.js';
+import { lastCandlePatterns } from './patterns.js';
 import { quantSnapshot, decide, regimeLabel } from './signal.js';
 import { emptyState, advance, summarize, STATE_VERSION } from './instructor.js';
 import { buildContext, recentNews } from './context.js';
@@ -133,7 +134,8 @@ export function instructorView({ symbol, interval, mode, state, closed, livePric
   const now = decide(snapshot, context);
   const summary = summarize(state, livePrice);
   const plan = buildPlan(summary, now, snapshot, livePrice);
-  const guidance = explainPlain({ decision: now, snapshot, context, plan });
+  const patterns = lastCandlePatterns(closed);
+  const guidance = explainPlain({ decision: now, snapshot, context, plan, patterns });
   return {
     ok: true,
     symbol,
@@ -143,6 +145,7 @@ export function instructorView({ symbol, interval, mode, state, closed, livePric
     price: livePrice,
     summary,
     guidance,
+    patterns,
     plan,
     trades: state.trades.slice(-30),
     equity: thinEquity(state.equity),
@@ -189,6 +192,7 @@ export async function marketReading(symbol, interval, { withContext = true } = {
   const snapshot = quantSnapshot(closed);
   const signal = decide(snapshot, live.context);
   const price = raw.at(-1)?.close ?? null;
-  const guidance = explainPlain({ decision: signal, snapshot, context: live.context, plan: buildPlan(null, signal, snapshot, price) });
-  return { snapshot, signal: { ...signal, regimeLabel: regimeLabel(snapshot?.regime) }, context: live.context, price, guidance };
+  const patterns = lastCandlePatterns(closed);
+  const guidance = explainPlain({ decision: signal, snapshot, context: live.context, plan: buildPlan(null, signal, snapshot, price), patterns });
+  return { snapshot, signal: { ...signal, regimeLabel: regimeLabel(snapshot?.regime) }, context: live.context, price, guidance, patterns };
 }
