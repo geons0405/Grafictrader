@@ -418,6 +418,21 @@ async function openPip() {
   updatePip();
 }
 
+/**
+ * Whether there are live minutes left today. Says why not, instead of opening a bubble
+ * that the server would close a few seconds later. Unknown (offline, no account) lets it try.
+ */
+async function liveMinutesLeft() {
+  try {
+    const data = await api('/api/auth?action=live-status');
+    if (data.left === 0) {
+      setStatus(`Já usaste os ${data.limit} minutos de análise ao vivo de hoje${data.plan === 'free' ? ' (plano gratuito)' : ''}. Voltam amanhã; até lá podes usar o FOTO.`);
+      return false;
+    }
+  } catch { /* unknown: let the server decide */ }
+  return true;
+}
+
 /* ---------- wiring ---------- */
 
 function syncToggles() {
@@ -432,6 +447,7 @@ function initNative() {
   $('#watchShareHint').hidden = true;
   $('#watchNative').onclick = async () => {
     if (!(await confirmCapture('bubble'))) return;
+    if (!(await liveMinutesLeft())) return;
     try {
       await Native.startWatch({ serverUrl: location.origin, voice: prefs.voice });
       await begin(null, 'native');
@@ -471,6 +487,7 @@ export function initWatch() {
 
   $('#watchShare').onclick = async () => {
     if (!(await confirmCapture('screen'))) return;
+    if (!(await liveMinutesLeft())) return;
     try {
       // The Grafictrader tab itself is left out of the picker (Chrome): sharing it
       // made a mirror of the app inside the app, with no chart to read.
@@ -491,6 +508,7 @@ export function initWatch() {
   };
   $('#watchCamera').onclick = async () => {
     if (!(await confirmCapture('camera'))) return;
+    if (!(await liveMinutesLeft())) return;
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } }, audio: false });
       await begin(s, 'camera');
