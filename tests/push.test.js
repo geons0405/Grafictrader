@@ -20,7 +20,7 @@ globalThis.fetch = async (url, init = {}) => {
 process.env.KV_REST_API_URL = 'http://kv.test';
 process.env.KV_REST_API_TOKEN = 'x';
 
-const { vapidKeys, validSubscription, subscribe, unsubscribe, readPrefs, runAlerts, alertMessage } = await import('../api/_lib/push.js');
+const { vapidKeys, validSubscription, subscribe, unsubscribe, subscribeApp, unsubscribeApp, alertsFeed, readPrefs, runAlerts, alertMessage } = await import('../api/_lib/push.js');
 
 const device = n => ({ endpoint: `https://push.example/${n}`, keys: { p256dh: 'p'.repeat(80), auth: 'a'.repeat(20) } });
 
@@ -85,4 +85,26 @@ test('an account on pause gets no alerts', async () => {
   const sent = [];
   await runAlerts({ now: 6, read: async () => ({ signal: { direction: 1, confidence: 90 }, snapshot: { time: 4000 } }), send: async sub => sent.push(sub.endpoint) });
   assert.ok(!sent.includes(device(9).endpoint));
+});
+
+test('the Android app collects the alerts for its markets, without a browser subscription', async () => {
+  const prefs = await subscribeApp('leo@push.test', { markets: ['XAUUSD', 'EURUSD'], interval: '4h' });
+  assert.deepEqual(prefs.markets, ['XAUUSD', 'EURUSD']);
+  assert.equal((await readPrefs('leo@push.test')).app, true);
+  store.delete('grafictrader:alerts:lock');
+  const sent = [];
+  const read = async symbol => (symbol === 'XAUUSD' ? { signal: { direction: -1, confidence: 77 }, snapshot: { time: 5000 } } : { signal: { direction: 0 }, snapshot: { time: 5000 } });
+  await runAlerts({ now: 7000, read, send: async sub => sent.push(sub.endpoint) });
+  assert.equal(sent.length, 0, 'no browser to push to');
+
+  const feed = await alertsFeed('leo@push.test', 0);
+  assert.equal(feed.length, 1);
+  assert.equal(feed[0].title, 'Boa oportunidade de venda');
+  assert.match(feed[0].body, /Ouro \(XAU\/USD\) · 4 horas/);
+  assert.equal((await alertsFeed('leo@push.test', 7000)).length, 0, 'nothing newer than the last look');
+  assert.equal((await alertsFeed('rui@push.test', 0)).length, 0, 'browser-only accounts have no app feed');
+
+  await unsubscribeApp('leo@push.test');
+  assert.equal((await alertsFeed('leo@push.test', 0)).length, 0);
+  assert.equal(store.has('grafictrader:push:leo@push.test'), false, 'nothing left to keep');
 });

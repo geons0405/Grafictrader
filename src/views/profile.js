@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { sessionMode, setUser, currentUser } from '../lib/session.js';
 import { renderIcons } from '../lib/icons.js';
 import { track } from '../lib/analytics.js';
-import { pushSupported, currentSubscription, enableAlerts, disableAlerts } from '../lib/push.js';
+import { pushSupported, currentSubscription, enableAlerts, disableAlerts, appAlerts, appAlertsStatus, enableAppAlerts, disableAppAlerts } from '../lib/push.js';
 
 async function loadStatus() {
   const status = $('#mt5Status');
@@ -42,18 +42,25 @@ async function loadAlerts() {
   const status = $('#alertsStatus');
   const hint = $('#alertsHint');
   $('#alertsForm').hidden = true;
-  if (!pushSupported()) {
+  if (!pushSupported() && !appAlerts()) {
     status.textContent = 'indisponível aqui';
-    hint.textContent = Capacitor.isNativePlatform()
-      ? 'Dentro da app Android os alertas ainda não funcionam. Abre grafictrader.vercel.app no Chrome do telemóvel, entra na tua conta e ativa-os aqui.'
-      : 'Este navegador não suporta alertas. No iPhone, primeiro adiciona o Grafictrader ao ecrã principal (Partilhar › Adicionar ao ecrã principal) e abre-o a partir daí.';
+    hint.textContent = 'Este navegador não suporta alertas. No iPhone, primeiro adiciona o Grafictrader ao ecrã principal (Partilhar › Adicionar ao ecrã principal) e abre-o a partir daí.';
     return;
   }
   try {
     const data = await api('/api/auth?action=push-status');
-    alertsKey = data.publicKey;
-    const subscription = await currentSubscription();
-    const on = Boolean(subscription && data.devices.includes(subscription.endpoint));
+    // The Android app needs no push key: it collects its alerts itself.
+    alertsKey = appAlerts() ? 'app' : data.publicKey;
+    let on;
+    let blocked = false;
+    if (appAlerts()) {
+      const native = await appAlertsStatus();
+      on = Boolean(native.on && data.app);
+      blocked = on && !native.notifications;
+    } else {
+      const subscription = await currentSubscription();
+      on = Boolean(subscription && data.devices.includes(subscription.endpoint));
+    }
     $('#alertsMarkets').innerHTML = data.choices.markets.map(m => `<label class="chip"><input type="checkbox" value="${m}" ${data.markets.includes(m) ? 'checked' : ''}><span>${MARKET_LABEL[m] || m}</span></label>`).join('');
     $('#alertsInterval').innerHTML = data.choices.intervals.map(i => `<button type="button" data-interval="${i}" class="${i === data.interval ? 'active' : ''}">${INTERVAL_LABEL[i] || i}</button>`).join('');
     $('#alertsForm').hidden = !alertsKey;
@@ -62,9 +69,13 @@ async function loadAlerts() {
     renderIcons();
     status.textContent = on ? 'ligados neste dispositivo' : 'desligados';
     status.dataset.sign = on ? 'up' : '';
-    hint.textContent = alertsKey
-      ? 'Escolhe até 5 mercados e o tempo gráfico. A IA verifica a cada 10 minutos e avisa uma vez por oportunidade. É uma orientação educativa, não uma ordem: confirma sempre antes de operar.'
-      : 'Os alertas ainda não estão disponíveis no servidor.';
+    hint.textContent = blocked
+      ? 'O Android está a bloquear as notificações do Grafictrader. Ativa-as em Definições › Apps › Grafictrader › Notificações.'
+      : !alertsKey
+        ? 'Os alertas ainda não estão disponíveis no servidor.'
+        : appAlerts()
+          ? 'Escolhe até 5 mercados e o tempo gráfico. A app confirma a cada 15 minutos, mesmo fechada, e avisa uma vez por oportunidade. É uma orientação educativa, não uma ordem: confirma sempre antes de operar.'
+          : 'Escolhe até 5 mercados e o tempo gráfico. A IA verifica a cada 10 minutos e avisa uma vez por oportunidade. É uma orientação educativa, não uma ordem: confirma sempre antes de operar.';
   } catch (error) {
     status.textContent = 'indisponível';
     hint.textContent = error.message;
@@ -86,7 +97,8 @@ function initAlerts() {
     if (!choice.markets.length) return ($('#alertsHint').textContent = 'Escolhe pelo menos um mercado.');
     $('#alertsOn').disabled = true;
     try {
-      await enableAlerts({ ...choice, publicKey: alertsKey });
+      if (appAlerts()) await enableAppAlerts(choice);
+      else await enableAlerts({ ...choice, publicKey: alertsKey });
       track('alerts_enabled', { markets: choice.markets.length, interval: choice.interval });
       await loadAlerts();
     } catch (error) {
@@ -97,7 +109,8 @@ function initAlerts() {
   };
   $('#alertsOff').onclick = async () => {
     try {
-      await disableAlerts();
+      if (appAlerts()) await disableAppAlerts();
+      else await disableAlerts();
     } catch (error) {
       $('#alertsHint').textContent = error.message;
     }

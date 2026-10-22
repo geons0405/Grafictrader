@@ -3,7 +3,8 @@ import { $, $$, api, escapeHtml, fmtTime } from '../lib/dom.js';
 import { renderIcons } from '../lib/icons.js';
 import { confirmCapture } from '../lib/consent.js';
 import { frameSignature, frameDiff, shouldSend, createStabilizer } from '../lib/watch-core.js';
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
+import { Native } from '../lib/native.js';
 
 // "Minha corretora": the AI watches the user's own broker (shared screen on a
 // computer, camera on a phone, or a recorded video) and keeps its advice up
@@ -20,7 +21,6 @@ const CHANCE = { COMPRAR: 'uma oportunidade de compra', VENDER: 'uma oportunidad
 const SHORT = { COMPRAR: 'COMPRA', VENDER: 'VENDA', AGUARDAR: 'NÃO OPERAR' };
 const SIDE = { COMPRAR: 'up', VENDER: 'down', AGUARDAR: '' };
 // Android app: native screen capture of the broker app with a floating bubble.
-const Native = Capacitor.isNativePlatform() ? registerPlugin('GrafictraderNative') : null;
 
 let stream = null;
 let kind = null; // 'screen' | 'camera' | 'file' | 'native'

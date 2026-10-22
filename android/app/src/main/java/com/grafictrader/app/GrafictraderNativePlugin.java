@@ -138,6 +138,34 @@ public class GrafictraderNativePlugin extends Plugin {
         call.resolve();
     }
 
+    /** Opportunity alerts collected by the app itself (the WebView has no Web Push). */
+    @PluginMethod
+    public void enableAlerts(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(getActivity(), new String[] {Manifest.permission.POST_NOTIFICATIONS}, 42);
+        }
+        // The worker reads the session cookie from storage: write it out now.
+        android.webkit.CookieManager.getInstance().flush();
+        AlertsWorker.schedule(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void disableAlerts(PluginCall call) {
+        AlertsWorker.cancel(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void alertsStatus(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("on", AlertsWorker.isOn(getContext()));
+        result.put("notifications", Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || ContextCompat.checkSelfPermission(getContext(), Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED);
+        call.resolve(result);
+    }
+
     @PluginMethod
     public void stopWatch(PluginCall call) {
         if (WatchService.isRunning()) {

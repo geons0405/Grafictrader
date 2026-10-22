@@ -1,8 +1,36 @@
 import { api } from './dom.js';
 import { Capacitor } from '@capacitor/core';
+import { Native } from './native.js';
 
 // Opportunity alerts through the browser's Web Push. The Android app's WebView has no
-// Web Push, so there the alerts are turned on from Chrome instead.
+// Web Push: there the app itself checks the server every 15 minutes (AlertsWorker).
+
+/** True inside the Android app, where alerts are collected by the app. */
+export const appAlerts = () => Boolean(Native);
+
+/** Whether this app's alert checks are on, and whether Android lets it notify. */
+export async function appAlertsStatus() {
+  try {
+    return await Native.alertsStatus();
+  } catch {
+    return { on: false, notifications: true }; // an older app without alerts
+  }
+}
+
+export async function enableAppAlerts({ markets, interval }) {
+  const result = await api('/api/auth?action=push-app', { method: 'POST', body: { markets, interval } });
+  try {
+    await Native.enableAlerts();
+  } catch {
+    throw new Error('Esta versão da app ainda não tem alertas. Instala a versão mais recente do APK.');
+  }
+  return result;
+}
+
+export async function disableAppAlerts() {
+  await api('/api/auth?action=push-app-off', { method: 'POST', body: {} });
+  await Native.disableAlerts().catch(() => {});
+}
 
 export const pushSupported = () => !Capacitor.isNativePlatform()
   && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
