@@ -1,30 +1,19 @@
 import YahooFinance from 'yahoo-finance2';
+import { FOREX_MARKETS } from '../markets.js';
 
 // Real forex and gold candles from Yahoo Finance (github.com/gadicc/node-yahoo-finance2, MIT).
 // Not an official API: Yahoo can change it, so callers treat an empty list as "no data".
 
 /** Markets read from Yahoo: our id → Yahoo symbol. */
-export const YAHOO_MARKETS = {
-  EURUSD: 'EURUSD=X',
-  GBPUSD: 'GBPUSD=X',
-  USDJPY: 'USDJPY=X',
-  AUDUSD: 'AUDUSD=X',
-  USDCAD: 'USDCAD=X',
-  USDCHF: 'USDCHF=X',
-  NZDUSD: 'NZDUSD=X',
-  EURJPY: 'EURJPY=X',
-  GBPJPY: 'GBPJPY=X',
-  EURGBP: 'EURGBP=X',
-  XAUUSD: 'GC=F'
-};
+export const YAHOO_MARKETS = FOREX_MARKETS;
 
 export const isYahooMarket = symbol => Object.hasOwn(YAHOO_MARKETS, symbol);
 
-// Yahoo intervals; 4h is built from 1h candles.
-const YAHOO_INTERVAL = { '1m': '1m', '5m': '5m', '15m': '15m', '1h': '60m', '4h': '60m' };
-const SECONDS = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400 };
-// How far back Yahoo serves each intraday interval.
-const MAX_DAYS = { '1m': 7, '5m': 59, '15m': 59, '1h': 700, '4h': 700 };
+// Yahoo intervals; 4h is built from 1h candles. 1d and 1w are read by the council.
+const YAHOO_INTERVAL = { '1m': '1m', '5m': '5m', '15m': '15m', '1h': '60m', '4h': '60m', '1d': '1d', '1w': '1wk' };
+const SECONDS = { '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400, '1w': 604800 };
+// How far back Yahoo serves each interval.
+const MAX_DAYS = { '1m': 7, '5m': 59, '15m': 59, '1h': 700, '4h': 700, '1d': 20000, '1w': 20000 };
 
 let client = null;
 
@@ -62,4 +51,23 @@ export async function getYahooCandles(symbol, interval = '5m', limit = 120, star
     console.warn(`[Yahoo] ${ticker} ${interval}: ${error?.message || error}`);
     return [];
   }
+}
+
+/** 24h figures for a forex pair or gold, from its last day of hourly candles (Yahoo's chart has no ticker). */
+export async function getYahooTicker(symbol) {
+  const hours = await getYahooCandles(symbol, '1h', 30);
+  if (!hours.length) return null;
+  const now = hours.at(-1);
+  const day = hours.filter(c => c.time > now.time - 86_400);
+  const open = day[0]?.open ?? now.open;
+  return {
+    symbol,
+    source: 'Yahoo Finance',
+    price: now.close,
+    change24h: open ? ((now.close - open) / open) * 100 : 0,
+    volume24h: 0,
+    high24h: Math.max(...day.map(c => c.high)),
+    low24h: Math.min(...day.map(c => c.low)),
+    timestamp: Date.now()
+  };
 }

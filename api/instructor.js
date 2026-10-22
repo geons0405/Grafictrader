@@ -6,9 +6,12 @@ import { requireUserIfConfigured } from './_lib/auth.js';
 import { signalsHandler } from './_lib/signals-route.js';
 import { cronHandler } from './_lib/cron.js';
 import { runAlerts } from './_lib/push.js';
+import { MAIN_FOREX } from './_lib/markets.js';
+
+const DESK = [...SYMBOLS, ...MAIN_FOREX];
 
 // GET /api/instructor?symbol=BTCUSDT&interval=5m  → full instructor view
-// GET /api/instructor?desk=1&interval=5m          → one summary per asset
+// GET /api/instructor?desk=1&interval=5m          → one summary per asset (crypto, main forex pairs, gold)
 // GET /api/instructor?council=1&symbol=…&interval=… → 7 analysts + AI judge verdict
 // GET /api/instructor?signals=1                  → real track record of the signals shown
 // GET /api/instructor?cron=1                     → daily job (CRON_SECRET)
@@ -54,16 +57,16 @@ export default async function handler(req, res) {
     if (!market) return res.status(400).json({ ok: false, error: 'Parâmetros inválidos.' });
     const limit = await rateLimit('desk', clientIp(req), { limit: 60, windowSeconds: 600 });
     if (!limit.allowed) return sendRateLimited(res, limit);
-    const settled = await Promise.allSettled(SYMBOLS.map(symbol => runInstructor(symbol, market.interval)));
+    const settled = await Promise.allSettled(DESK.map(symbol => runInstructor(symbol, market.interval)));
     const desk = settled.map((result, i) => result.status === 'fulfilled'
       ? {
-          symbol: SYMBOLS[i],
+          symbol: DESK[i],
           ok: true,
           price: result.value.price,
           summary: result.value.summary,
           signal: { action: result.value.signal.action, confidence: result.value.signal.confidence, regimeLabel: result.value.signal.regimeLabel }
         }
-      : { symbol: SYMBOLS[i], ok: false, error: result.reason?.message || 'Indisponível' });
+      : { symbol: DESK[i], ok: false, error: result.reason?.message || 'Indisponível' });
     res.setHeader('Cache-Control', 's-maxage=20, stale-while-revalidate=40');
     return res.status(200).json({ ok: true, interval: market.interval, updatedAt: new Date().toISOString(), desk });
   }

@@ -1,4 +1,5 @@
-import { getBinanceCandles } from '../sources/binance.js';
+import { getCandles } from '../sources/candles.js';
+import { isForexMarket } from '../markets.js';
 import { getFearGreed } from '../sources/feargreed.js';
 import { getRssNews, getYahooNews } from '../sources/news-feeds.js';
 import { getMarketauxEvents } from '../sources/marketaux.js';
@@ -44,13 +45,14 @@ async function computeCouncil(symbol, interval) {
   const [mid, high] = HIGHER[interval] || ['1h', '4h'];
   const [view, midRaw, highRaw, news, fearGreed, engine] = await Promise.all([
     runInstructor(symbol, interval),
-    getBinanceCandles(symbol, mid, 200).catch(() => []),
-    getBinanceCandles(symbol, high, 200).catch(() => []),
+    getCandles(symbol, mid, 200).catch(() => []),
+    getCandles(symbol, high, 200).catch(() => []),
     newsFor(symbol).catch(() => []),
-    cachedFearGreed().catch(() => null),
+    // The Fear & Greed index measures the crypto crowd: it says nothing about currencies or gold.
+    isForexMarket(symbol) ? null : cachedFearGreed().catch(() => null),
     runEngine(symbol, interval).catch(() => null)
   ]);
-  const base = closedCandles(rows(await getBinanceCandles(symbol, interval, 300)), interval);
+  const base = closedCandles(rows(await getCandles(symbol, interval, 300)), interval);
   const analysts = [
     structureAnalyst(engine),
     algorithmAnalyst(view.signal, view.summary),

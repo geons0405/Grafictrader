@@ -1,3 +1,4 @@
+import { isForexMarket, forexNewsQuery } from '../markets.js';
 import { headlineSentiment } from './headline-sentiment.js';
 const GDELT_BASE = 'https://api.gdeltproject.org/api/v2/doc/doc';
 
@@ -40,7 +41,7 @@ export async function getGdeltEvents(symbol = 'BTCUSDT') {
     ADAUSDT: '(cardano OR ADA OR cryptocurrency)',
     DOGEUSDT: '(dogecoin OR DOGE OR cryptocurrency)'
   };
-  const query = queryMap[symbol] || '(bitcoin OR cryptocurrency)';
+  const query = queryMap[symbol] || (isForexMarket(symbol) ? forexNewsQuery(symbol) : '(bitcoin OR cryptocurrency)');
   const url = GDELT_BASE + '?' + new URLSearchParams({
     query,
     mode: 'artlist',

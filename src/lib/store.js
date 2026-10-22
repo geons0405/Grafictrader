@@ -8,6 +8,22 @@ export const ASSETS = [
   { symbol: 'DOGEUSDT', short: 'DOGE', name: 'Dogecoin' }
 ];
 
+// Forex pairs and gold the AI reads from Yahoo Finance (same ids as the server's markets.js).
+export const FOREX_ASSETS = [
+  { symbol: 'EURUSD', short: 'EUR/USD', name: 'Euro / Dólar' },
+  { symbol: 'GBPUSD', short: 'GBP/USD', name: 'Libra / Dólar' },
+  { symbol: 'USDJPY', short: 'USD/JPY', name: 'Dólar / Iene' },
+  { symbol: 'XAUUSD', short: 'OURO', name: 'Ouro (XAU/USD)' },
+  { symbol: 'AUDUSD', short: 'AUD/USD', name: 'Dólar australiano / Dólar' },
+  { symbol: 'USDCAD', short: 'USD/CAD', name: 'Dólar / Dólar canadiano' },
+  { symbol: 'USDCHF', short: 'USD/CHF', name: 'Dólar / Franco suíço' },
+  { symbol: 'NZDUSD', short: 'NZD/USD', name: 'Dólar neozelandês / Dólar' },
+  { symbol: 'EURJPY', short: 'EUR/JPY', name: 'Euro / Iene' },
+  { symbol: 'GBPJPY', short: 'GBP/JPY', name: 'Libra / Iene' },
+  { symbol: 'EURGBP', short: 'EUR/GBP', name: 'Euro / Libra' }
+];
+export const isForexSymbol = symbol => FOREX_ASSETS.some(a => a.symbol === symbol);
+
 export const INTERVALS = [
   { value: '1m', label: '1m', name: '1 minuto' },
   { value: '5m', label: '5m', name: '5 minutos' },
@@ -40,7 +56,7 @@ export const TV_SYMBOLS = [
 ];
 
 const listeners = new Set();
-// source: where the chart comes from — 'binance', 'tradingview' or 'mt5'.
+// source: where the chart comes from — 'binance' (our live data: Binance crypto, Yahoo forex and gold), 'tradingview' or 'mt5'.
 export const market = { source: 'binance', symbol: 'BTCUSDT', tvSymbol: 'BINANCE:BTCUSDT', mt5Symbol: null, interval: '5m' };
 
 export function setMarket(next) {

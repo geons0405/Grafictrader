@@ -1,10 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import { getBinanceCandles, getBinanceAggTrades, getBinanceOrderBook } from '../sources/binance.js';
+import { getBinanceAggTrades, getBinanceOrderBook } from '../sources/binance.js';
 import { redis, redisConfigured } from '../redis.js';
 import { closedCandles } from '../mechanics/pattern-library.js';
 import { lastCandlePatterns } from './patterns.js';
 import { getCandles } from '../sources/candles.js';
-import { isYahooMarket } from '../sources/yahoo.js';
+import { isForexMarket } from '../markets.js';
 import { quantSnapshot, decide, regimeLabel } from './signal.js';
 import { emptyState, advance, summarize, STATE_VERSION } from './instructor.js';
 import { buildContext, recentNews } from './context.js';
@@ -32,15 +32,20 @@ function normalize(candles) {
     .filter(c => [c.time, c.open, c.high, c.low, c.close].every(Number.isFinite));
 }
 
-/** Live market context for one symbol: aggressor flow, book depth and news tone. */
+/**
+ * Live market context for one symbol: aggressor flow, book depth and news tone.
+ * Forex and gold have no public trades or order book (each broker has its own),
+ * so there only the news, the economic calendar and the world markets count.
+ */
 export async function liveContext(symbol) {
+  const forex = isForexMarket(symbol);
   const [trades, orderBook, news, macro] = await Promise.all([
-    getBinanceAggTrades(symbol, 500),
-    getBinanceOrderBook(symbol, 100),
-    recentNews().catch(() => []),
+    forex ? [] : getBinanceAggTrades(symbol, 500),
+    forex ? null : getBinanceOrderBook(symbol, 100),
+    recentNews(symbol).catch(() => []),
     macroContext(symbol)
   ]);
-  return { context: { ...buildContext({ trades, orderBook, news }), ...macro }, orderBook };
+  return { context: { ...buildContext({ trades, orderBook: orderBook || {}, news }), ...macro }, orderBook };
 }
 
 const CACHE_MS = 8000;
@@ -66,7 +71,7 @@ export function runInstructor(symbol, interval) {
 
 async function computeInstructor(symbol, interval) {
   const [raw, live] = await Promise.all([
-    getBinanceCandles(symbol, interval, HISTORY),
+    getCandles(symbol, interval, HISTORY),
     liveContext(symbol)
   ]);
   const candles = normalize(raw);
@@ -137,7 +142,7 @@ export function instructorView({ symbol, interval, mode, state, closed, livePric
   const summary = summarize(state, livePrice);
   const plan = buildPlan(summary, now, snapshot, livePrice);
   const patterns = lastCandlePatterns(closed);
-  const guidance = explainPlain({ decision: now, snapshot, context, plan, patterns });
+  const guidance = explainPlain({ decision: now, snapshot, context, plan, patterns, symbol });
   return {
     ok: true,
     symbol,
@@ -188,14 +193,13 @@ export async function instructorFromCandles(symbol, interval, candles, livePrice
 export async function marketReading(symbol, interval, { withContext = true } = {}) {
   const [raw, live] = await Promise.all([
     getCandles(symbol, interval, 300),
-    // Order flow and the order book come from Binance: crypto only.
-    withContext && !isYahooMarket(symbol) ? liveContext(symbol) : Promise.resolve({ context: {} })
+    withContext ? liveContext(symbol) : Promise.resolve({ context: {} })
   ]);
   const closed = closedCandles(normalize(raw), interval);
   const snapshot = quantSnapshot(closed);
   const signal = decide(snapshot, live.context);
   const price = raw.at(-1)?.close ?? null;
   const patterns = lastCandlePatterns(closed);
-  const guidance = explainPlain({ decision: signal, snapshot, context: live.context, plan: buildPlan(null, signal, snapshot, price), patterns });
-  return { snapshot, signal: { ...signal, regimeLabel: regimeLabel(snapshot?.regime) }, context: live.context, price, guidance, patterns };
+  const guidance = explainPlain({ decision: signal, snapshot, context: live.context, plan: buildPlan(null, signal, snapshot, price), patterns, symbol });
+  return { symbol, snapshot, signal: { ...signal, regimeLabel: regimeLabel(snapshot?.regime) }, context: live.context, price, guidance, patterns };
 }

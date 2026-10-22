@@ -1,4 +1,6 @@
-import { getBinanceCandles, getBinanceAggTrades, getBinanceOrderBook } from '../sources/binance.js';
+import { getBinanceAggTrades, getBinanceOrderBook } from '../sources/binance.js';
+import { getCandles } from '../sources/candles.js';
+import { isForexMarket } from '../markets.js';
 import { analyzeMarketMechanics } from './index.js';
 import { buildMechanicsMemory } from './memory.js';
 import { loadPatternLibrary, rememberPatternFamily, HORIZONS } from './pattern-library.js';
@@ -12,10 +14,12 @@ const MEMORY_CANDLES = 240;
  * and /api/mechanics-ai so the AI never interprets client-supplied numbers.
  */
 export async function buildMechanicsSnapshot(symbol, interval, { persist = false } = {}) {
+  // Forex and gold: candles only (no public trades or order book).
+  const forex = isForexMarket(symbol);
   const [history, trades, orderBook] = await Promise.all([
-    getBinanceCandles(symbol, interval, MEMORY_CANDLES),
-    getBinanceAggTrades(symbol, 500),
-    getBinanceOrderBook(symbol, 100)
+    getCandles(symbol, interval, MEMORY_CANDLES),
+    forex ? [] : getBinanceAggTrades(symbol, 500),
+    forex ? { bids: [], asks: [] } : getBinanceOrderBook(symbol, 100)
   ]);
 
   if (!Array.isArray(history) || history.length < 2) {

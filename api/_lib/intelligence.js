@@ -1,3 +1,4 @@
+import { isForexMarket } from './markets.js';
 import { getBinanceMarketEvents } from './sources/binance.js';
 import { getGdeltEvents } from './sources/gdelt.js';
 import { getMarketauxEvents } from './sources/marketaux.js';
@@ -7,7 +8,8 @@ import { apiKey } from './env.js';
 
 export async function getAllIntelligence(symbol = 'BTCUSDT') {
   const tasks = [
-    ['Binance', () => getBinanceMarketEvents(symbol)],
+    // Binance only lists crypto: forex and gold go straight to the news sources.
+    ...(isForexMarket(symbol) ? [] : [['Binance', () => getBinanceMarketEvents(symbol)]]),
     ['GDELT', () => getGdeltEvents(symbol)],
     ['Marketaux', () => getMarketauxEvents(symbol)],
     ['Finnhub', () => getFinnhubEvents(symbol)],

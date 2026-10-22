@@ -1,6 +1,6 @@
 import { createChart, LineSeries } from 'lightweight-charts';
 import { $, $$, api, escapeHtml, safeUrl, fmtPrice, fmtPct, fmtTime, pairLabel } from '../lib/dom.js';
-import { market, setMarket, onMarketChange, intervalName, ASSETS } from '../lib/store.js';
+import { market, setMarket, onMarketChange, intervalName, ASSETS, FOREX_ASSETS } from '../lib/store.js';
 import { chartOptions, onThemeChange, resolvedTheme, chartPalette } from '../lib/theme.js';
 import { renderIcons } from '../lib/icons.js';
 import { openSheet, closeSheet } from './sheet.js';
@@ -13,7 +13,7 @@ const GLOBAL_MS = 60000;
 const AI_MIN_INTERVAL_MS = 120000;
 
 // Muted per-asset hues, used only on the bot cards (as in the reference terminal).
-const BOT_HUES = { BTCUSDT: '#c27c3a', ETHUSDT: '#6f73c9', SOLUSDT: '#3c9c88', BNBUSDT: '#b8962e', XRPUSDT: '#5f6b7a', ADAUSDT: '#4a72b0', DOGEUSDT: '#a8844f' };
+const BOT_HUES = { BTCUSDT: '#c27c3a', ETHUSDT: '#6f73c9', SOLUSDT: '#3c9c88', BNBUSDT: '#b8962e', XRPUSDT: '#5f6b7a', ADAUSDT: '#4a72b0', DOGEUSDT: '#a8844f', EURUSD: '#3f7fbf', GBPUSD: '#8a5cb0', USDJPY: '#b0504f', XAUUSD: '#c9a227' };
 
 const MECH_METRICS = [
   ['priceEfficiency', 'Eficiência do preço'],
@@ -217,12 +217,12 @@ function eventRow(risk) {
   return '';
 }
 
-function renderBook(book, price) {
+function renderBook(book, price, symbol) {
   const asks = (book?.asks || []).slice(0, 6).reverse();
   const bids = (book?.bids || []).slice(0, 6);
   const max = Math.max(...asks.map(r => r.quantity), ...bids.map(r => r.quantity), 1e-9);
-  const row = (r, side) => `<div class="b-row" data-side="${side}"><span>${fmtPrice(r.price)}</span><span class="b-bar"><i style="--w:${(r.quantity / max) * 100}%"></i></span><span>${r.quantity.toFixed(3)}</span></div>`;
-  $('#tBook').innerHTML = asks.map(r => row(r, 'ask')).join('') + `<div class="b-mid">${fmtPrice(price)}</div>` + bids.map(r => row(r, 'bid')).join('');
+  const row = (r, side) => `<div class="b-row" data-side="${side}"><span>${fmtPrice(r.price, symbol)}</span><span class="b-bar"><i style="--w:${(r.quantity / max) * 100}%"></i></span><span>${r.quantity.toFixed(3)}</span></div>`;
+  $('#tBook').innerHTML = asks.map(r => row(r, 'ask')).join('') + `<div class="b-mid">${fmtPrice(price, symbol)}</div>` + bids.map(r => row(r, 'bid')).join('');
   const bestBid = bids[0]?.price;
   const bestAsk = book?.asks?.[0]?.price;
   $('#tSpread').textContent = bestBid && bestAsk ? 'spread ' + (((bestAsk - bestBid) / ((bestAsk + bestBid) / 2)) * 10000).toFixed(2) + ' bps' : 'spread —';
@@ -255,7 +255,7 @@ function renderTerminal(data) {
   if (s.open) {
     pos.textContent = s.open.side === 'BUY' ? 'COMPRA' : 'VENDA';
     pos.dataset.sign = s.open.side === 'BUY' ? 'up' : 'down';
-    $('#tPositionSub').textContent = `@ ${fmtPrice(s.open.entry)} · ${s.open.unrealizedR >= 0 ? '+' : ''}${s.open.unrealizedR}R`;
+    $('#tPositionSub').textContent = `@ ${fmtPrice(s.open.entry, data.symbol)} · ${s.open.unrealizedR >= 0 ? '+' : ''}${s.open.unrealizedR}R`;
   } else {
     pos.textContent = 'SEM POSIÇÃO';
     pos.dataset.sign = '';
@@ -275,7 +275,9 @@ function renderTerminal(data) {
 
   renderLog(data.log);
   $('#tBookTitle').textContent = '// ORDER BOOK · ' + pairLabel(data.symbol);
-  renderBook(data.orderBook, data.price);
+  renderBook(data.orderBook, data.price, data.symbol);
+  // Forex and gold trade across many brokers: there is no single public order book.
+  if (!data.orderBook) $('#tBook').innerHTML = `<div class="b-mid">${fmtPrice(data.price, data.symbol)}</div><p class="term-note">Forex e ouro não têm um livro de ordens público: cada corretora tem o seu.</p>`;
   $('#tRegime').textContent = data.signal?.regimeLabel || '—';
   renderQuant(data.quant);
   renderContext(data.context, data.signal);
@@ -300,7 +302,7 @@ async function loadDesk() {
     try {
       const { desk = [] } = await api(`/api/instructor?desk=1&interval=${market.interval}`);
       $('#tBots').innerHTML = desk.map((bot, i) => {
-        const asset = ASSETS.find(a => a.symbol === bot.symbol);
+        const asset = [...ASSETS, ...FOREX_ASSETS].find(a => a.symbol === bot.symbol);
         const open = bot.summary?.open;
         const icon = open ? (open.side === 'BUY' ? 'trending-up' : 'trending-down') : 'pause';
         const state = !bot.ok ? 'offline' : open ? (open.side === 'BUY' ? 'compra' : 'venda') : 'a observar';

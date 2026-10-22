@@ -105,7 +105,7 @@ function renderResult(image, data) {
       ${vis.risks.length ? `<div class="analysis-item"><small>Riscos</small><ul class="reasons">${list(vis.risks)}</ul></div>` : ''}
       ${live ? `
       <div class="analysis-item">
-        <small>Motor ao vivo · ${escapeHtml(pairLabel(live.symbol))} ${escapeHtml(live.interval)} · ${fmtPrice(live.price)}</small>
+        <small>Motor ao vivo · ${escapeHtml(pairLabel(live.symbol))} ${escapeHtml(live.interval)} · ${fmtPrice(live.price, live.symbol)}</small>
         <p>${escapeHtml(live.signal.action)} · ${escapeHtml(live.signal.regimeLabel)}${live.context ? ' · contexto ' + Math.round((live.context.score || 0) * 100) + '%' : ''}</p>
         ${quant ? `<div class="quant-chips"><span>Hurst ${f2(quant.hurst)}</span><span>VR ${f2(quant.varianceRatio)}</span><span>Kalman z ${f2(quant.kalmanZ)}</span><span>Entropia ${f2(quant.entropy)}</span><span>VPIN ${f2(quant.vpin)}</span></div>` : ''}
       </div>` : ''}
