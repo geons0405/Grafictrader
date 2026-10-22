@@ -39,6 +39,7 @@ export function createStabilizer({ confirmations = 2 } = {}) {
   let shown = null;
   let pending = null;
   let count = 0;
+  let skipped = false;
   let lastContext = null;
   return {
     /**
@@ -55,6 +56,7 @@ export function createStabilizer({ confirmations = 2 } = {}) {
         shown = null;
         pending = null;
         count = 0;
+        skipped = false;
         contextChanged = true;
       }
       if (context) lastContext = context;
@@ -70,8 +72,15 @@ export function createStabilizer({ confirmations = 2 } = {}) {
         return { shown, changed: true, pending, contextChanged };
       }
       if (decision === shown) {
+        // One cautious reading in the middle of a confirmation does not cancel it:
+        // the AI often hesitates for a frame while the opportunity is still there.
+        if (decision === 'AGUARDAR' && pending && !skipped) {
+          skipped = true;
+          return { shown, changed: false, pending };
+        }
         pending = null;
         count = 0;
+        skipped = false;
         return { shown, changed: false, pending: null };
       }
       if (decision === 'AGUARDAR') {
@@ -81,11 +90,12 @@ export function createStabilizer({ confirmations = 2 } = {}) {
         return { shown, changed: true, pending: null };
       }
       if (pending === decision) count += 1;
-      else { pending = decision; count = 1; }
+      else { pending = decision; count = 1; skipped = false; }
       if (count >= needed) {
         shown = decision;
         pending = null;
         count = 0;
+        skipped = false;
         return { shown, changed: true, pending: null };
       }
       return { shown, changed: false, pending };
@@ -93,6 +103,7 @@ export function createStabilizer({ confirmations = 2 } = {}) {
     reset() {
       shown = null;
       pending = null;
+      skipped = false;
       count = 0;
       lastContext = null;
     },
