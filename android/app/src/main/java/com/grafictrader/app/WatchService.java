@@ -75,7 +75,7 @@ public class WatchService extends Service {
     private static final int NOTIFICATION_ID = 41;
     private static final int MAX_SIDE = 1280;
     private static final long TICK_MS = 1000;
-    private static final long MIN_GAP_MS = 8000;
+    private static final long MIN_GAP_MS = 6000;
     private static final long SLOW_GAP_MS = 20000;
     private static final long MAX_GAP_MS = 45000;
     private static final long SESSION_LIMIT_MS = 45 * 60 * 1000;
@@ -176,6 +176,7 @@ public class WatchService extends Service {
         running = true;
         remember(true, null);
         startedAt = System.currentTimeMillis();
+        lastManageAction = null;
         projection.registerCallback(new MediaProjection.Callback() {
             @Override
             public void onStop() {
@@ -451,7 +452,7 @@ public class WatchService extends Service {
             return;
         }
         ByteArrayOutputStream jpeg = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, jpeg);
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 72, jpeg);
         // Fingerprint of the frame actually sent (bubble-free) for the next change check.
         lastSig = signature(bitmap);
         bitmap.recycle();
@@ -567,15 +568,20 @@ public class WatchService extends Service {
         // The server names the market in one stable spelling; null when asset or timeframe is missing.
         String context = chartVisible && !data.isNull("market") ? data.optString("market", "") : "";
         if (context.isEmpty()) context = null;
-        Stabilizer.Step step = stabilizer.push(decision, chartVisible, context);
+        // A strong reading (high certainty, confirmed by the live market) is shown at once.
+        boolean strong = verdict != null && verdict.optBoolean("strong", false);
+        Stabilizer.Step step = stabilizer.push(decision, chartVisible, context, strong);
         // A different market: the previous one's levels must not come back.
         if (step.contextChanged) lastByDecision.clear();
         if (chartVisible) lastByDecision.put(decision, data);
         // No chart now: show this reading, never the last trade.
         JSONObject shown = chartVisible && step.shown != null && lastByDecision.containsKey(step.shown) ? lastByDecision.get(step.shown) : data;
         current = shown;
-        render(shown, step, chartVisible);
+        render(shown, data, step, chartVisible);
+        if (step.contextChanged) lastManageAction = null;
         if (step.changed) announce(shown, step.shown);
+        // Independent of the buy/sell advice: an open trade that needs action is always announced.
+        announceManage(chartVisible ? data : null);
 
         Listener target = listener;
         if (target != null) target.onResult(text);
@@ -595,7 +601,31 @@ public class WatchService extends Service {
         return "";
     }
 
-    private void render(JSONObject data, Stabilizer.Step step, boolean chartVisible) {
+    /** How to handle the trade open on screen, from the newest reading (the advice shown may be older). */
+    private static JSONObject manageOf(JSONObject latest) {
+        JSONObject guidance = latest == null ? null : latest.optJSONObject("guidance");
+        return guidance == null ? null : guidance.optJSONObject("manage");
+    }
+
+    private String lastManageAction = null;
+
+    /** Speaks up when the open trade needs action now: protect it or close it. */
+    private void announceManage(JSONObject latest) {
+        JSONObject manage = manageOf(latest);
+        String action = manage == null ? null : manage.optString("action", null);
+        boolean urgent = "fechar".equals(action) || "proteger".equals(action);
+        if (urgent && !action.equals(lastManageAction)) {
+            Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) vibrator.vibrate(VibrationEffect.createOneShot(400, VibrationEffect.DEFAULT_AMPLITUDE));
+                else vibrator.vibrate(400);
+            }
+            if (tts != null) tts.speak(manage.optString("text", ""), TextToSpeech.QUEUE_ADD, null, "manage");
+        }
+        lastManageAction = action;
+    }
+
+    private void render(JSONObject data, JSONObject latest, Stabilizer.Step step, boolean chartVisible) {
         String decision = chartVisible && step.shown != null ? step.shown : "AGUARDAR";
         JSONObject vision = data.optJSONObject("vision");
         JSONObject verdict = data.optJSONObject("verdict");
@@ -626,6 +656,12 @@ public class WatchService extends Service {
                     .append(" · Alvo ").append(levels.optString("target", "—"));
         }
         if (chartVisible && step.pending != null) detail.append("\nA confirmar sinal de ").append(label(step.pending)).append("…");
+        // The trade already open on screen: where the stop goes, when to close.
+        JSONObject manage = chartVisible ? manageOf(latest) : null;
+        if (manage != null) {
+            String prefix = "fechar".equals(manage.optString("action")) ? "\n⚠ " : "\n📌 ";
+            detail.append(prefix).append(manage.optString("text", ""));
+        }
 
         String title = chartVisible ? label(decision) : "SEM GRÁFICO";
         if (bubble != null) bubble.update(title, side(decision), asset.toString().trim(), detail.toString());

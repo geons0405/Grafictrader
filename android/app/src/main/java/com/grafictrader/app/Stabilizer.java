@@ -34,8 +34,16 @@ final class Stabilizer {
         return shown;
     }
 
-    /** {@code context} names the market on screen (asset + timeframe); a new one starts over. */
     Step push(String decision, boolean chartVisible, String context) {
+        return push(decision, chartVisible, context, false);
+    }
+
+    /**
+     * {@code context} names the market on screen (asset + timeframe); a new one starts over.
+     * A {@code strong} reading (high certainty, confirmed by the live market) needs no second look.
+     */
+    Step push(String decision, boolean chartVisible, String context, boolean strong) {
+        int needed = strong ? 1 : CONFIRMATIONS;
         if (!chartVisible) return new Step(shown, null, false);
         boolean contextChanged = false;
         if (context != null && lastContext != null && !context.equals(lastContext)) {
@@ -47,7 +55,7 @@ final class Stabilizer {
         if (context != null) lastContext = context;
         if (shown == null) {
             // The very first trade direction waits for its confirmation like any change.
-            if ("AGUARDAR".equals(decision)) {
+            if ("AGUARDAR".equals(decision) || needed <= 1) {
                 shown = decision;
                 return new Step(shown, null, true, contextChanged);
             }
@@ -72,7 +80,7 @@ final class Stabilizer {
             pending = decision;
             count = 1;
         }
-        if (count >= CONFIRMATIONS) {
+        if (count >= needed) {
             shown = decision;
             pending = null;
             count = 0;

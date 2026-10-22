@@ -283,9 +283,9 @@ export function isVisionAnswer(text) {
 }
 
 /** Chart image → parsed JSON from the first vision model that answers well. */
-export async function runVision(image, prompt, { maxOutputTokens = 1800 } = {}) {
+export async function runVision(image, prompt, { maxOutputTokens = 1800, hedgeMs = VISION_HEDGE_MS } = {}) {
   try {
-    const { text, provider } = await runChain('vision', prompt, image, { maxTokens: maxOutputTokens, accept: isVisionAnswer, hedgeMs: VISION_HEDGE_MS });
+    const { text, provider } = await runChain('vision', prompt, image, { maxTokens: maxOutputTokens, accept: isVisionAnswer, hedgeMs });
     return { raw: parseJson(text), provider };
   } catch (error) {
     if (error.setupRequired) throw error;

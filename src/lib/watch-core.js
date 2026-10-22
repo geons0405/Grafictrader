@@ -32,7 +32,8 @@ export function shouldSend({ now, lastSentAt, diff, minGapMs = 8000, maxGapMs = 
 /**
  * Keeps the advice steady: moving to "AGUARDAR" (caution) is immediate,
  * but switching to a trade direction needs the same reading `confirmations`
- * times in a row, so one noisy frame does not flip BUY into SELL.
+ * times in a row, so one noisy frame does not flip BUY into SELL. A strong
+ * reading (the server's verdict.strong) needs only one.
  */
 export function createStabilizer({ confirmations = 2 } = {}) {
   let shown = null;
@@ -45,7 +46,9 @@ export function createStabilizer({ confirmations = 2 } = {}) {
      * changes, everything starts again: a new market's first trade also
      * needs its confirmations, and the caller must forget the old levels.
      */
-    push(decision, { chartVisible = true, context = null } = {}) {
+    push(decision, { chartVisible = true, context = null, strong = false } = {}) {
+      // A strong signal (high certainty, confirmed by the live market) is shown at once.
+      const needed = strong ? 1 : confirmations;
       if (!chartVisible) return { shown, changed: false, pending: null, noChart: true };
       let contextChanged = false;
       if (context && lastContext && context !== lastContext) {
@@ -58,7 +61,7 @@ export function createStabilizer({ confirmations = 2 } = {}) {
       if (shown === null) {
         // The very first trade direction is not shown at once either: it waits like any change.
         shown = 'AGUARDAR';
-        if (decision === 'AGUARDAR' || confirmations <= 1) {
+        if (decision === 'AGUARDAR' || needed <= 1) {
           shown = decision;
           return { shown, changed: true, pending: null, contextChanged };
         }
@@ -79,7 +82,7 @@ export function createStabilizer({ confirmations = 2 } = {}) {
       }
       if (pending === decision) count += 1;
       else { pending = decision; count = 1; }
-      if (count >= confirmations) {
+      if (count >= needed) {
         shown = decision;
         pending = null;
         count = 0;

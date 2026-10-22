@@ -14,6 +14,7 @@ import { photoGuidance } from './_lib/quant/explain.js';
 const WATCH_PROMPT = `És um analista técnico a acompanhar AO VIVO o ecrã da corretora de um utilizador.
 Esta imagem é um frame de uma sessão contínua. Lê só o que é visível: o ativo, o timeframe, o preço atual, as últimas velas, a estrutura (topos e fundos), suportes e resistências, padrões e indicadores visíveis.
 Foca-te no que está a acontecer AGORA, nas velas mais recentes à direita.
+Se o preço acabou de fazer um movimento muito forte (velas grandes seguidas), entrar agora é correr atrás do preço: prefere AGUARDAR e diz em "esperarPor" onde um repique/recuo daria uma entrada melhor.
 Decide a orientação para a próxima fase:
 - "COMPRAR" se a estrutura e o momentum favorecem subida;
 - "VENDER" se favorecem descida;
@@ -22,7 +23,7 @@ O ecrã de uma corretora (Pocket Option, Quotex, IQ Option, MetaTrader…) tem o
 Só indica graficoVisivel false se não houver velas, barras nem linha de preço (outra app, menu sem gráfico, ecrã preto, imagem tão tremida que não se vêem as velas).
 ${rulesBlock({ chart: true })}
 {CONTINUITY}
-Responde em português de Angola.
+Responde em português de Angola, com frases curtas: a resposta tem de ser rápida.
 Responde APENAS com JSON válido:
 {
   "graficoVisivel": true | false,
@@ -35,14 +36,16 @@ Responde APENAS com JSON válido:
   "entrada": "zona ou condição de entrada",
   "stop": "nível de stop loss",
   "alvos": ["take profit"],
-  "estrutura": "descrição curta",
-  "padroes": ["padrões visíveis"],
-  "indicadores": "o que os indicadores visíveis mostram",
-  "motivos": ["até 3 motivos objetivos"],
-  "riscos": ["até 2 riscos"],
+  "estrutura": "até 12 palavras",
+  "padroes": ["no máximo 2, em palavras simples"],
+  "motivos": ["até 2 motivos curtos, em palavras simples"],
+  "riscos": ["1 risco curto"],
+  "posicaoAberta": {"lado": "COMPRA" | "VENDA", "preco": número ou null} ou null (só se o ecrã mostrar uma operação já aberta: linha ou etiqueta tipo "SELL 0.01" / "BUY 0.01", lista de posições ou ordem ativa da opção binária),
+  "esperarPor": "se AGUARDAR mas existe tendência: o preço ou a condição para entrar melhor (ex.: repique até 1.1235 para vender); senão null",
+  "gestaoPosicao": "se há operação aberta: onde pôr o stop, quando mover o stop para a entrada e quando fechar, com preços; senão null",
   "mudanca": "o que mudou desde a leitura anterior, numa frase",
-  "resumo": "uma frase",
-  "explicacaoSimples": "2 a 4 frases informais para quem nunca operou: o que fazer agora e porquê",
+  "resumo": "uma frase curta",
+  "explicacaoSimples": "1 ou 2 frases curtas, como se falasses com um amigo que nunca operou: o que fazer agora e porquê",
   "qualidadeImagem": "boa" | "média" | "fraca"
 }`;
 
@@ -108,15 +111,22 @@ export default async function handler(req, res) {
     });
   }
 
-  // About one analysis every 10 s on average per user.
-  const limit = await rateLimit('watch', who, { limit: 60, windowSeconds: 600, failClosed: true });
+  // About one analysis every 6–7 s on average per user.
+  const limit = await rateLimit('watch', who, { limit: 90, windowSeconds: 600, failClosed: true });
   if (!limit.allowed) return sendRateLimited(res, limit);
   const quota = await aiQuota(who);
   if (!quota.allowed) return sendRateLimited(res, quota);
 
+  // Same market as the last frame (the usual case): read the live market while the AI
+  // looks at the image, instead of after it.
+  const prevSymbol = previous?.asset ? mapAsset(String(previous.asset).slice(0, 30)) : null;
+  const prevInterval = previous?.timeframe ? mapTimeframe(String(previous.timeframe).slice(0, 12)) : null;
+  if (prevSymbol && prevInterval) cachedReading(prevSymbol, prevInterval).catch(() => null);
+
   let vision;
   try {
-    vision = await runVision(image, WATCH_PROMPT.replace('{CONTINUITY}', continuity(previous)), { maxOutputTokens: 1000 });
+    // Short answer and a quicker second model: the bubble has to react fast.
+    vision = await runVision(image, WATCH_PROMPT.replace('{CONTINUITY}', continuity(previous)), { maxOutputTokens: 650, hedgeMs: 4000 });
   } catch (error) {
     return res.status(error.status || 502).json({ ok: false, setupRequired: Boolean(error.setupRequired), exhausted: Boolean(error.exhausted), error: error.message });
   }

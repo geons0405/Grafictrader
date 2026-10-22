@@ -11,7 +11,7 @@ import { Native } from '../lib/native.js';
 // to date while the user trades there.
 
 const MAX_SIDE = 1280;
-const MIN_GAP_MS = 8000;
+const MIN_GAP_MS = 6000;
 const MAX_GAP_MS = 45000;
 const SESSION_LIMIT_MS = 45 * 60 * 1000;
 const PREFS_KEY = 'grafictrader.watchPrefs';
@@ -38,6 +38,9 @@ let lastByDecision = {};
 // Bumped on every start and stop: an answer from an older session is ignored.
 let session = 0;
 let current = null;
+// The newest reading: the open trade's advice always comes from it, even while the
+// shown buy/sell advice is an older reading waiting for its confirmation.
+let latest = null;
 let pipWindow = null;
 let prefs = { voice: false, alerts: false };
 const stabilizer = createStabilizer({ confirmations: 2 });
@@ -98,7 +101,7 @@ function toJpeg(source) {
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
   canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', 0.8);
+  return canvas.toDataURL('image/jpeg', 0.72);
 }
 
 async function tick() {
@@ -219,6 +222,8 @@ async function begin(newStream, newKind, { keepSource = false } = {}) {
   history = [];
   lastByDecision = {};
   current = null;
+  latest = null;
+  lastManageKey = null;
   stabilizer.reset();
   $('#watchStage').classList.add('active');
   $('#watchStage').dataset.kind = kind;
@@ -274,13 +279,17 @@ function handleResult(data) {
   const decision = data.verdict.decision;
   // Only a market named in full (asset and timeframe) can count as a different one.
   const context = data.chartVisible ? data.market || null : null;
-  const step = stabilizer.push(decision, { chartVisible: data.chartVisible, context });
+  const step = stabilizer.push(decision, { chartVisible: data.chartVisible, context, strong: Boolean(data.verdict?.strong) });
   // A different market: levels and readings of the previous one must not come back.
-  if (step.contextChanged) lastByDecision = {};
+  if (step.contextChanged) {
+    lastByDecision = {};
+    lastManageKey = null;
+  }
   if (data.chartVisible) lastByDecision[decision] = data;
   // No chart now: show this reading (it explains what to do), not the last trade.
   const shownData = !step.noChart && step.shown ? lastByDecision[step.shown] || data : data;
   current = shownData;
+  latest = data;
   render(shownData, step, data);
   if (step.changed) {
     history.unshift({ at: data.at, decision: step.shown, asset: shownData.vision.asset, timeframe: shownData.vision.timeframe, confidence: shownData.verdict.confidence });
@@ -291,6 +300,9 @@ function handleResult(data) {
   }
   updatePip();
 }
+
+// Speaks a protect/close warning once per market and action.
+let lastManageKey = null;
 
 function render(data, step, latest) {
   const g = data.guidance || {};
@@ -328,6 +340,20 @@ function render(data, step, latest) {
       ? `Não operes ainda: a IA vê ${CHANCE[v.decision] || 'um possível sinal'} e confirma-a na próxima leitura.`
       : g.now || '—';
   $('#watchHudNow').textContent = $('#watchNow').textContent;
+  // The trade already open on screen, from the newest reading: where the stop goes, when to close.
+  const manage = step.noChart ? null : latest.guidance?.manage;
+  $('#watchManage').hidden = !manage;
+  if (manage) {
+    $('#watchManage').dataset.action = manage.action || '';
+    $('#watchManageText').textContent = manage.text;
+  }
+  const manageKey = manage?.action ? `${latest.market || ''}|${manage.action}` : null;
+  if (manageKey && manageKey !== lastManageKey && ['fechar', 'proteger'].includes(manage.action) && prefs.voice && 'speechSynthesis' in window) {
+    const utterance = new SpeechSynthesisUtterance(manage.text);
+    utterance.lang = 'pt-PT';
+    speechSynthesis.speak(utterance);
+  }
+  lastManageKey = manageKey;
   $('#watchWhy').innerHTML = (g.why || []).map(p => `<p>${escapeHtml(p)}</p>`).join('');
   $('#watchSteps').innerHTML = (g.steps || []).map(p => `<li>${escapeHtml(p)}</li>`).join('');
   $('#watchChange').textContent = latest.change || '';
@@ -367,7 +393,8 @@ function pipMarkup() {
   const d = noChart ? 'AGUARDAR' : stabilizer.shown || current.verdict.decision;
   return `<div class="pip-badge" data-side="${SIDE[d] || ''}">${noChart ? 'SEM GRÁFICO' : LABEL[d] || d}</div>
     <p class="pip-asset">${escapeHtml(current.vision.asset || '')} ${escapeHtml(current.vision.timeframe || '')} · ${current.verdict.confidence}%</p>
-    <p class="pip-now">${escapeHtml(current.guidance?.now || '')}</p>`;
+    <p class="pip-now">${escapeHtml(current.guidance?.now || '')}</p>
+    ${!noChart && latest?.guidance?.manage ? `<p class="pip-now"><b>A tua operação:</b> ${escapeHtml(latest.guidance.manage.text)}</p>` : ''}`;
 }
 
 function updatePip() {

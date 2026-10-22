@@ -70,6 +70,18 @@ export function mapTimeframe(text) {
 
 const VISION_ACTIONS = { COMPRAR: 1, COMPRA: 1, BUY: 1, VENDER: -1, VENDA: -1, SELL: -1 };
 
+const presentText = v => typeof v === 'string' && v.trim() !== '' && !['null', 'nenhum', 'nenhuma', 'n/a'].includes(v.trim().toLowerCase());
+
+/** The trade already open on screen, as the model read it: { side: 1 | -1, price } or null. */
+function readPosition(p) {
+  if (!p || typeof p !== 'object') return null;
+  const word = String(p.lado || p.side || '').toUpperCase();
+  const side = /COMPRA|BUY|CALL|ACIMA/.test(word) ? 1 : /VENDA|SELL|PUT|ABAIXO/.test(word) ? -1 : 0;
+  if (!side) return null;
+  const price = Number(p.preco ?? p.price);
+  return { side, price: Number.isFinite(price) && price > 0 ? price : null };
+}
+
 export function normalizeVision(raw = {}) {
   const action = String(raw.decisao || raw.decision || '').toUpperCase().trim();
   const direction = VISION_ACTIONS[action] ?? 0;
@@ -92,6 +104,9 @@ export function normalizeVision(raw = {}) {
     risks: list(raw.riscos),
     summary: raw.resumo ? String(raw.resumo).slice(0, 300) : null,
     plain: raw.explicacaoSimples ? String(raw.explicacaoSimples).slice(0, 900) : null,
+    position: readPosition(raw.posicaoAberta),
+    waitFor: presentText(raw.esperarPor) ? String(raw.esperarPor).slice(0, 160) : null,
+    manage: presentText(raw.gestaoPosicao) ? String(raw.gestaoPosicao).slice(0, 240) : null,
     imageQuality: typeof raw.qualidadeImagem === 'string' && raw.qualidadeImagem.trim() ? raw.qualidadeImagem.trim().toLowerCase() : null
   };
 }
@@ -160,7 +175,7 @@ export function mergeVerdict(vision, reading) {
 
   if (vision.direction === 0 || vision.confidence < 45) {
     direction = 0;
-    reasons.push(vision.direction === 0 ? 'A leitura visual não encontra uma entrada clara.' : 'A leitura visual tem confiança baixa.');
+    reasons.push(vision.direction === 0 ? 'No gráfico não se vê uma entrada clara.' : 'O gráfico ainda não mostra o sinal com certeza suficiente.');
   }
 
   if (reading?.signal) {
@@ -169,30 +184,30 @@ export function mergeVerdict(vision, reading) {
     if (direction !== 0 && q === direction) {
       agreement = 'confirma';
       confidence = Math.min(95, Math.round((confidence + reading.signal.confidence) / 2 + 10));
-      reasons.push(`O motor estatístico ao vivo confirma (${reading.signal.regimeLabel.toLowerCase()}).`);
+      reasons.push('Os dados ao vivo do mercado confirmam.');
     } else if (direction !== 0 && q === -direction) {
       agreement = 'diverge';
-      reasons.push('O motor estatístico ao vivo aponta o sentido contrário: sinais divergentes.');
+      reasons.push('Os dados ao vivo apontam para o lado contrário.');
       direction = 0;
     } else if (direction !== 0) {
       agreement = 'neutro';
       confidence = Math.max(0, confidence - 10);
-      reasons.push(`O motor ao vivo não tem sinal próprio agora (${reading.signal.regimeLabel.toLowerCase()}).`);
+      reasons.push('Os dados ao vivo ainda não confirmam este sinal.');
       if (ctx * direction < -0.35) {
-        reasons.push('Fluxo, livro de ordens e notícias estão contra esta direção.');
+        reasons.push('As ordens a entrar e as notícias estão contra este lado.');
         direction = 0;
       }
     } else {
       agreement = q === 0 ? 'neutro' : 'diverge';
     }
     if (reading.snapshot?.regime === 'chaotic') {
-      reasons.push('Volatilidade extrema neste momento.');
+      reasons.push('O preço está a saltar demasiado neste momento.');
       direction = 0;
     }
   }
 
   if (direction !== 0 && confidence < 50) {
-    reasons.push('Confiança final abaixo de 50%.');
+    reasons.push('A certeza é baixa (menos de 50%).');
     direction = 0;
   }
 
@@ -202,7 +217,9 @@ export function mergeVerdict(vision, reading) {
     : direction < 0
       ? 'O gráfico tende a descer'
       : 'Mercado instável: melhor aguardar';
-  return { decision, direction, confidence: direction === 0 ? Math.min(confidence, 40) : confidence, agreement, headline, reasons };
+  // Strong enough to show at once, without waiting for a second reading.
+  const strong = direction !== 0 && ((agreement === 'confirma' && confidence >= 70) || (!reading?.signal && confidence >= 80));
+  return { decision, direction, confidence: direction === 0 ? Math.min(confidence, 40) : confidence, agreement, headline, reasons, strong };
 }
 
 /** Plain guidance for an image that is not a chart. `source` is 'foto' or 'ecrã'. */

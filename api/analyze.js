@@ -34,6 +34,9 @@ Responde APENAS com JSON válido neste formato:
   "indicadores": "o que os indicadores visíveis mostram",
   "motivos": ["até 4 motivos objetivos"],
   "riscos": ["até 3 riscos"],
+  "posicaoAberta": {"lado": "COMPRA" | "VENDA", "preco": número ou null} ou null (só se o ecrã mostrar uma operação já aberta: linha ou etiqueta tipo "SELL 0.01" / "BUY 0.01", lista de posições ou ordem ativa da opção binária),
+  "esperarPor": "se AGUARDAR mas existe tendência: o preço ou a condição para entrar melhor (ex.: repique até 1.1235 para vender); senão null",
+  "gestaoPosicao": "se há operação aberta: onde pôr o stop, quando mover o stop para a entrada e quando fechar, com preços; senão null",
   "resumo": "uma frase",
   "explicacaoSimples": "3 a 5 frases informais, como se falasses com um amigo que nunca operou: o que fazer agora, porquê, onde entrar, onde pôr o stop loss e onde tirar o lucro (ou porque é melhor não operar)",
   "qualidadeImagem": "boa" | "média" | "fraca"

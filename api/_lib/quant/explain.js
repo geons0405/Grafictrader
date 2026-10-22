@@ -1,11 +1,12 @@
 import { patternSentence } from './patterns.js';
 import { isForexMarket, formatPrice } from '../markets.js';
+import { manageOpen, pullbackAdvice } from './live-plan.js';
 // Plain-language guidance for people who have never traded.
 // Turns the engine's numbers into "what to do now and why", in informal
 // Angolan Portuguese. Pure function: same input, same text.
 
 /** Price formatter for one market: currency pairs as rates (no "$"), gold and crypto in dollars. */
-function moneyFor(symbol) {
+export function moneyFor(symbol) {
   if (isForexMarket(symbol) && symbol !== 'XAUUSD') return value => formatPrice(symbol, value);
   return value => {
     const n = Number(value);
@@ -38,8 +39,8 @@ function whyTrend(dir, snap, ctx) {
   }
   if (Number.isFinite(snap?.vwap)) {
     lines.push(up
-      ? 'O preço está acima do "preço médio do dia" (VWAP), sinal de que os compradores estão no controlo.'
-      : 'O preço está abaixo do "preço médio do dia" (VWAP), sinal de que os vendedores estão no controlo.');
+      ? 'O preço está acima do preço médio do dia: quem compra está a mandar.'
+      : 'O preço está abaixo do preço médio do dia: quem vende está a mandar.');
   }
   addContext(lines, dir, ctx);
   return lines;
@@ -63,8 +64,8 @@ function addContext(lines, dir, ctx) {
   if (!ctx) return;
   if (Number.isFinite(ctx.score) && Math.abs(ctx.score) > 0.2) {
     lines.push(ctx.score * dir > 0
-      ? 'O que está a acontecer agora (ordens a entrar, livro de ordens e notícias) também puxa para o mesmo lado.'
-      : 'Atenção: o que está a acontecer agora (ordens, livro e notícias) puxa um pouco para o lado contrário. Usa sempre o stop.');
+      ? 'As ordens a entrar agora e as notícias também puxam para o mesmo lado.'
+      : 'Atenção: as ordens a entrar agora e as notícias puxam um pouco para o lado contrário. Usa sempre o stop.');
   }
   if (ctx.global && Math.abs(ctx.global.score) > 0.15) {
     lines.push(ctx.global.score > 0
@@ -225,7 +226,7 @@ export function photoGuidance(verdict, vision, reading) {
       guidance.why.unshift('A foto e o mercado ao vivo não concordam: o gráfico da imagem sugere um lado, mas os dados em tempo real apontam para o outro. Quando há esta dúvida, o mais inteligente é não arriscar.');
     }
     if (vision.plain) guidance.why.push('Sobre a imagem: ' + vision.plain);
-    return guidance;
+    return withLivePlan(guidance, verdict, vision, reading, money);
   }
   const dir = verdict.direction;
   return {
@@ -241,6 +242,65 @@ export function photoGuidance(verdict, vision, reading) {
           'Arrisca no máximo 1% da tua conta nesta operação.'
         ]
       : ['Não abras operação agora.', 'Tira outra foto daqui a umas velas ou quando o gráfico mostrar uma direção clara.'],
-    now: dir ? 'Segue os passos acima e respeita o stop.' : 'Fica de fora por agora.'
+    now: dir ? 'Segue os passos acima e respeita o stop.' : vision.waitFor ? `Fica de fora por agora. Espera: ${vision.waitFor}` : `${firstSentence(verdict.reasons[0] || vision.summary)} Fica de fora por agora.`.trim(),
+    manage: visionManage(vision)
   };
+}
+
+const firstSentence = text => {
+  const s = String(text || '').trim();
+  if (!s) return '';
+  const cut = s.search(/[.!?](\s|$)/);
+  return (cut > 0 ? s.slice(0, cut + 1) : s).slice(0, 160);
+};
+
+/** The model's own advice for a trade open on screen, when there are no live candles to compute it. */
+function visionManage(vision) {
+  if (!vision.position) return null;
+  const word = vision.position.side > 0 ? 'COMPRA' : 'VENDA';
+  const at = vision.position.price ? ` a ${vision.position.price}` : '';
+  const advice = vision.manage || (vision.stop ? `Stop sugerido: ${vision.stop}.` : 'Põe já um stop loss: sem ele uma perda pode crescer sem limite.');
+  return { action: 'manter', stop: null, target: null, text: `Tens uma ${word}${at}. ${advice}` };
+}
+
+/**
+ * What the live bubble says beyond buy/sell/wait: why it waits and where a better entry
+ * would be when the trend is clear but the price ran too far, and how to manage a trade
+ * already open on screen (stop, break-even, close).
+ */
+function withLivePlan(guidance, verdict, vision, reading, money) {
+  const state = reading.trendState;
+  // Never offer a pullback entry when the market itself says stay out: the image and
+  // the live data disagree, the price is jumping wildly, or big news is coming out.
+  const blocked = verdict.agreement === 'diverge' || reading.snapshot?.regime === 'chaotic' || Boolean(reading.context?.eventRisk?.blocked);
+  const pullback = blocked ? null : pullbackAdvice(state, money);
+  if (!verdict.direction) {
+    if (pullback) {
+      guidance.now = pullback.text;
+      guidance.wait = { side: pullback.side, zone: money(pullback.zone), stop: money(pullback.stop) };
+    } else if (vision.waitFor) {
+      guidance.now = `Fica de fora por agora. Espera: ${vision.waitFor}`;
+    } else if (verdict.agreement === 'diverge') {
+      guidance.now = 'O teu gráfico e os dados ao vivo dizem coisas diferentes. Quando há dúvida, não se entra: espera.';
+    } else {
+      const why = firstSentence(guidance.why[0]);
+      guidance.now = why ? `${why} Fica de fora e espera pelo próximo sinal.` : guidance.now;
+    }
+  } else if (pullback && pullback.side === verdict.direction) {
+    const up = verdict.direction > 0;
+    // Entry at the pullback zone: the steps and levels follow it, not the current price.
+    const risk = Math.abs(pullback.zone - pullback.stop);
+    const plan = { side: verdict.direction, entry: pullback.zone, stop: pullback.stop, initialStop: pullback.stop, target: pullback.zone + verdict.direction * 2 * risk, open: false, livePrice: reading.price, setup: 'trend' };
+    const redone = explainPlain({ decision: { direction: verdict.direction, setup: 'trend', reasons: [] }, snapshot: reading.snapshot, context: reading.context, plan, patterns: reading.patterns, symbol: reading.symbol });
+    guidance.steps = redone.steps;
+    guidance.levels = { entry: money(plan.entry), stop: money(plan.stop), target: money(plan.target) };
+    guidance.now = `Boa oportunidade de ${up ? 'compra' : 'venda'}, mas não corras atrás do preço: o ideal é esperar que ${up ? 'desça' : 'suba'} um pouco, até perto de ${money(pullback.zone)}, e ${up ? 'comprar' : 'vender'} aí.`;
+  }
+  guidance.manage = vision.position ? manageOpen(vision.position, state, verdict.direction, money) || visionManage(vision) : null;
+  if (guidance.manage) {
+    for (const key of ['stop', 'target']) {
+      if (Number.isFinite(guidance.manage[key])) guidance.manage[key] = money(guidance.manage[key]);
+    }
+  }
+  return guidance;
 }

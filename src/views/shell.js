@@ -176,6 +176,7 @@ export const shellTemplate = `
         </div>
         <div class="guide">
           <div class="guide-now"><small>O que fazer agora</small><p id="watchNow">—</p></div>
+          <div class="guide-manage" id="watchManage" hidden><small>A tua operação aberta</small><p id="watchManageText"></p></div>
           <p class="watch-change" id="watchChange" hidden></p>
           <div class="guide-block"><small>Porquê</small><div id="watchWhy"></div></div>
           <div class="guide-block"><small>Passo a passo</small><ol id="watchSteps"></ol></div>

@@ -95,6 +95,7 @@ function renderResult(image, data) {
     ${data.guidance ? `
     <div class="guide">
       <div class="guide-now"><small>O que fazer agora</small><p>${escapeHtml(data.guidance.now)}</p></div>
+      ${data.guidance.manage ? `<div class="guide-manage" data-action="${escapeHtml(data.guidance.manage.action || '')}"><small>A tua operação aberta</small><p>${escapeHtml(data.guidance.manage.text)}</p></div>` : ''}
       <div class="guide-block"><small>Porquê</small>${(data.guidance.why || []).map(p => `<p>${escapeHtml(p)}</p>`).join('')}</div>
       <div class="guide-block"><small>Passo a passo</small><ol>${list(data.guidance.steps)}</ol></div>
     </div>` : ''}
