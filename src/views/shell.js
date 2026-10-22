@@ -109,9 +109,10 @@ export const shellTemplate = `
   <!-- LIVE -->
   <section id="live" class="screen">
     <header class="live-top">
-      <div class="segmented live-mode" role="tablist" aria-label="Modo do LIVE">
-        <button type="button" data-live-mode="broker">Minha corretora</button>
-        <button type="button" data-live-mode="market">Mercado</button>
+      <div class="live-title" data-live-title="broker"><b>Minha corretora</b></div>
+      <div class="live-title" data-live-title="market" hidden>
+        <button class="back-btn" type="button" data-live-mode="broker" aria-label="Voltar à Minha corretora"><i data-lucide="chevron-left"></i></button>
+        <b>Gráficos e robô IA</b>
       </div>
       <button class="round-btn" type="button" data-open-menu aria-label="Menu"><i data-lucide="sliders-horizontal"></i></button>
     </header>
@@ -185,6 +186,7 @@ export const shellTemplate = `
     </div>
 
     <div class="live-pane" data-live-pane="market" hidden>
+    <p class="dev-note"><i data-lucide="construction"></i><span><b>Área em desenvolvimento.</b> Os gráficos, o robô demo e o conselho ainda estão a ser melhorados e podem mudar ou falhar. Para operar, usa a <b>Minha corretora</b>.</span></p>
     <header class="live-head">
       <button class="asset-pill" type="button" id="assetPicker" aria-label="Escolher ativo"><span id="assetLabel">BTC/USDT</span><i data-lucide="chevron-down"></i></button>
       <div class="live-quote"><strong id="price">—</strong><span class="delta" id="change">—</span></div>
@@ -530,6 +532,7 @@ export const shellTemplate = `
   <!-- MENU (top-right) -->
   <div class="menu-backdrop" id="menu" hidden>
     <div class="menu" role="menu" aria-label="Menu">
+      <button type="button" role="menuitem" data-route="mercado"><span class="menu-icon"><i data-lucide="candlestick-chart"></i></span><span><b>Gráficos e robô IA <em class="dev-tag">Em desenvolvimento</em></b><small>Cripto, forex e ouro com a IA a operar em demo</small></span></button>
       <button type="button" role="menuitem" data-route="intel"><span class="menu-icon"><i data-lucide="activity"></i></span><span><b>Live Inteligente</b><small>Informação e estatística em tempo real</small></span></button>
       <button type="button" role="menuitem" data-route="diario"><span class="menu-icon"><i data-lucide="calculator"></i></span><span><b>Diário e calculadora</b><small>Quanto arriscar e o teu resultado real</small></span></button>
       <button type="button" role="menuitem" data-route="perfil"><span class="menu-icon"><i data-lucide="user"></i></span><span><b>Perfil</b><small>Conta, tema e sessão</small></span></button>
