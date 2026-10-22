@@ -38,6 +38,9 @@ let lastByDecision = {};
 // Bumped on every start and stop: an answer from an older session is ignored.
 let session = 0;
 let current = null;
+// The newest reading: the open trade's advice always comes from it, even while the
+// shown buy/sell advice is an older reading waiting for its confirmation.
+let latest = null;
 let pipWindow = null;
 let prefs = { voice: false, alerts: false };
 const stabilizer = createStabilizer({ confirmations: 2 });
@@ -219,6 +222,8 @@ async function begin(newStream, newKind, { keepSource = false } = {}) {
   history = [];
   lastByDecision = {};
   current = null;
+  latest = null;
+  lastManageKey = null;
   stabilizer.reset();
   $('#watchStage').classList.add('active');
   $('#watchStage').dataset.kind = kind;
@@ -276,11 +281,15 @@ function handleResult(data) {
   const context = data.chartVisible ? data.market || null : null;
   const step = stabilizer.push(decision, { chartVisible: data.chartVisible, context, strong: Boolean(data.verdict?.strong) });
   // A different market: levels and readings of the previous one must not come back.
-  if (step.contextChanged) lastByDecision = {};
+  if (step.contextChanged) {
+    lastByDecision = {};
+    lastManageKey = null;
+  }
   if (data.chartVisible) lastByDecision[decision] = data;
   // No chart now: show this reading (it explains what to do), not the last trade.
   const shownData = !step.noChart && step.shown ? lastByDecision[step.shown] || data : data;
   current = shownData;
+  latest = data;
   render(shownData, step, data);
   if (step.changed) {
     history.unshift({ at: data.at, decision: step.shown, asset: shownData.vision.asset, timeframe: shownData.vision.timeframe, confidence: shownData.verdict.confidence });
@@ -292,7 +301,8 @@ function handleResult(data) {
   updatePip();
 }
 
-let lastManageAction = null;
+// Speaks a protect/close warning once per market and action.
+let lastManageKey = null;
 
 function render(data, step, latest) {
   const g = data.guidance || {};
@@ -337,12 +347,13 @@ function render(data, step, latest) {
     $('#watchManage').dataset.action = manage.action || '';
     $('#watchManageText').textContent = manage.text;
   }
-  if (manage?.action && manage.action !== lastManageAction && ['fechar', 'proteger'].includes(manage.action) && prefs.voice && 'speechSynthesis' in window) {
+  const manageKey = manage?.action ? `${latest.market || ''}|${manage.action}` : null;
+  if (manageKey && manageKey !== lastManageKey && ['fechar', 'proteger'].includes(manage.action) && prefs.voice && 'speechSynthesis' in window) {
     const utterance = new SpeechSynthesisUtterance(manage.text);
     utterance.lang = 'pt-PT';
     speechSynthesis.speak(utterance);
   }
-  lastManageAction = manage?.action || null;
+  lastManageKey = manageKey;
   $('#watchWhy').innerHTML = (g.why || []).map(p => `<p>${escapeHtml(p)}</p>`).join('');
   $('#watchSteps').innerHTML = (g.steps || []).map(p => `<li>${escapeHtml(p)}</li>`).join('');
   $('#watchChange').textContent = latest.change || '';
@@ -383,7 +394,7 @@ function pipMarkup() {
   return `<div class="pip-badge" data-side="${SIDE[d] || ''}">${noChart ? 'SEM GRÁFICO' : LABEL[d] || d}</div>
     <p class="pip-asset">${escapeHtml(current.vision.asset || '')} ${escapeHtml(current.vision.timeframe || '')} · ${current.verdict.confidence}%</p>
     <p class="pip-now">${escapeHtml(current.guidance?.now || '')}</p>
-    ${!noChart && current.guidance?.manage ? `<p class="pip-now"><b>A tua operação:</b> ${escapeHtml(current.guidance.manage.text)}</p>` : ''}`;
+    ${!noChart && latest?.guidance?.manage ? `<p class="pip-now"><b>A tua operação:</b> ${escapeHtml(latest.guidance.manage.text)}</p>` : ''}`;
 }
 
 function updatePip() {

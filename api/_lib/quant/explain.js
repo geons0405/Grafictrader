@@ -226,7 +226,7 @@ export function photoGuidance(verdict, vision, reading) {
       guidance.why.unshift('A foto e o mercado ao vivo não concordam: o gráfico da imagem sugere um lado, mas os dados em tempo real apontam para o outro. Quando há esta dúvida, o mais inteligente é não arriscar.');
     }
     if (vision.plain) guidance.why.push('Sobre a imagem: ' + vision.plain);
-    return withLivePlan(guidance, verdict, vision, reading.trendState, money);
+    return withLivePlan(guidance, verdict, vision, reading, money);
   }
   const dir = verdict.direction;
   return {
@@ -268,8 +268,12 @@ function visionManage(vision) {
  * would be when the trend is clear but the price ran too far, and how to manage a trade
  * already open on screen (stop, break-even, close).
  */
-function withLivePlan(guidance, verdict, vision, state, money) {
-  const pullback = pullbackAdvice(state, money);
+function withLivePlan(guidance, verdict, vision, reading, money) {
+  const state = reading.trendState;
+  // Never offer a pullback entry when the market itself says stay out: the image and
+  // the live data disagree, the price is jumping wildly, or big news is coming out.
+  const blocked = verdict.agreement === 'diverge' || reading.snapshot?.regime === 'chaotic' || Boolean(reading.context?.eventRisk?.blocked);
+  const pullback = blocked ? null : pullbackAdvice(state, money);
   if (!verdict.direction) {
     if (pullback) {
       guidance.now = pullback.text;
@@ -284,6 +288,12 @@ function withLivePlan(guidance, verdict, vision, state, money) {
     }
   } else if (pullback && pullback.side === verdict.direction) {
     const up = verdict.direction > 0;
+    // Entry at the pullback zone: the steps and levels follow it, not the current price.
+    const risk = Math.abs(pullback.zone - pullback.stop);
+    const plan = { side: verdict.direction, entry: pullback.zone, stop: pullback.stop, initialStop: pullback.stop, target: pullback.zone + verdict.direction * 2 * risk, open: false, livePrice: reading.price, setup: 'trend' };
+    const redone = explainPlain({ decision: { direction: verdict.direction, setup: 'trend', reasons: [] }, snapshot: reading.snapshot, context: reading.context, plan, patterns: reading.patterns, symbol: reading.symbol });
+    guidance.steps = redone.steps;
+    guidance.levels = { entry: money(plan.entry), stop: money(plan.stop), target: money(plan.target) };
     guidance.now = `Boa oportunidade de ${up ? 'compra' : 'venda'}, mas não corras atrás do preço: o ideal é esperar que ${up ? 'desça' : 'suba'} um pouco, até perto de ${money(pullback.zone)}, e ${up ? 'comprar' : 'vender'} aí.`;
   }
   guidance.manage = vision.position ? manageOpen(vision.position, state, verdict.direction, money) || visionManage(vision) : null;

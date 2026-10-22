@@ -39,7 +39,7 @@ test('an open sell gets a stop above the last top, then break-even, and "close" 
   assert.ok(hold.stop > state.price);
   assert.match(hold.text, /VENDA a 1\.12\d{3}: põe o stop em 1\.12\d{3} \(logo acima do ponto mais alto recente\)/);
 
-  const winning = manageOpen({ side: -1, price: state.price + 0.002 }, state, 0, money);
+  const winning = manageOpen({ side: -1, price: state.price + 0.0005 }, state, 0, money);
   assert.equal(winning.action, 'proteger');
   assert.match(winning.text, /Muda o stop para 1\.12\d{3}, o preço a que entraste/);
 
@@ -75,4 +75,24 @@ test('forex pays about one pip of spread in the demo robot, crypto its exchange 
   assert.equal(tradeCost('EURUSD'), 0.00012);
   assert.equal(tradeCost('EURGBP'), 0.0002);
   assert.equal(tradeCost('BTCUSDT'), 0.0008);
+});
+
+test('a trade already at its target is told to take the profit', () => {
+  const state = trendState(fallingThenSpike());
+  const done = manageOpen({ side: -1, price: state.price + 0.004 }, state, 0, money);
+  assert.equal(done.action, 'fechar');
+  assert.match(done.text, /já chegou ao alvo/);
+});
+
+test('no pullback entry is offered when the market says stay out; a stretched signal enters at the zone', () => {
+  const state = trendState(fallingThenSpike());
+  const vision = normalizeVision({ decisao: 'VENDER', confianca: 70 });
+  const reading = { symbol: 'EURUSD', price: state.price, snapshot: { regime: 'trend', atr: state.atr }, signal: { direction: -1, reasons: [] }, context: {}, patterns: [], trendState: state };
+  const diverge = photoGuidance({ direction: 0, agreement: 'diverge', reasons: [] }, vision, reading);
+  assert.doesNotMatch(diverge.now, /volte a subir/);
+  assert.equal(diverge.wait, undefined);
+
+  const sell = photoGuidance({ direction: -1, agreement: 'confirma', reasons: [] }, vision, reading);
+  assert.equal(sell.levels.entry, money(state.zone), 'entry at the pullback zone, not the current price');
+  assert.match(sell.steps[0], new RegExp(money(state.zone).replace('.', '\\.')));
 });

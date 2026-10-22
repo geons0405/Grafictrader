@@ -577,8 +577,10 @@ public class WatchService extends Service {
         JSONObject shown = chartVisible && step.shown != null && lastByDecision.containsKey(step.shown) ? lastByDecision.get(step.shown) : data;
         current = shown;
         render(shown, data, step, chartVisible);
+        if (step.contextChanged) lastManageAction = null;
         if (step.changed) announce(shown, step.shown);
-        else announceManage(chartVisible ? data : null);
+        // Independent of the buy/sell advice: an open trade that needs action is always announced.
+        announceManage(chartVisible ? data : null);
 
         Listener target = listener;
         if (target != null) target.onResult(text);
@@ -617,7 +619,7 @@ public class WatchService extends Service {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) vibrator.vibrate(VibrationEffect.createOneShot(400, VibrationEffect.DEFAULT_AMPLITUDE));
                 else vibrator.vibrate(400);
             }
-            if (tts != null) tts.speak(manage.optString("text", ""), TextToSpeech.QUEUE_FLUSH, null, "manage");
+            if (tts != null) tts.speak(manage.optString("text", ""), TextToSpeech.QUEUE_ADD, null, "manage");
         }
         lastManageAction = action;
     }

@@ -63,7 +63,7 @@ export function manageOpen(position, state, verdictDirection, money) {
   if (!position?.side || !state) return null;
   const side = position.side;
   const { atr, price } = state;
-  const entry = Number.isFinite(position.price) && Math.abs(position.price - price) < 25 * atr ? position.price : null;
+  const entry = Number.isFinite(position.price) && Math.abs(position.price - price) < 60 * atr ? position.price : null;
   const word = side > 0 ? 'COMPRA' : 'VENDA';
   const opened = entry != null ? ` a ${money(entry)}` : '';
   // Structure stop: beyond the last swing against the trade, with a small buffer.
@@ -77,11 +77,31 @@ export function manageOpen(position, state, verdictDirection, money) {
       text: `Tens uma ${word}${opened}, mas o mercado virou contra ti${state.trend === -side ? ` (o preço agora vem a ${side > 0 ? 'cair' : 'subir'})` : ''}. O mais seguro é fechar já. Se quiseres esperar, põe o stop em ${money(structureStop)}.`
     };
   }
-  const risk = entry != null ? Math.abs(entry - structureStop) : 1.5 * atr;
+  // The trade's risk: how far its stop sits on the losing side of the entry, never less
+  // than a normal stop (1.5 average candles). When the last swing is already past the
+  // entry, the trade is in profit and the swing can hold the stop.
+  const lossSide = entry != null && (entry - structureStop) * side > 0;
+  const risk = Math.max(1.5 * atr, lossSide ? Math.abs(entry - structureStop) : 0);
   const gained = entry != null ? (price - entry) * side : 0;
-  if (entry != null && gained >= Math.max(atr, 0.8 * risk)) {
+  if (entry != null && gained >= 0.8 * risk) {
     // In profit by about one stop's distance: protect it.
     const target = entry + side * 2 * risk;
+    if ((price - target) * side >= 0) {
+      return {
+        action: 'fechar',
+        stop: entry,
+        target: null,
+        text: `A tua ${word}${opened} já chegou ao alvo (${money(target)}). Bom momento para fechar e guardar o lucro.`
+      };
+    }
+    if (!lossSide) {
+      return {
+        action: 'proteger',
+        stop: structureStop,
+        target,
+        text: `A tua ${word}${opened} já está a ganhar bem. Muda o stop para ${money(structureStop)}: assim, mesmo que o preço volte, já sais com lucro. Podes tirar o lucro em ${money(target)}.`
+      };
+    }
     return {
       action: 'proteger',
       stop: entry,
