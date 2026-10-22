@@ -3,17 +3,26 @@ import { getGdeltEvents } from '../sources/gdelt.js';
 import { getFinnhubEvents } from '../sources/finnhub.js';
 import { getRssNews } from '../sources/news-feeds.js';
 import { clamp } from './stats.js';
+import { isForexMarket } from '../markets.js';
 
 const NEWS_TTL_MS = 120_000;
 const NEWS_WINDOW_MS = 3 * 60 * 60 * 1000;
-let newsCache = { at: 0, events: [] };
+const newsCache = new Map();
 
-/** Crypto-wide news, cached per instance so many requests share one fetch. */
-export async function recentNews() {
-  if (Date.now() - newsCache.at < NEWS_TTL_MS) return newsCache.events;
-  const settled = await Promise.allSettled([getGdeltEvents('BTCUSDT'), getFinnhubEvents('BTCUSDT'), getRssNews('BTCUSDT')]);
+/**
+ * Recent news for a market, cached per instance so many requests share one fetch:
+ * crypto-wide news for every crypto pair, the pair's own news for forex and gold.
+ */
+export async function recentNews(symbol = 'BTCUSDT') {
+  const key = isForexMarket(symbol) ? symbol : 'crypto';
+  const hit = newsCache.get(key);
+  if (hit && Date.now() - hit.at < NEWS_TTL_MS) return hit.events;
+  const tasks = key === 'crypto'
+    ? [getGdeltEvents('BTCUSDT'), getFinnhubEvents('BTCUSDT'), getRssNews('BTCUSDT')]
+    : [getRssNews(symbol)];
+  const settled = await Promise.allSettled(tasks);
   const events = settled.flatMap(r => (r.status === 'fulfilled' && Array.isArray(r.value) ? r.value : []));
-  newsCache = { at: Date.now(), events };
+  newsCache.set(key, { at: Date.now(), events });
   return events;
 }
 

@@ -191,7 +191,7 @@ export const shellTemplate = `
     </header>
     <div class="segmented source-switch" id="sources" role="tablist" aria-label="Fonte do gráfico">
       <button type="button" data-source="tradingview">TradingView</button>
-      <button type="button" data-source="binance">Binance</button>
+      <button type="button" data-source="binance">Cripto + Forex</button>
       <button type="button" data-source="mt5">MetaTrader 5</button>
     </div>
     <div class="segmented" id="timeframes" role="tablist" aria-label="Timeframe">${timeframeButtons}</div>
@@ -265,7 +265,7 @@ export const shellTemplate = `
       </div>
       <p class="fine-print left">Operações simuladas pela IA (conta demo de $1.000, risco 1% por operação). Copiar é por tua conta e risco; resultados passados não garantem resultados futuros.</p>
     </article>
-    <p class="fine-print">Gráficos <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView Lightweight Charts™</a> · dados Binance, MetaTrader 5 e TradingView.</p>
+    <p class="fine-print">Gráficos <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView Lightweight Charts™</a> · dados Binance, Yahoo Finance, MetaTrader 5 e TradingView.</p>
     </div>
   </section>
 
@@ -447,6 +447,17 @@ export const shellTemplate = `
       <p class="reading-summary">Instala o Grafictrader no telemóvel para a IA analisar a tua corretora com uma bolha por cima dela.</p>
       <a class="btn btn-primary" href="https://github.com/geons0405/Grafictrader/releases/download/android-latest/Grafictrader.apk" rel="noopener"><i data-lucide="smartphone"></i>Descarregar a app Android</a>
       <p class="fine-print left">Depois de descarregar, abre o ficheiro Grafictrader.apk e permite instalar apps desta fonte quando o Android pedir.</p>
+    </article>
+    <article class="card alerts-card" id="alertsCard" data-server-only>
+      <header class="card-head"><b>Alertas de oportunidades</b><small id="alertsStatus">—</small></header>
+      <p class="reading-summary">Recebe um aviso no telemóvel ou no computador quando a IA vê uma boa oportunidade, mesmo com o app fechado. Os alertas usam só os cálculos do motor: não gastam análises de IA.</p>
+      <div id="alertsForm" hidden>
+        <div class="chip-grid" id="alertsMarkets"></div>
+        <div class="segmented" id="alertsInterval"></div>
+        <button class="btn btn-primary" type="button" id="alertsOn"><i data-lucide="bell"></i>Ativar alertas neste dispositivo</button>
+        <button class="btn btn-ghost" type="button" id="alertsOff" hidden>Desligar alertas neste dispositivo</button>
+      </div>
+      <p class="fine-print left" id="alertsHint"></p>
     </article>
     <article class="card">
       <header class="card-head"><b>Aparência</b></header>

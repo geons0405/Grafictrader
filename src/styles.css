@@ -1665,3 +1665,10 @@ body.stage-open .tabbar { display: none; }
 /* "BOA OPORTUNIDADE DE COMPRA/VENDA" is long: badges wrap instead of overflowing. */
 .badge { height: auto; min-height: 40px; max-width: 200px; padding: 6px 12px; text-align: center; line-height: 1.2; }
 .verdict-main strong { font-size: clamp(20px, 5.5vw, 28px); line-height: 1.1; }
+
+/* Opportunity alerts */
+.chip-grid { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 999px; background: var(--well); font-size: 13px; font-weight: 600; cursor: pointer; }
+.chip input { accent-color: var(--up); margin: 0; }
+.alerts-card .segmented { margin-bottom: 12px; }
+.alerts-card .btn + .btn { margin-top: 8px; }

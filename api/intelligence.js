@@ -1,5 +1,5 @@
 import { getAllIntelligence } from './_lib/intelligence.js';
-import { isBinanceSymbol, parseMarketQuery, clientIp } from './_lib/validate.js';
+import { isMarketSymbol, parseMarketQuery, clientIp } from './_lib/validate.js';
 import { runEngine } from './_lib/engine/index.js';
 import { rateLimit, sendRateLimited } from './_lib/rate-limit.js';
 
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     }
   }
   const symbol = String(req.query?.symbol || 'BTCUSDT').toUpperCase();
-  if (!isBinanceSymbol(symbol)) return res.status(400).json({ ok: false, error: 'Ativo inválido.' });
+  if (!isMarketSymbol(symbol)) return res.status(400).json({ ok: false, error: 'Ativo inválido.' });
   const limit = await rateLimit('feed', clientIp(req), { limit: 120, windowSeconds: 600 });
   if (!limit.allowed) return sendRateLimited(res, limit);
   try {

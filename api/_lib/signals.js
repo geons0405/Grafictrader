@@ -1,5 +1,5 @@
 import { redis, redisConfigured } from './redis.js';
-import { getBinanceCandles } from './sources/binance.js';
+import { getCandles } from './sources/candles.js';
 
 // Every BUY/SELL the app shows (FOTO, Minha corretora) is recorded with the
 // live price at that moment and checked later against what the price really
@@ -124,7 +124,7 @@ export async function verifySignals({ maxFetches = 12, now = Date.now() / 1000 }
       const last = Math.max(...group.map(s => s.at));
       const span = Math.ceil((last - first) / SECONDS[group[0].interval]) + HORIZON_BARS + 2;
       fetches += 1;
-      const candles = await getBinanceCandles(group[0].symbol, group[0].interval, Math.min(1000, span), first).catch(() => []);
+      const candles = await getCandles(group[0].symbol, group[0].interval, Math.min(1000, span), first).catch(() => []);
       for (const s of group) {
         const result = judgeSignal(s, candles);
         if (result) results.set(s.id, { ...result, checkedAt: Math.round(now) });

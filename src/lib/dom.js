@@ -1,3 +1,4 @@
+import { isForexMarket, formatPrice, marketLabel } from '../../api/_lib/markets.js';
 export const $ = (selector, root = document) => root.querySelector(selector);
 export const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -16,16 +17,18 @@ export function safeUrl(value) {
   }
 }
 
-export function fmtPrice(value) {
+/** A price; with the market's symbol, currency pairs read as rates (1.08457) instead of dollars. */
+export function fmtPrice(value, symbol = '') {
   const n = Number(value);
   if (!Number.isFinite(n)) return '—';
+  if (isForexMarket(symbol) && symbol !== 'XAUUSD') return formatPrice(symbol, n);
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: n < 10 ? 4 : 2, maximumFractionDigits: n < 10 ? 4 : 2 });
 }
 
 /** Short price for tight spaces: no cents above $1,000. */
-export function fmtPriceShort(value) {
+export function fmtPriceShort(value, symbol = '') {
   const n = Number(value);
-  if (!Number.isFinite(n) || n < 1000) return fmtPrice(value);
+  if (!Number.isFinite(n) || n < 1000) return fmtPrice(value, symbol);
   return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
@@ -47,8 +50,9 @@ export function fmtTime(value) {
   return d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
 }
 
+/** "BTC/USDT", "EUR/USD", "Ouro (XAU/USD)". */
 export function pairLabel(symbol) {
-  return String(symbol || '').replace(/USDT$/, '/USDT');
+  return marketLabel(symbol);
 }
 
 export class ApiError extends Error {

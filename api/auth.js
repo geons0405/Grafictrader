@@ -9,6 +9,8 @@ import {
 import { rateLimit, sendRateLimited, peekLimit } from './_lib/rate-limit.js';
 import { clientIp, crossSite } from './_lib/validate.js';
 import { journalHandler } from './_lib/journal.js';
+import { termsAccepted } from './_lib/terms.js';
+import { vapidKeys, validSubscription, subscribe, unsubscribe, subscribeApp, unsubscribeApp, alertsFeed, readPrefs, ALERT_MARKETS, ALERT_INTERVALS } from './_lib/push.js';
 
 const notConfigured = res => res.status(503).json({
   ok: false,
@@ -30,6 +32,26 @@ export default async function handler(req, res) {
 
     // Trading journal (GET, POST, DELETE) lives here: Vercel Hobby allows 12 functions.
     if (action === 'journal') return journalHandler(req, res);
+
+    // Opportunity alerts (Web Push): the server's public key and this account's choice.
+    if (action === 'push-status' && req.method === 'GET') {
+      if (!authConfigured()) return notConfigured(res);
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
+      const keys = await vapidKeys();
+      const prefs = await readPrefs(user.email);
+      return res.status(200).json({ ok: true, publicKey: keys?.publicKey || null, markets: prefs.markets, interval: prefs.interval, devices: prefs.devices.map(d => d.endpoint), app: prefs.app === true, choices: { markets: ALERT_MARKETS, intervals: ALERT_INTERVALS } });
+    }
+
+    // The Android app asks every 15 minutes for the alerts raised since its last look.
+    if (action === 'alerts-feed' && req.method === 'GET') {
+      if (!authConfigured()) return notConfigured(res);
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
+      const since = Number(req.query?.since) || 0;
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({ ok: true, now: Date.now(), alerts: await alertsFeed(user.email, since) });
+    }
 
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
     if (crossSite(req)) return res.status(403).json({ ok: false, error: 'Pedido recusado.' });
@@ -60,6 +82,27 @@ export default async function handler(req, res) {
       if (!token) return res.status(401).json({ ok: false, error: 'A sessão terminou. Inicia sessão outra vez.' });
       setSessionCookie(res, req, token);
       return res.status(200).json({ ok: true, user: publicUser(user) });
+    }
+
+    if (action === 'push' || action === 'push-off' || action === 'push-app' || action === 'push-app-off') {
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
+      if (action === 'push-off') {
+        await unsubscribe(user.email, typeof req.body?.endpoint === 'string' ? req.body.endpoint : null);
+        return res.status(200).json({ ok: true });
+      }
+      if (action === 'push-app-off') {
+        await unsubscribeApp(user.email);
+        return res.status(200).json({ ok: true });
+      }
+      if (!termsAccepted(user)) return res.status(403).json({ ok: false, termsRequired: true, error: 'Aceita os Termos de Uso e o Aviso de Risco para ativar os alertas.' });
+      if (action === 'push-app') {
+        const prefs = await subscribeApp(user.email, req.body || {});
+        return res.status(200).json({ ok: true, markets: prefs.markets, interval: prefs.interval });
+      }
+      if (!validSubscription(req.body?.subscription)) return res.status(400).json({ ok: false, error: 'Este navegador não deu uma subscrição de alertas válida.' });
+      const prefs = await subscribe(user.email, req.body);
+      return res.status(200).json({ ok: true, markets: prefs.markets, interval: prefs.interval });
     }
 
     if (action === 'pause') {

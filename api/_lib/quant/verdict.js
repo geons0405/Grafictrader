@@ -16,6 +16,22 @@ const ASSET_ALIASES = [
 const OTHER_QUOTES = new Set(['BTC', 'XBT', 'BITCOIN', 'ETH', 'ETHEREUM', 'BNB', 'SOL', 'EUR', 'EURO', 'BRL', 'REAL', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF',
   'TRY', 'RUB', 'INR', 'AOA', 'ZAR', 'NGN', 'MXN', 'ARS', 'IDR', 'KRW', 'CNY', 'UAH', 'PLN']);
 
+// Real forex pairs and gold, read from Yahoo Finance (see sources/yahoo.js).
+const FOREX = new Set(['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD', 'EURJPY', 'GBPJPY', 'EURGBP']);
+const GOLD = new Set(['XAU', 'XAUUSD', 'GOLD', 'OURO']);
+
+function mapForex(tokens) {
+  for (let i = 0; i < tokens.length; i++) {
+    const one = tokens[i];
+    const two = one.length === 3 ? one + (tokens[i + 1] || '') : null;
+    if (FOREX.has(one)) return one;
+    if (two && FOREX.has(two)) return two;
+    // Gold only against the dollar (or with no quote written).
+    if (GOLD.has(one) && (!tokens[i + 1] || tokens[i + 1] === 'USD' || one === 'XAUUSD')) return 'XAUUSD';
+  }
+  return null;
+}
+
 /** Maps text like "BTC/USDT", "ETHUSD" or "Bitcoin" to a supported Binance symbol; null for non-dollar pairs. */
 export function mapAsset(text) {
   if (!text) return null;
@@ -23,6 +39,8 @@ export function mapAsset(text) {
   // Broker OTC prices (binary options at weekends, "Bitcoin OTC") are the broker's own
   // synthetic feed: the real market says nothing about them.
   if (tokens.includes('OTC') || tokens.some(t => t.endsWith('OTC'))) return null;
+  const forex = mapForex(tokens);
+  if (forex) return forex;
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     for (const [symbol, names] of ASSET_ALIASES) {

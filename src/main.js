@@ -12,6 +12,7 @@ import { initIntel, activateIntel, deactivateIntel } from './views/intel.js';
 import { initProfile, activateProfile } from './views/profile.js';
 import { initDiario, activateDiario } from './views/diario.js';
 import { initSheets, closeSheet } from './views/sheet.js';
+import { initAnalytics, track } from './lib/analytics.js';
 
 const PUBLIC_ROUTES = ['home', 'login', 'register'];
 const PRIVATE_ROUTES = ['live', 'foto', 'intel', 'perfil', 'diario'];
@@ -28,6 +29,8 @@ const VIEWS = {
 let currentRoute = null;
 
 $('#app').innerHTML = shellTemplate;
+initAnalytics();
+track('app_opened', { native: Boolean(window.Capacitor?.isNativePlatform?.()) });
 applyTheme();
 renderIcons();
 

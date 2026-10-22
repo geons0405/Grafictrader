@@ -1,12 +1,18 @@
+import { patternSentence } from './patterns.js';
+import { isForexMarket, formatPrice } from '../markets.js';
 // Plain-language guidance for people who have never traded.
 // Turns the engine's numbers into "what to do now and why", in informal
 // Angolan Portuguese. Pure function: same input, same text.
 
-function money(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return '—';
-  const digits = n >= 1000 ? 2 : n >= 1 ? 4 : 6;
-  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: Math.min(2, digits), maximumFractionDigits: digits });
+/** Price formatter for one market: currency pairs as rates (no "$"), gold and crypto in dollars. */
+function moneyFor(symbol) {
+  if (isForexMarket(symbol) && symbol !== 'XAUUSD') return value => formatPrice(symbol, value);
+  return value => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '—';
+    const digits = n >= 1000 ? 2 : n >= 1 ? 4 : 6;
+    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: Math.min(2, digits), maximumFractionDigits: digits });
+  };
 }
 
 const pct = v => Math.round(Math.abs(v) * 100) + '%';
@@ -68,7 +74,7 @@ function addContext(lines, dir, ctx) {
 }
 
 /** Describes what the chart really shows when the statistics find no edge. */
-function whyNoise(snap) {
+function whyNoise(snap, money) {
   const lines = [];
   const z = snap?.kalmanZ;
   const move = snap?.movePct;
@@ -87,7 +93,7 @@ function whyNoise(snap) {
   return lines;
 }
 
-function whyWait(snap, ctx, decision) {
+function whyWait(snap, ctx, decision, money) {
   const lines = [];
   const risk = ctx?.eventRisk;
   if (risk?.blocked && risk.event) {
@@ -100,7 +106,7 @@ function whyWait(snap, ctx, decision) {
       lines.push('O mercado está muito agitado agora: as velas estão bem maiores do que o normal. Entrar assim é arriscar muito para nada.');
       break;
     case 'noise':
-      lines.push(...whyNoise(snap));
+      lines.push(...whyNoise(snap, money));
       break;
     case 'trend':
       lines.push('Existe tendência, mas os sinais ainda não estão todos alinhados (força do movimento, volume e preço médio). Melhor esperar confirmação do que entrar cedo demais.');
@@ -126,9 +132,12 @@ function whyWait(snap, ctx, decision) {
  * @param {object} p.snapshot  quantSnapshot() output
  * @param {object} p.context   live context (may include eventRisk and global)
  * @param {object} p.plan      { side: 1|-1, entry, stop, target, open: bool, livePrice, unrealizedR }
+ * @param {string} p.symbol    market id, for how prices are written
  */
-export function explainPlain({ decision, snapshot, context, plan }) {
+export function explainPlain({ decision, snapshot, context, plan, patterns = [], symbol = '' }) {
+  const money = moneyFor(symbol);
   const dir = plan ? plan.side : decision?.direction || 0;
+  const candleLine = patternSentence(patterns, dir);
   const label = dir > 0 ? 'COMPRAR' : dir < 0 ? 'VENDER' : 'NÃO OPERAR';
   const tone = dir > 0 ? 'up' : dir < 0 ? 'down' : 'wait';
 
@@ -140,7 +149,7 @@ export function explainPlain({ decision, snapshot, context, plan }) {
       action: label,
       tone,
       headline: context?.eventRisk?.blocked ? 'Não operes agora: notícia forte a sair' : box ? 'Preço aos saltos: espera que saia da zona' : 'Agora não é hora de entrar',
-      why: whyWait(snapshot, context, decision),
+      why: [...whyWait(snapshot, context, decision, money), candleLine].filter(Boolean),
       steps: [
         'Não abras nenhuma operação neste momento.',
         box ? `Fica atento aos limites: ${money(snapshot.rangeHigh)} em cima e ${money(snapshot.rangeLow)} em baixo. Só um fecho fora desta zona mostra uma direção, e mesmo aí espera pela confirmação da IA aqui.` : null,
@@ -156,6 +165,7 @@ export function explainPlain({ decision, snapshot, context, plan }) {
   const up = dir > 0;
   const setup = plan?.setup || decision?.setup;
   const why = setup === 'reversion' ? whyReversion(dir, snapshot, context) : whyTrend(dir, snapshot, context);
+  if (candleLine) why.push(candleLine);
   const risk = Math.abs(plan.entry - (plan.initialStop ?? plan.stop));
   const breakEven = plan.entry + dir * risk;
   const steps = [
@@ -208,7 +218,8 @@ export function photoGuidance(verdict, vision, reading) {
   if (reading?.snapshot) {
     const decision = { direction: verdict.direction, setup: reading.signal?.setup, reasons: reading.signal?.reasons || [] };
     const plan = verdict.direction ? buildPlan(null, { direction: verdict.direction, setup: reading.signal?.setup || 'trend' }, reading.snapshot, reading.price) : null;
-    const guidance = explainPlain({ decision, snapshot: reading.snapshot, context: reading.context, plan });
+    const guidance = explainPlain({ decision, snapshot: reading.snapshot, context: reading.context, plan, patterns: reading.patterns, symbol: reading.symbol });
+    const money = moneyFor(reading.symbol);
     if (plan) guidance.levels = { entry: money(plan.entry), stop: money(plan.initialStop ?? plan.stop), target: money(plan.target) };
     if (verdict.direction === 0 && verdict.agreement === 'diverge') {
       guidance.why.unshift('A foto e o mercado ao vivo não concordam: o gráfico da imagem sugere um lado, mas os dados em tempo real apontam para o outro. Quando há esta dúvida, o mais inteligente é não arriscar.');

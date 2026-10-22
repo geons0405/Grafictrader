@@ -164,6 +164,7 @@ export async function deleteAccount(email) {
   await destroyAllSessions(email);
   if (user.mt5KeyHash) await redis(['DEL', 'grafictrader:mt5key:' + user.mt5KeyHash]);
   await redis(['DEL', 'grafictrader:journal:' + email]);
+  await redis(['DEL', 'grafictrader:push:' + email]);
   await redis(['DEL', userKey(email)]);
   return true;
 }

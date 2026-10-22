@@ -1,8 +1,10 @@
+import { track } from '../lib/analytics.js';
 import { $, $$, api, escapeHtml, fmtTime } from '../lib/dom.js';
 import { renderIcons } from '../lib/icons.js';
 import { confirmCapture } from '../lib/consent.js';
 import { frameSignature, frameDiff, shouldSend, createStabilizer } from '../lib/watch-core.js';
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor } from '@capacitor/core';
+import { Native } from '../lib/native.js';
 
 // "Minha corretora": the AI watches the user's own broker (shared screen on a
 // computer, camera on a phone, or a recorded video) and keeps its advice up
@@ -19,7 +21,6 @@ const CHANCE = { COMPRAR: 'uma oportunidade de compra', VENDER: 'uma oportunidad
 const SHORT = { COMPRAR: 'COMPRA', VENDER: 'VENDA', AGUARDAR: 'NÃO OPERAR' };
 const SIDE = { COMPRAR: 'up', VENDER: 'down', AGUARDAR: '' };
 // Android app: native screen capture of the broker app with a floating bubble.
-const Native = Capacitor.isNativePlatform() ? registerPlugin('GrafictraderNative') : null;
 
 let stream = null;
 let kind = null; // 'screen' | 'camera' | 'file' | 'native'
@@ -138,6 +139,7 @@ async function tick() {
   } catch (error) {
     if (mine !== session) return;
     if (error.data?.liveLimit) {
+      track('live_stopped', { where: kind || 'web', reason: 'limite diário' });
       stop(error.message);
     } else if (error.status === 429) {
       minGap = 20000;
@@ -147,9 +149,9 @@ async function tick() {
     } else if (error.data?.exhausted) {
       // Out of AI quota: try again less often, and say so.
       minGap = 60000;
-      showError(error.message);
+      showError(error.message, error.status, true);
     } else {
-      showError('Falhou uma análise (' + error.message + '). A tentar de novo…');
+      showError('Falhou uma análise (' + error.message + '). A tentar de novo…', error.status);
     }
   } finally {
     inflight = false;
@@ -169,7 +171,8 @@ function updateClock() {
   setStatus(`Ao vivo · ${analyses} análise(s) · última há ${ago}s · analisa quando o gráfico muda${minutesText()}`);
 }
 
-function showError(message) {
+function showError(message, status = 0, exhausted = false) {
+  if (lastError !== message) track('analysis_failed', { mode: kind || 'live', status, exhausted });
   lastError = message;
   setStatus('⚠ ' + message);
   if (!current) $('#watchHudNow').textContent = message;
@@ -414,12 +417,20 @@ function initNative() {
     try { handleResult(data); } catch { /* malformed result */ }
   });
   Native.addListener('watchStopped', ({ message } = {}) => {
-    if (kind === 'native') { kind = null; stop(message || undefined); }
+    if (kind === 'native') {
+      if (message) track('live_stopped', { where: 'android', reason: message });
+      kind = null;
+      stop(message || undefined);
+    }
   });
   // The capture keeps running when the app is reopened.
   Native.status().then(s => {
     if (s?.running && kind !== 'native') begin(null, 'native');
-    else if (s?.lastStop) setStatus('A análise parou: ' + s.lastStop);
+    else if (s?.lastStop) {
+      setStatus('A análise parou: ' + s.lastStop);
+      // Why the Android bubble stopped: the reason text is the app's own message, not user data.
+      track('live_stopped', { where: 'android', reason: s.lastStop });
+    }
   }).catch(() => {});
 }
 

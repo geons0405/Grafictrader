@@ -1,3 +1,4 @@
+import { track } from '../lib/analytics.js';
 import { $, api, escapeHtml, fmtPrice, pairLabel } from '../lib/dom.js';
 import { market } from '../lib/store.js';
 import { renderIcons } from '../lib/icons.js';
@@ -104,7 +105,7 @@ function renderResult(image, data) {
       ${vis.risks.length ? `<div class="analysis-item"><small>Riscos</small><ul class="reasons">${list(vis.risks)}</ul></div>` : ''}
       ${live ? `
       <div class="analysis-item">
-        <small>Motor ao vivo · ${escapeHtml(pairLabel(live.symbol))} ${escapeHtml(live.interval)} · ${fmtPrice(live.price)}</small>
+        <small>Motor ao vivo · ${escapeHtml(pairLabel(live.symbol))} ${escapeHtml(live.interval)} · ${fmtPrice(live.price, live.symbol)}</small>
         <p>${escapeHtml(live.signal.action)} · ${escapeHtml(live.signal.regimeLabel)}${live.context ? ' · contexto ' + Math.round((live.context.score || 0) * 100) + '%' : ''}</p>
         ${quant ? `<div class="quant-chips"><span>Hurst ${f2(quant.hurst)}</span><span>VR ${f2(quant.varianceRatio)}</span><span>Kalman z ${f2(quant.kalmanZ)}</span><span>Entropia ${f2(quant.entropy)}</span><span>VPIN ${f2(quant.vpin)}</span></div>` : ''}
       </div>` : ''}
@@ -123,7 +124,9 @@ async function analyze(image) {
   try {
     const data = await api('/api/analyze', { method: 'POST', body: { image, symbol: market.symbol, interval: market.interval } });
     showPanel(renderResult(image, data));
+    track('photo_result', { decision: data.verdict?.decision, chart: Boolean(data.chartVisible), provider: data.provider, engine: Boolean(data.live) });
   } catch (error) {
+    track('analysis_failed', { mode: 'foto', status: error.status || 0, exhausted: Boolean(error.data?.exhausted) });
     const hint = error.status === 401 ? 'Inicia sessão novamente para usar a IA.'
       : error.status === 429 ? 'Atingiste o limite de análises. Aguarda uns minutos.'
       : error.status === 503 ? 'A IA não está configurada no servidor.'

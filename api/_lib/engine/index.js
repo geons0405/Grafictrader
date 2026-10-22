@@ -1,4 +1,6 @@
-import { getBinanceCandles, getBinanceAggTrades, getBinanceOrderBook } from '../sources/binance.js';
+import { getBinanceAggTrades, getBinanceOrderBook } from '../sources/binance.js';
+import { getCandles } from '../sources/candles.js';
+import { isForexMarket, marketLabel } from '../markets.js';
 import { fetchJson } from '../sources/http.js';
 import { closedCandles } from '../mechanics/pattern-library.js';
 import { median, mad, std, mean, round, last, logReturns } from './core.js';
@@ -46,12 +48,15 @@ function emaSlopeStrength(candles) {
 }
 
 async function compute(symbol, interval) {
-  const refs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'].filter(s => s !== symbol);
+  // Forex and gold have no public trades or order book: the micro layer then reads candles only,
+  // and the cross-market checks compare against other currencies and gold instead of BTC.
+  const forex = isForexMarket(symbol);
+  const refs = (forex ? ['EURUSD', 'USDJPY', 'XAUUSD', 'GBPUSD'] : ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']).filter(s => s !== symbol).slice(0, 3);
   const [rawBase, trades, book, ...refRaw] = await Promise.all([
-    getBinanceCandles(symbol, interval, 1000),
-    getBinanceAggTrades(symbol, 1000),
-    getBinanceOrderBook(symbol, 500),
-    ...refs.map(s => getBinanceCandles(s, interval, 500).catch(() => []))
+    getCandles(symbol, interval, 1000),
+    forex ? [] : getBinanceAggTrades(symbol, 1000),
+    forex ? {} : getBinanceOrderBook(symbol, 500),
+    ...refs.map(s => getCandles(s, interval, 500).catch(() => []))
   ]);
   const [dxyRaw, derivatives] = await Promise.all([
     yahooCandles('DX-Y.NYB', interval).catch(() => []),
@@ -65,9 +70,9 @@ async function compute(symbol, interval) {
   }
   const price = rows(rawBase).at(-1)?.close ?? last(candles).close;
   const returns = logReturns(candles.map(c => c.close));
-  // Reference for cross-asset checks: BTC, or ETH when the target is BTC itself.
+  // Reference for cross-asset checks: BTC (ETH when the target is BTC itself), or EUR/USD for forex.
   const reference = rows(refRaw[0] || []);
-  const referenceName = refs[0].replace('USDT', '');
+  const referenceName = forex ? marketLabel(refs[0]) : refs[0].replace('USDT', '');
 
   // Layers 1, 2, 4–8.
   const micro = microLayer({ candles, trades, book });

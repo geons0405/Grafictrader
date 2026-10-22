@@ -1,4 +1,5 @@
 import { apiKey } from '../env.js';
+import { isForexMarket } from '../markets.js';
 export async function getFinnhubEvents(symbol = 'BTCUSDT') {
   const key = apiKey('FINNHUB_API_KEY');
   if (!key) {
@@ -9,7 +10,7 @@ export async function getFinnhubEvents(symbol = 'BTCUSDT') {
   const timer = setTimeout(() => controller.abort(), 9000);
   try {
     const url = 'https://finnhub.io/api/v1/news?' + new URLSearchParams({
-      category: 'crypto',
+      category: isForexMarket(symbol) ? 'forex' : 'crypto',
       token: key
     });
     const response = await fetch(url, { signal: controller.signal, cache: 'no-store' });

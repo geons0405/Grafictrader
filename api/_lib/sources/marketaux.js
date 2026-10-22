@@ -1,7 +1,10 @@
 import { apiKey } from '../env.js';
-/** Marketaux entity filter: crypto uses the "CC:" prefix (CC:BTC); stocks use the ticker. */
+import { isForexMarket } from '../markets.js';
+/** Marketaux filter: crypto uses the "CC:" prefix (CC:BTC); stocks use the ticker; forex a search. */
 export function marketauxFilter(symbol = 'BTCUSDT') {
   const s = String(symbol).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // Forex pairs and gold: a text search (their entity codes are not crypto or stock tickers).
+  if (isForexMarket(s)) return { search: s === 'XAUUSD' ? 'gold' : `${s.slice(0, 3)}/${s.slice(3)}` };
   if (s.endsWith('USDT')) return { symbols: `CC:${s.slice(0, -4)}`, entity_types: 'cryptocurrency' };
   if (/^[A-Z]{1,5}$/.test(s)) return { symbols: s, entity_types: 'equity' };
   return { symbols: 'CC:BTC', entity_types: 'cryptocurrency' };

@@ -1,10 +1,12 @@
 import { createChart, CandlestickSeries, createSeriesMarkers, LineStyle } from 'lightweight-charts';
 import { $, $$, api, escapeHtml, fmtPrice, fmtPriceShort, fmtPct, fmtCompact, pairLabel, fmtTime } from '../lib/dom.js';
 import { chartOptions, seriesOptions, onThemeChange, resolvedTheme } from '../lib/theme.js';
-import { market, setMarket, onMarketChange, intervalName, TV_SYMBOLS } from '../lib/store.js';
+import { market, setMarket, onMarketChange, intervalName, TV_SYMBOLS, FOREX_ASSETS, isForexSymbol } from '../lib/store.js';
 import { openSheet, closeSheet } from './sheet.js';
 
 const POLL_MS = 5000;
+// Forex and gold come from Yahoo Finance, without a live socket: polled more gently.
+const FOREX_POLL_MS = 15000;
 const MT5_POLL_MS = 3000;
 const INSTRUCTOR_MS = 15000;
 const COUNCIL_MS = 60000;
@@ -21,10 +23,11 @@ let candles = [];
 let source = '';
 let ticker = null;
 let instructor = null;
-let plan = null; // { chart: 'lw'|'tv', feed: 'binance'|'mt5'|null, symbol, mt5Symbol }
+let plan = null; // { chart: 'lw'|'tv', feed: 'binance'|'mt5'|null, symbol, mt5Symbol } ('binance' = our data: Binance crypto, Yahoo forex/gold)
 let mt5Symbols = [];
 let mt5Meta = null;
 let binanceList = null;
+let forexList = null;
 let ws = null;
 let wsRetry = 0;
 let reconnectTimer = null;
@@ -85,8 +88,11 @@ function computePlan() {
   if (market.source === 'mt5') return { chart: 'lw', feed: 'mt5', mt5Symbol: market.mt5Symbol };
   const crypto = market.tvSymbol.match(/^BINANCE:([A-Z0-9]+USDT)$/);
   if (crypto) return { chart: 'tv', feed: 'binance', symbol: crypto[1] };
+  // The broker's own prices first (MT5); otherwise forex and gold from our data.
   const mt5 = matchMt5(market.tvSymbol);
-  return mt5 ? { chart: 'tv', feed: 'mt5', mt5Symbol: mt5 } : { chart: 'tv', feed: null };
+  if (mt5) return { chart: 'tv', feed: 'mt5', mt5Symbol: mt5 };
+  const forex = normalizeName(market.tvSymbol);
+  return isForexSymbol(forex) ? { chart: 'tv', feed: 'binance', symbol: forex } : { chart: 'tv', feed: null };
 }
 
 function assetLabel() {
@@ -96,6 +102,16 @@ function assetLabel() {
 }
 
 /* ---------- chart + quote ---------- */
+
+/** Axis precision for the market on the chart: rates to 5 decimals (3 for yen pairs), small coins to 4–6. */
+function applyPrecision(price, digits = null) {
+  let precision = digits;
+  if (precision == null) {
+    const s = plan?.symbol || '';
+    precision = isForexSymbol(s) && s !== 'XAUUSD' ? (s.endsWith('JPY') ? 3 : 5) : price < 1 ? 6 : price < 10 ? 4 : 2;
+  }
+  series.applyOptions({ priceFormat: { type: 'price', precision, minMove: 1 / 10 ** precision } });
+}
 
 function upsertCandle(candle) {
   const last = candles.at(-1);
@@ -115,7 +131,7 @@ function renderQuote() {
     change.textContent = mt5Meta.bid ? `bid ${mt5Meta.bid} · ask ${mt5Meta.ask}` : '—';
     change.dataset.sign = '';
   } else if (plan?.feed === 'binance') {
-    $('#price').textContent = last ? fmtPrice(last.close) : '—';
+    $('#price').textContent = last ? fmtPrice(last.close, plan.symbol) : '—';
     const pct = Number(ticker?.change24h);
     change.textContent = Number.isFinite(pct) ? fmtPct(pct) + ' 24h' : '—';
     change.dataset.sign = Number.isFinite(pct) ? (pct >= 0 ? 'up' : 'down') : '';
@@ -124,7 +140,7 @@ function renderQuote() {
     change.textContent = 'TradingView';
     change.dataset.sign = '';
   }
-  const feedName = plan?.chart === 'tv' ? 'TradingView' : plan?.fallback ? (plan.feed === 'mt5' ? 'MT5' : 'Binance') + ' (no lugar do TradingView)' : plan?.feed === 'mt5' ? (mt5Meta?.broker || 'MetaTrader 5') : (source || 'Binance');
+  const feedName = plan?.chart === 'tv' ? 'TradingView' : plan?.fallback ? (plan.feed === 'mt5' ? 'MT5' : source || 'Binance') + ' (no lugar do TradingView)' : plan?.feed === 'mt5' ? (mt5Meta?.broker || 'MetaTrader 5') : (source || 'Binance');
   $('#chartMeta').textContent = feedName + ' · ' + intervalName(market.interval);
   if (instructor?.summary?.open && last) renderPnl(last.close);
 }
@@ -194,13 +210,13 @@ function tvFallback(reason) {
     plan = { ...plan, chart: 'lw', fallback: true };
     $('#tvChart').hidden = true;
     $('#chart').hidden = false;
-    const name = plan.feed === 'mt5' ? 'do teu MetaTrader 5' : 'da Binance';
+    const name = plan.feed === 'mt5' ? 'do teu MetaTrader 5' : isForexSymbol(plan.symbol) ? 'do Yahoo Finance' : 'da Binance';
     showNotice(`${escapeHtml(reason)} A mostrar o mesmo ativo com os dados ${name}, ao vivo.`);
     if (candles.length) chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, candles.length - 90), to: candles.length + 4 });
     renderOverlay();
     renderQuote();
   } else {
-    showNotice(`${escapeHtml(reason)} Para este ativo escolhe a fonte MetaTrader 5 (liga-o no Perfil) ou um ativo cripto.`);
+    showNotice(`${escapeHtml(reason)} Para este ativo escolhe a fonte MetaTrader 5 (liga-o no Perfil) ou um ativo cripto, forex ou ouro.`);
   }
 }
 
@@ -251,7 +267,7 @@ function renderPnl(livePrice) {
   $('#positionPnlSub').textContent = fmtPct(((livePrice - open.entry) / open.entry) * 100 * dir) + ' ao vivo';
 }
 
-const fmtLevel = v => (plan?.feed === 'mt5' && mt5Meta?.digits != null ? Number(v).toFixed(mt5Meta.digits) : fmtPriceShort(v));
+const fmtLevel = v => (plan?.feed === 'mt5' && mt5Meta?.digits != null ? Number(v).toFixed(mt5Meta.digits) : fmtPriceShort(v, plan?.symbol));
 
 function renderInstructor() {
   const data = instructor;
@@ -377,8 +393,8 @@ async function loadCouncil() {
   clearTimeout(councilTimer);
   if (!active || !councilView) return;
   if (plan?.feed !== 'binance') {
-    $('#councilTitle').textContent = 'O conselho analisa mercados Binance';
-    $('#councilSub').textContent = 'Escolhe a fonte Binance para ver os 7 analistas e o veredito.';
+    $('#councilTitle').textContent = 'O conselho analisa cripto, forex e ouro';
+    $('#councilSub').textContent = 'Escolhe a fonte Cripto + Forex (ou um destes ativos no TradingView) para ver os analistas e o veredito.';
     return;
   }
   const token = loadToken;
@@ -449,7 +465,7 @@ function scheduleBinancePoll() {
       if (token === loadToken) setConnection('Instável · a tentar novamente');
     }
     scheduleBinancePoll();
-  }, POLL_MS);
+  }, isForexSymbol(plan?.symbol) ? FOREX_POLL_MS : POLL_MS);
 }
 
 async function startBinance(token) {
@@ -458,6 +474,7 @@ async function startBinance(token) {
   candles = data.candles.map(k => ({ time: k.time, open: +k.open, high: +k.high, low: +k.low, close: +k.close, volume: +k.volume || 0 }));
   ticker = data.ticker;
   source = data.source || 'Binance';
+  applyPrecision(candles.at(-1)?.close ?? 0);
   series.setData(candles);
   chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, candles.length - 90), to: candles.length + 4 });
   renderQuote();
@@ -489,6 +506,7 @@ async function pollMt5(first = false) {
     mt5Meta = data;
     const rows = data.candles.map(c => ({ ...c }));
     if (first || !candles.length) {
+      applyPrecision(rows.at(-1)?.close ?? 0, data.digits ?? null);
       candles = rows;
       series.setData(candles);
       chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, candles.length - 90), to: candles.length + 4 });
@@ -561,7 +579,7 @@ async function load() {
     else if (plan.feed === 'mt5') await startMt5(token);
     else {
       setConnection('TradingView', true);
-      renderNoGuidance('Neste ativo a IA precisa dos preços da tua corretora: liga o MetaTrader 5 no Perfil e abre o mesmo ativo no MT5. Para cripto, a IA usa os dados da Binance.');
+      renderNoGuidance('Neste ativo a IA precisa dos preços da tua corretora: liga o MetaTrader 5 no Perfil e abre o mesmo ativo no MT5. Para cripto, forex e ouro, a IA usa dados reais (Binance e Yahoo Finance).');
     }
   } catch (error) {
     if (token !== loadToken) return;
@@ -594,12 +612,25 @@ async function renderAssetList() {
   const list = $('#assetList');
   if (market.source === 'binance') {
     if (!binanceList) {
-      list.innerHTML = '<p class="muted-line">A carregar os mercados da Binance…</p>';
-      try { binanceList = (await api('/api/market?list=1')).markets; } catch { binanceList = []; }
+      list.innerHTML = '<p class="muted-line">A carregar os mercados…</p>';
+      try {
+        const data = await api('/api/market?list=1');
+        binanceList = data.markets || [];
+        forexList = data.forex || [];
+      } catch { binanceList = []; }
     }
+    const quote = m => m && Number.isFinite(m.price)
+      ? `<span class="asset-meta"><b>${fmtPrice(m.price, m.symbol)}</b><small data-sign="${m.change24h >= 0 ? 'up' : 'down'}">${fmtPct(m.change24h)}</small></span>`
+      : '';
+    const fx = FOREX_ASSETS.filter(a => !q || a.symbol.includes(q.replace(/[^A-Z0-9]/g, '')) || a.name.toUpperCase().includes(q) || a.short.includes(q));
     const rows = binanceList.filter(m => !q || m.symbol.includes(q)).slice(0, 120);
-    list.innerHTML = rows.map(m => item(m.symbol, m.base + '/USDT', 'Vol. 24h ' + fmtCompact(m.volume24h),
-      `<span class="asset-meta"><b>${fmtPrice(m.price)}</b><small data-sign="${m.change24h >= 0 ? 'up' : 'down'}">${fmtPct(m.change24h)}</small></span>`)).join('')
+    const fxHtml = fx.length
+      ? '<small class="asset-group">Forex e ouro · Yahoo Finance</small>' + fx.map(a => item(a.symbol, a.short === 'OURO' ? 'Ouro · XAU/USD' : a.short, a.name, quote(forexList?.find(m => m.symbol === a.symbol)))).join('')
+      : '';
+    const cryptoHtml = rows.length
+      ? '<small class="asset-group">Cripto · Binance</small>' + rows.map(m => item(m.symbol, m.base + '/USDT', 'Vol. 24h ' + fmtCompact(m.volume24h), quote(m))).join('')
+      : '';
+    list.innerHTML = fxHtml + cryptoHtml
       || (/^[A-Z0-9]{2,16}$/.test(q) ? item(q + 'USDT', q + '/USDT', 'Abrir este par') : '<p class="muted-line">Nenhum mercado encontrado.</p>');
   } else if (market.source === 'tradingview') {
     const rows = TV_SYMBOLS.filter(s => !q || s.symbol.includes(q) || s.name.toUpperCase().includes(q));
@@ -634,7 +665,7 @@ async function renderAssetList() {
 export function initLive() {
   $('#assetPicker').onclick = () => {
     $('#assetSearch').value = '';
-    $('#assetSheetTitle').textContent = market.source === 'binance' ? 'Mercados Binance' : market.source === 'tradingview' ? 'Ativos TradingView' : 'Símbolos do teu MT5';
+    $('#assetSheetTitle').textContent = market.source === 'binance' ? 'Mercados: cripto, forex e ouro' : market.source === 'tradingview' ? 'Ativos TradingView' : 'Símbolos do teu MT5';
     openSheet('#assetSheet');
     renderAssetList();
   };
