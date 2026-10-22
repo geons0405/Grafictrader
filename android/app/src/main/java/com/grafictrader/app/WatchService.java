@@ -86,6 +86,9 @@ public class WatchService extends Service {
 
     private static volatile Listener listener;
     private static volatile boolean running;
+    // The server ended the session: no more frames, the bubble shows why for a moment.
+    private volatile boolean ending;
+    private volatile String endingMessage;
 
     static void setListener(Listener value) {
         listener = value;
@@ -177,6 +180,8 @@ public class WatchService extends Service {
         remember(true, null);
         startedAt = System.currentTimeMillis();
         lastManageAction = null;
+        ending = false;
+        endingMessage = null;
         projection.registerCallback(new MediaProjection.Callback() {
             @Override
             public void onStop() {
@@ -201,7 +206,7 @@ public class WatchService extends Service {
         };
         registerComponentCallbacks(configCallbacks);
 
-        bubble = new Bubble(this, this::openApp, () -> finish(null));
+        bubble = new Bubble(this, this::openApp, () -> finish(endingMessage));
         try {
             bubble.show();
         } catch (Exception error) {
@@ -395,6 +400,7 @@ public class WatchService extends Service {
     }
 
     private void step() {
+        if (ending) return;
         long now = System.currentTimeMillis();
         if (now - startedAt > SESSION_LIMIT_MS) {
             main.post(() -> finish("Sessão terminada ao fim de 45 minutos para poupar análises."));
@@ -513,7 +519,7 @@ public class WatchService extends Service {
 
     private void handleResponse(int status, String text) {
         inflight = false;
-        if (!running) return;
+        if (!running || ending) return;
         JSONObject data;
         try {
             data = new JSONObject(text);
@@ -521,7 +527,7 @@ public class WatchService extends Service {
             data = new JSONObject();
         }
         if (status == 429 && data.optBoolean("liveLimit")) {
-            finish(data.optString("error", "Usaste os minutos de análise ao vivo de hoje. Voltam amanhã."));
+            finishVisibly(data.optString("error", "Usaste os minutos de análise ao vivo de hoje. Voltam amanhã."));
             return;
         }
         if (status == 429) {
@@ -530,20 +536,20 @@ public class WatchService extends Service {
             return;
         }
         if (status == 401) {
-            finish("Inicia sessão na app Grafictrader para usar a análise ao vivo.");
+            finishVisibly("Inicia sessão na app Grafictrader para usar a análise ao vivo.");
             return;
         }
         if (status == 423 && data.optBoolean("paused")) {
-            finish(data.optString("error", "Estás em pausa: as análises voltam quando a pausa terminar."));
+            finishVisibly(data.optString("error", "Estás em pausa: as análises voltam quando a pausa terminar."));
             return;
         }
         if (status == 403 && data.optBoolean("termsRequired")) {
-            finish(data.optString("error", "Aceita os Termos de Uso e o Aviso de Risco na app Grafictrader para continuar."));
+            finishVisibly(data.optString("error", "Aceita os Termos de Uso e o Aviso de Risco na app Grafictrader para continuar."));
             return;
         }
         if (status >= 400 || !data.optBoolean("ok")) {
             if (status == 503 || data.optBoolean("setupRequired")) {
-                finish(data.optString("error", "A análise por IA não está configurada no servidor."));
+                finishVisibly(data.optString("error", "A análise por IA não está configurada no servidor."));
             } else if (data.optBoolean("exhausted")) {
                 // Out of AI quota: say why, and try less often.
                 minGap = SLOW_GAP_MS;
@@ -748,6 +754,25 @@ public class WatchService extends Service {
     }
 
     /* ---------- teardown ---------- */
+
+    /**
+     * The server ended the session (minutes used up, signed out, pause…): stop sending frames
+     * but leave the bubble on screen with the reason for 20 seconds, so it does not just vanish.
+     */
+    private void finishVisibly(String message) {
+        if (ending) return;
+        ending = true;
+        endingMessage = message;
+        Bubble shown = bubble;
+        if (shown == null) {
+            finish(message);
+            return;
+        }
+        shown.update("ANÁLISE PAROU", "", "", message + "\nToca em Parar análise para fechar.");
+        NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        manager.notify(NOTIFICATION_ID, notification(message));
+        main.postDelayed(() -> finish(message), 20_000);
+    }
 
     private void finish(String message) {
         boolean wasRunning = running;

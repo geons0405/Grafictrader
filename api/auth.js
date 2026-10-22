@@ -6,7 +6,7 @@ import {
   rememberPlace, knownPlace,
   startPause, pausedUntil, PAUSE_DAYS
 } from './_lib/auth.js';
-import { rateLimit, sendRateLimited, peekLimit } from './_lib/rate-limit.js';
+import { rateLimit, sendRateLimited, peekLimit, liveMinutes, liveMinutesFor } from './_lib/rate-limit.js';
 import { clientIp, crossSite } from './_lib/validate.js';
 import { journalHandler } from './_lib/journal.js';
 import { termsAccepted } from './_lib/terms.js';
@@ -34,6 +34,17 @@ export default async function handler(req, res) {
     if (action === 'journal') return journalHandler(req, res);
 
     // Opportunity alerts (Web Push): the server's public key and this account's choice.
+    // Minutes of live analysis left today, checked before the app opens the bubble.
+    if (action === 'live-status' && req.method === 'GET') {
+      if (!authConfigured()) return notConfigured(res);
+      const user = await getSessionUser(req);
+      if (!user) return res.status(401).json({ ok: false, error: 'Inicia sessão primeiro.' });
+      const limit = liveMinutesFor(user);
+      const live = await liveMinutes(user.email, limit);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({ ok: true, limit: limit > 0 ? limit : null, left: live.left, plan: user.plan || 'free' });
+    }
+
     if (action === 'push-status' && req.method === 'GET') {
       if (!authConfigured()) return notConfigured(res);
       const user = await getSessionUser(req);
