@@ -5,7 +5,8 @@ import { applyTheme, toggleTheme, getThemePreference, onThemeChange } from './li
 import { loadSession, currentUser, sessionMode, login, register, startLocalProfile, logout, acceptTerms, isOffline } from './lib/session.js';
 import { TERMS_VERSION, needsTerms } from './lib/terms.js';
 import { shellTemplate } from './views/shell.js';
-import { initLiveScreen, activateLiveScreen, deactivateLiveScreen } from './views/live-screen.js';
+import { initLiveScreen, activateLiveScreen, deactivateLiveScreen, setLiveMode } from './views/live-screen.js';
+import { setMarket } from './lib/store.js';
 import { stop as stopWatch } from './views/watch.js';
 import { initFoto, deactivateFoto } from './views/foto.js';
 import { initIntel, activateIntel, deactivateIntel } from './views/intel.js';
@@ -82,7 +83,24 @@ function renderAuthMode() {
   $('[data-register-cta]').textContent = local ? 'Continuar' : 'Criar conta';
 }
 
+// "#mercado" opens the charts and AI robot inside LIVE; an alert adds the market
+// (?m=EURUSD&i=1h) so the tap lands on that chart.
+function openMarketView() {
+  const params = new URLSearchParams(location.search);
+  const symbol = String(params.get('m') || '').toUpperCase();
+  const interval = params.get('i');
+  if (/^[A-Z0-9]{3,20}$/.test(symbol)) setMarket({ source: 'binance', symbol, ...(['1m', '5m', '15m', '1h', '4h'].includes(interval) ? { interval } : {}) });
+  if (location.search) history.replaceState(null, '', location.pathname + location.hash);
+  setLiveMode('market');
+}
+
 function show(route) {
+  if (route === 'mercado') {
+    if (currentUser()) openMarketView();
+    route = 'live';
+  } else if (route === 'live' && currentRoute !== 'live') {
+    setLiveMode('broker');
+  }
   let target = [...PUBLIC_ROUTES, ...PRIVATE_ROUTES].includes(route) ? route : 'home';
   const user = currentUser();
   if (PRIVATE_ROUTES.includes(target) && !user) target = 'login';

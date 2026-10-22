@@ -1128,7 +1128,16 @@ button.asset-pill svg.lucide { position: static; }
    LIVE · "Minha corretora" (AI watching the user's broker)
    ========================================================= */
 .live-top { display: flex; align-items: center; gap: 10px; }
-.live-top .live-mode { flex: 1; }
+.live-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 50px; padding: 0 4px; }
+.live-title[hidden] { display: none; }
+.live-title > b { font-size: 20px; font-weight: 750; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.back-btn { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--card); color: var(--text); border: 0; box-shadow: var(--shadow); }
+.back-btn svg.lucide { width: 20px; height: 20px; }
+.dev-tag { flex: none; display: inline-block; font-style: normal; padding: 3px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.02em; vertical-align: middle; background: color-mix(in srgb, #e0a100 18%, var(--card)); color: #c48a00; }
+.menu .dev-tag { margin-left: 4px; justify-self: start; }
+.dev-note { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; font-size: 13px; line-height: 1.45; background: color-mix(in srgb, #e0a100 12%, var(--card)); color: var(--text-2); }
+.dev-note b { color: var(--text); }
+.dev-note svg.lucide { flex: none; width: 18px; height: 18px; color: #c48a00; margin-top: 1px; }
 .live-top .round-btn { width: 50px; height: 50px; }
 .live-mode button { font-size: 13px; }
 .live-pane { display: grid; gap: 14px; }

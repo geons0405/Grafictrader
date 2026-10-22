@@ -113,7 +113,7 @@ export function alertMessage(symbol, interval, direction, confidence) {
   return {
     title: direction > 0 ? 'Boa oportunidade de compra' : 'Boa oportunidade de venda',
     body: `${marketName(symbol)} · ${INTERVAL_NAMES[interval] || interval}: a IA vê uma boa oportunidade de ${direction > 0 ? 'compra' : 'venda'} (${confidence}%). Toca para ver a análise. Não é aconselhamento financeiro.`,
-    url: '/#live',
+    url: `/?m=${symbol}&i=${interval}#mercado`,
     tag: `${symbol}-${interval}`
   };
 }
