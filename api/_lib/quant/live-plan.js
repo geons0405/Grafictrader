@@ -47,7 +47,8 @@ export function trendState(candles) {
   const swingLow = Math.min(...recent.map(c => c.low));
   const run = trend ? ((last.close - fast) * trend) / atr : 0;
   const lastMove = trend ? ((last.close - last.open) * trend) / atr : 0;
-  const stretched = Boolean(trend) && (run > 1.5 || lastMove > 2);
+  // Only past the average on the trend's side: the pullback zone must be behind the price.
+  const stretched = Boolean(trend) && run > 0 && (run > 1.5 || lastMove > 2);
   const zone = fast;
   const stop = trend > 0 ? Math.min(swingLow, zone - atr) - 0.2 * atr : trend < 0 ? Math.max(swingHigh, zone + atr) + 0.2 * atr : null;
   return { trend, stretched, atr, price: last.close, ema20: fast, ema50: slow, swingHigh, swingLow, zone, stop };

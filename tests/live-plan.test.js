@@ -96,3 +96,17 @@ test('no pullback entry is offered when the market says stay out; a stretched si
   assert.equal(sell.levels.entry, money(state.zone), 'entry at the pullback zone, not the current price');
   assert.match(sell.steps[0], new RegExp(money(state.zone).replace('.', '\\.')));
 });
+
+test('a big candle on the wrong side of the average is not "stretched"', () => {
+  const rows = fallingThenSpike();
+  // Upside version: mirror the prices around 2.25 so the market rises, then ends with a big up candle below its average.
+  const up = rows.map(c => ({ ...c, open: 2.25 - c.open, close: 2.25 - c.close, high: 2.25 - c.low, low: 2.25 - c.high }));
+  const last = up.at(-1);
+  const state0 = trendState(up.slice(0, -1));
+  // A strong up candle that still closes just under the 20 average (and above the 50).
+  const close = state0.ema20 - 0.00008;
+  up[up.length - 1] = { ...last, open: close - 0.0004, close, high: close + 0.00002, low: close - 0.00042 };
+  const state = trendState(up);
+  assert.equal(state.trend, 1);
+  assert.equal(state.stretched, false);
+});

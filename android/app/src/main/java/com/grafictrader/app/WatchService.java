@@ -176,6 +176,7 @@ public class WatchService extends Service {
         running = true;
         remember(true, null);
         startedAt = System.currentTimeMillis();
+        lastManageAction = null;
         projection.registerCallback(new MediaProjection.Callback() {
             @Override
             public void onStop() {
