@@ -1,4 +1,5 @@
 import { quantSnapshot, decide, regimeLabel } from './signal.js';
+import { isForexMarket, formatPrice } from '../markets.js';
 
 // The AI instructor trades a simulated account candle by candle.
 // Entries happen at the close of the signal candle; exits are checked on
@@ -17,11 +18,16 @@ const WARMUP = 200;
 const MAX_TRADES = 200;
 const MAX_LOG = 120;
 const MAX_EQUITY_POINTS = 600;
-// Round-trip trading cost as a fraction of price (0.08% ≈ futures taker fees
-// in and out plus a little spread). Override with INSTRUCTOR_COST_PCT.
-export function tradeCost() {
+// Round-trip trading cost as a fraction of price. Crypto: 0.08% (futures taker
+// fees in and out plus a little spread). Forex has no fee, only the spread: about
+// 1.3 pips on the main pairs (0.012%), a little more on the others and on gold.
+// INSTRUCTOR_COST_PCT overrides it for every market.
+const FOREX_COST_PCT = { EURUSD: 0.012, GBPUSD: 0.012, USDJPY: 0.012, XAUUSD: 0.025 };
+export function tradeCost(symbol = '') {
   const pct = Number(process.env.INSTRUCTOR_COST_PCT);
-  return (Number.isFinite(pct) && pct >= 0 ? pct : 0.08) / 100;
+  if (Number.isFinite(pct) && pct >= 0) return pct / 100;
+  if (isForexMarket(symbol)) return (FOREX_COST_PCT[symbol] ?? 0.02) / 100;
+  return 0.08 / 100;
 }
 const MAX_COST_R = 0.25;
 
@@ -50,7 +56,9 @@ function pushLog(state, time, kind, text) {
   if (state.log.length > MAX_LOG) state.log.splice(0, state.log.length - MAX_LOG);
 }
 
-const fmt = n => (Math.abs(n) >= 100 ? n.toFixed(2) : Math.abs(n) >= 1 ? n.toFixed(3) : n.toFixed(5));
+// Prices in the log: currency pairs to 5 decimals (3 for yen pairs), as on the broker's screen.
+const fmt = (n, symbol = '') => (isForexMarket(symbol) && symbol !== 'XAUUSD' ? formatPrice(symbol, n)
+  : Math.abs(n) >= 100 ? n.toFixed(2) : Math.abs(n) >= 1 ? n.toFixed(3) : n.toFixed(5));
 
 function closePosition(state, candle, exitPrice, why) {
   const p = state.position;
@@ -81,7 +89,7 @@ function closePosition(state, candle, exitPrice, why) {
   if (state.trades.length > MAX_TRADES) state.trades.splice(0, state.trades.length - MAX_TRADES);
   state.position = null;
   pushLog(state, candle.time, trade.outcome === 'win' ? 'win' : trade.outcome === 'loss' ? 'loss' : 'info',
-    `FECHOU ${trade.side === 'BUY' ? 'COMPRA' : 'VENDA'} @ ${fmt(exitPrice)} · ${why} · ${trade.r >= 0 ? '+' : ''}${trade.r}R (${trade.pnl >= 0 ? '+' : ''}$${trade.pnl.toFixed(2)})`);
+    `FECHOU ${trade.side === 'BUY' ? 'COMPRA' : 'VENDA'} @ ${fmt(exitPrice, state.symbol)} · ${why} · ${trade.r >= 0 ? '+' : ''}${trade.r}R (${trade.pnl >= 0 ? '+' : ''}$${trade.pnl.toFixed(2)})`);
 }
 
 function manage(state, candle) {
@@ -150,7 +158,7 @@ export function advance(state, history, { context = null } = {}) {
       reasons: decision.reasons
     };
 
-    const cost = tradeCost();
+    const cost = tradeCost(state.symbol);
     const costR = snap?.atr > 0 ? (candle.close * cost) / (STOP_ATR * snap.atr) : Infinity;
     if (!state.position && decision.direction !== 0 && snap?.atr > 0 && costR > MAX_COST_R) {
       pushLog(state, candle.time, 'info', `Sinal de ${decision.direction > 0 ? 'compra' : 'venda'} ignorado: os custos comeriam ${Math.round(costR * 100)}% do risco (velas pequenas demais).`);
@@ -172,7 +180,7 @@ export function advance(state, history, { context = null } = {}) {
         reasons: decision.reasons
       };
       pushLog(state, candle.time, decision.direction > 0 ? 'buy' : 'sell',
-        `${decision.direction > 0 ? 'COMPROU' : 'VENDEU'} @ ${fmt(entry)} · stop ${fmt(stop)} · alvo ${fmt(target)} · ${regimeLabel(snap.regime)} · confiança ${decision.confidence}%`);
+        `${decision.direction > 0 ? 'COMPROU' : 'VENDEU'} @ ${fmt(entry, state.symbol)} · stop ${fmt(stop, state.symbol)} · alvo ${fmt(target, state.symbol)} · ${regimeLabel(snap.regime)} · confiança ${decision.confidence}%`);
     }
 
     state.equity.push({ time: candle.time, value: Number(state.balance.toFixed(2)) });
@@ -242,7 +250,7 @@ export function summarize(state, livePrice = null) {
     totalR: Number(totalR.toFixed(2)),
     expectancyR: trades.length ? Number((totalR / trades.length).toFixed(2)) : null,
     maxDrawdownPct: Number((maxDrawdown * 100).toFixed(2)),
-    costPct: Number((tradeCost() * 100).toFixed(3)),
+    costPct: Number((tradeCost(state.symbol) * 100).toFixed(3)),
     streak,
     cycle: state.cycle,
     startedAt: state.startedAt,

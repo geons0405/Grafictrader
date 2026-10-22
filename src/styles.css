@@ -1141,6 +1141,12 @@ button.asset-pill svg.lucide { position: static; }
 .live-top .round-btn { width: 50px; height: 50px; }
 .live-mode button { font-size: 13px; }
 .live-pane { display: grid; gap: 14px; }
+.guide-manage { padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 8%, var(--card)); display: grid; gap: 4px; }
+.guide-manage[hidden] { display: none; }
+.guide-manage small { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.guide-manage p { font-size: 14px; line-height: 1.45; }
+.guide-manage[data-action="fechar"] { background: color-mix(in srgb, var(--down) 16%, var(--card)); }
+.guide-manage[data-action="proteger"] { background: color-mix(in srgb, var(--up) 14%, var(--card)); }
 .live-pane[hidden] { display: none !important; }
 
 .watch-card { display: grid; gap: 12px; padding: 10px; }

@@ -292,6 +292,8 @@ function handleResult(data) {
   updatePip();
 }
 
+let lastManageAction = null;
+
 function render(data, step, latest) {
   const g = data.guidance || {};
   const v = data.verdict;
@@ -328,6 +330,19 @@ function render(data, step, latest) {
       ? `Não operes ainda: a IA vê ${CHANCE[v.decision] || 'um possível sinal'} e confirma-a na próxima leitura.`
       : g.now || '—';
   $('#watchHudNow').textContent = $('#watchNow').textContent;
+  // The trade already open on screen, from the newest reading: where the stop goes, when to close.
+  const manage = step.noChart ? null : latest.guidance?.manage;
+  $('#watchManage').hidden = !manage;
+  if (manage) {
+    $('#watchManage').dataset.action = manage.action || '';
+    $('#watchManageText').textContent = manage.text;
+  }
+  if (manage?.action && manage.action !== lastManageAction && ['fechar', 'proteger'].includes(manage.action) && prefs.voice && 'speechSynthesis' in window) {
+    const utterance = new SpeechSynthesisUtterance(manage.text);
+    utterance.lang = 'pt-PT';
+    speechSynthesis.speak(utterance);
+  }
+  lastManageAction = manage?.action || null;
   $('#watchWhy').innerHTML = (g.why || []).map(p => `<p>${escapeHtml(p)}</p>`).join('');
   $('#watchSteps').innerHTML = (g.steps || []).map(p => `<li>${escapeHtml(p)}</li>`).join('');
   $('#watchChange').textContent = latest.change || '';
@@ -367,7 +382,8 @@ function pipMarkup() {
   const d = noChart ? 'AGUARDAR' : stabilizer.shown || current.verdict.decision;
   return `<div class="pip-badge" data-side="${SIDE[d] || ''}">${noChart ? 'SEM GRÁFICO' : LABEL[d] || d}</div>
     <p class="pip-asset">${escapeHtml(current.vision.asset || '')} ${escapeHtml(current.vision.timeframe || '')} · ${current.verdict.confidence}%</p>
-    <p class="pip-now">${escapeHtml(current.guidance?.now || '')}</p>`;
+    <p class="pip-now">${escapeHtml(current.guidance?.now || '')}</p>
+    ${!noChart && current.guidance?.manage ? `<p class="pip-now"><b>A tua operação:</b> ${escapeHtml(current.guidance.manage.text)}</p>` : ''}`;
 }
 
 function updatePip() {

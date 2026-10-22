@@ -1,11 +1,12 @@
 import { patternSentence } from './patterns.js';
 import { isForexMarket, formatPrice } from '../markets.js';
+import { manageOpen, pullbackAdvice } from './live-plan.js';
 // Plain-language guidance for people who have never traded.
 // Turns the engine's numbers into "what to do now and why", in informal
 // Angolan Portuguese. Pure function: same input, same text.
 
 /** Price formatter for one market: currency pairs as rates (no "$"), gold and crypto in dollars. */
-function moneyFor(symbol) {
+export function moneyFor(symbol) {
   if (isForexMarket(symbol) && symbol !== 'XAUUSD') return value => formatPrice(symbol, value);
   return value => {
     const n = Number(value);
@@ -225,7 +226,7 @@ export function photoGuidance(verdict, vision, reading) {
       guidance.why.unshift('A foto e o mercado ao vivo não concordam: o gráfico da imagem sugere um lado, mas os dados em tempo real apontam para o outro. Quando há esta dúvida, o mais inteligente é não arriscar.');
     }
     if (vision.plain) guidance.why.push('Sobre a imagem: ' + vision.plain);
-    return guidance;
+    return withLivePlan(guidance, verdict, vision, reading.trendState, money);
   }
   const dir = verdict.direction;
   return {
@@ -241,6 +242,55 @@ export function photoGuidance(verdict, vision, reading) {
           'Arrisca no máximo 1% da tua conta nesta operação.'
         ]
       : ['Não abras operação agora.', 'Tira outra foto daqui a umas velas ou quando o gráfico mostrar uma direção clara.'],
-    now: dir ? 'Segue os passos acima e respeita o stop.' : 'Fica de fora por agora.'
+    now: dir ? 'Segue os passos acima e respeita o stop.' : vision.waitFor ? `Fica de fora por agora. Espera: ${vision.waitFor}` : `${firstSentence(verdict.reasons[0] || vision.summary)} Fica de fora por agora.`.trim(),
+    manage: visionManage(vision)
   };
+}
+
+const firstSentence = text => {
+  const s = String(text || '').trim();
+  if (!s) return '';
+  const cut = s.search(/[.!?](\s|$)/);
+  return (cut > 0 ? s.slice(0, cut + 1) : s).slice(0, 160);
+};
+
+/** The model's own advice for a trade open on screen, when there are no live candles to compute it. */
+function visionManage(vision) {
+  if (!vision.position) return null;
+  const word = vision.position.side > 0 ? 'COMPRA' : 'VENDA';
+  const at = vision.position.price ? ` a ${vision.position.price}` : '';
+  const advice = vision.manage || (vision.stop ? `Stop sugerido: ${vision.stop}.` : 'Põe já um stop loss: sem ele uma perda pode crescer sem limite.');
+  return { action: 'manter', stop: null, target: null, text: `Tens uma ${word}${at}. ${advice}` };
+}
+
+/**
+ * What the live bubble says beyond buy/sell/wait: why it waits and where a better entry
+ * would be when the trend is clear but the price ran too far, and how to manage a trade
+ * already open on screen (stop, break-even, close).
+ */
+function withLivePlan(guidance, verdict, vision, state, money) {
+  const pullback = pullbackAdvice(state, money);
+  if (!verdict.direction) {
+    if (pullback) {
+      guidance.now = pullback.text;
+      guidance.wait = { side: pullback.side, zone: money(pullback.zone), stop: money(pullback.stop) };
+    } else if (vision.waitFor) {
+      guidance.now = `Fica de fora por agora. Espera: ${vision.waitFor}`;
+    } else if (verdict.agreement === 'diverge') {
+      guidance.now = 'A imagem e os dados ao vivo apontam para lados diferentes. Fica de fora até concordarem.';
+    } else {
+      const why = firstSentence(guidance.why[0]);
+      guidance.now = why ? `${why} Fica de fora e espera pelo próximo sinal.` : guidance.now;
+    }
+  } else if (pullback && pullback.side === verdict.direction) {
+    const up = verdict.direction > 0;
+    guidance.now = `Boa oportunidade de ${up ? 'compra' : 'venda'}, mas não persigas o preço: o ideal é ${up ? 'comprar num recuo' : 'vender num repique'} até perto de ${money(pullback.zone)}.`;
+  }
+  guidance.manage = vision.position ? manageOpen(vision.position, state, verdict.direction, money) || visionManage(vision) : null;
+  if (guidance.manage) {
+    for (const key of ['stop', 'target']) {
+      if (Number.isFinite(guidance.manage[key])) guidance.manage[key] = money(guidance.manage[key]);
+    }
+  }
+  return guidance;
 }

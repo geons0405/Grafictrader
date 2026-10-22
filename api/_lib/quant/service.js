@@ -3,6 +3,7 @@ import { getBinanceAggTrades, getBinanceOrderBook } from '../sources/binance.js'
 import { redis, redisConfigured } from '../redis.js';
 import { closedCandles } from '../mechanics/pattern-library.js';
 import { lastCandlePatterns } from './patterns.js';
+import { trendState } from './live-plan.js';
 import { getCandles } from '../sources/candles.js';
 import { isForexMarket } from '../markets.js';
 import { quantSnapshot, decide, regimeLabel } from './signal.js';
@@ -201,5 +202,5 @@ export async function marketReading(symbol, interval, { withContext = true } = {
   const price = raw.at(-1)?.close ?? null;
   const patterns = lastCandlePatterns(closed);
   const guidance = explainPlain({ decision: signal, snapshot, context: live.context, plan: buildPlan(null, signal, snapshot, price), patterns, symbol });
-  return { symbol, snapshot, signal: { ...signal, regimeLabel: regimeLabel(snapshot?.regime) }, context: live.context, price, guidance, patterns };
+  return { symbol, snapshot, signal: { ...signal, regimeLabel: regimeLabel(snapshot?.regime) }, context: live.context, price, guidance, patterns, trendState: trendState(closed) };
 }

@@ -14,6 +14,7 @@ import { photoGuidance } from './_lib/quant/explain.js';
 const WATCH_PROMPT = `És um analista técnico a acompanhar AO VIVO o ecrã da corretora de um utilizador.
 Esta imagem é um frame de uma sessão contínua. Lê só o que é visível: o ativo, o timeframe, o preço atual, as últimas velas, a estrutura (topos e fundos), suportes e resistências, padrões e indicadores visíveis.
 Foca-te no que está a acontecer AGORA, nas velas mais recentes à direita.
+Se o preço acabou de fazer um movimento muito forte (velas grandes seguidas), entrar agora é correr atrás do preço: prefere AGUARDAR e diz em "esperarPor" onde um repique/recuo daria uma entrada melhor.
 Decide a orientação para a próxima fase:
 - "COMPRAR" se a estrutura e o momentum favorecem subida;
 - "VENDER" se favorecem descida;
@@ -40,6 +41,9 @@ Responde APENAS com JSON válido:
   "indicadores": "o que os indicadores visíveis mostram",
   "motivos": ["até 3 motivos objetivos"],
   "riscos": ["até 2 riscos"],
+  "posicaoAberta": {"lado": "COMPRA" | "VENDA", "preco": número ou null} ou null (só se o ecrã mostrar uma operação já aberta: linha ou etiqueta tipo "SELL 0.01" / "BUY 0.01", lista de posições ou ordem ativa da opção binária),
+  "esperarPor": "se AGUARDAR mas existe tendência: o preço ou a condição para entrar melhor (ex.: repique até 1.1235 para vender); senão null",
+  "gestaoPosicao": "se há operação aberta: onde pôr o stop, quando mover o stop para a entrada e quando fechar, com preços; senão null",
   "mudanca": "o que mudou desde a leitura anterior, numa frase",
   "resumo": "uma frase",
   "explicacaoSimples": "2 a 4 frases informais para quem nunca operou: o que fazer agora e porquê",

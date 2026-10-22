@@ -70,6 +70,18 @@ export function mapTimeframe(text) {
 
 const VISION_ACTIONS = { COMPRAR: 1, COMPRA: 1, BUY: 1, VENDER: -1, VENDA: -1, SELL: -1 };
 
+const presentText = v => typeof v === 'string' && v.trim() !== '' && !['null', 'nenhum', 'nenhuma', 'n/a'].includes(v.trim().toLowerCase());
+
+/** The trade already open on screen, as the model read it: { side: 1 | -1, price } or null. */
+function readPosition(p) {
+  if (!p || typeof p !== 'object') return null;
+  const word = String(p.lado || p.side || '').toUpperCase();
+  const side = /COMPRA|BUY|CALL|ACIMA/.test(word) ? 1 : /VENDA|SELL|PUT|ABAIXO/.test(word) ? -1 : 0;
+  if (!side) return null;
+  const price = Number(p.preco ?? p.price);
+  return { side, price: Number.isFinite(price) && price > 0 ? price : null };
+}
+
 export function normalizeVision(raw = {}) {
   const action = String(raw.decisao || raw.decision || '').toUpperCase().trim();
   const direction = VISION_ACTIONS[action] ?? 0;
@@ -92,6 +104,9 @@ export function normalizeVision(raw = {}) {
     risks: list(raw.riscos),
     summary: raw.resumo ? String(raw.resumo).slice(0, 300) : null,
     plain: raw.explicacaoSimples ? String(raw.explicacaoSimples).slice(0, 900) : null,
+    position: readPosition(raw.posicaoAberta),
+    waitFor: presentText(raw.esperarPor) ? String(raw.esperarPor).slice(0, 160) : null,
+    manage: presentText(raw.gestaoPosicao) ? String(raw.gestaoPosicao).slice(0, 240) : null,
     imageQuality: typeof raw.qualidadeImagem === 'string' && raw.qualidadeImagem.trim() ? raw.qualidadeImagem.trim().toLowerCase() : null
   };
 }
