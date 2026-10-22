@@ -75,7 +75,7 @@ public class WatchService extends Service {
     private static final int NOTIFICATION_ID = 41;
     private static final int MAX_SIDE = 1280;
     private static final long TICK_MS = 1000;
-    private static final long MIN_GAP_MS = 8000;
+    private static final long MIN_GAP_MS = 6000;
     private static final long SLOW_GAP_MS = 20000;
     private static final long MAX_GAP_MS = 45000;
     private static final long SESSION_LIMIT_MS = 45 * 60 * 1000;
@@ -451,7 +451,7 @@ public class WatchService extends Service {
             return;
         }
         ByteArrayOutputStream jpeg = new ByteArrayOutputStream();
-        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, jpeg);
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 72, jpeg);
         // Fingerprint of the frame actually sent (bubble-free) for the next change check.
         lastSig = signature(bitmap);
         bitmap.recycle();
@@ -567,7 +567,9 @@ public class WatchService extends Service {
         // The server names the market in one stable spelling; null when asset or timeframe is missing.
         String context = chartVisible && !data.isNull("market") ? data.optString("market", "") : "";
         if (context.isEmpty()) context = null;
-        Stabilizer.Step step = stabilizer.push(decision, chartVisible, context);
+        // A strong reading (high certainty, confirmed by the live market) is shown at once.
+        boolean strong = verdict != null && verdict.optBoolean("strong", false);
+        Stabilizer.Step step = stabilizer.push(decision, chartVisible, context, strong);
         // A different market: the previous one's levels must not come back.
         if (step.contextChanged) lastByDecision.clear();
         if (chartVisible) lastByDecision.put(decision, data);

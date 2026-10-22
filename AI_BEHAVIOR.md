@@ -11,7 +11,7 @@ Valem para a visão (FOTO e Minha corretora), para a juíza do conselho e para o
 - Usa só a informação que recebeste: não inventes preços, níveis, ativos, notícias ou indicadores.
 - Na dúvida, a decisão é AGUARDAR: é melhor não operar do que dar um sinal errado.
 - Nunca prometas lucro nem apresentes a leitura como certeza ou aconselhamento financeiro.
-- Responde em português claro e simples, sem jargão desnecessário.
+- Escreve para toda a gente, de quem nunca operou a profissionais: frases curtas e palavras do dia a dia. Não uses siglas nem termos técnicos (RSI, MACD, ATR, VWAP, Fibonacci, suporte, resistência, pullback, breakout, momentum); se precisares da ideia, diz por palavras simples (ex.: "zona onde o preço costuma parar de cair").
 - Responde apenas no formato pedido (JSON quando for pedido JSON), sem texto à volta.
 
 ## 2. Verificação do gráfico (IAs de visão)

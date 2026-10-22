@@ -74,7 +74,7 @@ export function manageOpen(position, state, verdictDirection, money) {
       action: 'fechar',
       stop: structureStop,
       target: null,
-      text: `Tens uma ${word}${opened}, mas o mercado virou contra ela${state.trend === -side ? ` (tendência de ${side > 0 ? 'descida' : 'subida'})` : ''}. Considera fechar já ou, no mínimo, põe o stop em ${money(structureStop)}.`
+      text: `Tens uma ${word}${opened}, mas o mercado virou contra ti${state.trend === -side ? ` (o preço agora vem a ${side > 0 ? 'cair' : 'subir'})` : ''}. O mais seguro é fechar já. Se quiseres esperar, põe o stop em ${money(structureStop)}.`
     };
   }
   const risk = entry != null ? Math.abs(entry - structureStop) : 1.5 * atr;
@@ -86,7 +86,7 @@ export function manageOpen(position, state, verdictDirection, money) {
       action: 'proteger',
       stop: entry,
       target,
-      text: `A tua ${word}${opened} já está a ganhar. Move o stop para ${money(entry)} (o preço de entrada): assim já não perdes. Alvo ${money(target)}.`
+      text: `A tua ${word}${opened} já está a ganhar. Muda o stop para ${money(entry)}, o preço a que entraste: assim, aconteça o que acontecer, já não perdes. Podes tirar o lucro em ${money(target)}.`
     };
   }
   const target = (entry ?? price) + side * 2 * risk;
@@ -94,7 +94,7 @@ export function manageOpen(position, state, verdictDirection, money) {
     action: 'manter',
     stop: structureStop,
     target,
-    text: `A tua ${word}${opened}: põe o stop em ${money(structureStop)} (${side > 0 ? 'abaixo do último fundo' : 'acima do último topo'}) e o alvo em ${money(target)}. Se o preço chegar ao stop, a ideia falhou: fecha.`
+    text: `A tua ${word}${opened}: põe o stop em ${money(structureStop)} (${side > 0 ? 'logo abaixo do ponto mais baixo recente' : 'logo acima do ponto mais alto recente'}) e tira o lucro em ${money(target)}. Se o preço chegar ao stop, a operação fecha sozinha com uma perda pequena.`
   };
 }
 
@@ -109,6 +109,6 @@ export function pullbackAdvice(state, money) {
     side: state.trend,
     zone: state.zone,
     stop: state.stop,
-    text: `Tendência de ${down ? 'descida' : 'subida'}, mas o preço já ${down ? 'caiu' : 'subiu'} muito de uma vez: entrar agora é correr atrás dele. Espera um ${down ? 'repique' : 'recuo'} até perto de ${money(state.zone)} para ${down ? 'vender' : 'comprar'}, com stop ${down ? 'acima' : 'abaixo'} de ${money(state.stop)}.`
+    text: `O preço vem a ${down ? 'cair' : 'subir'}, mas já ${down ? 'caiu' : 'subiu'} muito de uma vez: entrar agora é chegar atrasado. Espera que ${down ? 'volte a subir um pouco' : 'volte a descer um pouco'}, até perto de ${money(state.zone)}, e aí ${down ? 'vende' : 'compra'}. Põe o stop (onde sais se correr mal) ${down ? 'acima' : 'abaixo'} de ${money(state.stop)}.`
   };
 }

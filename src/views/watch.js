@@ -11,7 +11,7 @@ import { Native } from '../lib/native.js';
 // to date while the user trades there.
 
 const MAX_SIDE = 1280;
-const MIN_GAP_MS = 8000;
+const MIN_GAP_MS = 6000;
 const MAX_GAP_MS = 45000;
 const SESSION_LIMIT_MS = 45 * 60 * 1000;
 const PREFS_KEY = 'grafictrader.watchPrefs';
@@ -98,7 +98,7 @@ function toJpeg(source) {
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
   canvas.getContext('2d').drawImage(source, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', 0.8);
+  return canvas.toDataURL('image/jpeg', 0.72);
 }
 
 async function tick() {
@@ -274,7 +274,7 @@ function handleResult(data) {
   const decision = data.verdict.decision;
   // Only a market named in full (asset and timeframe) can count as a different one.
   const context = data.chartVisible ? data.market || null : null;
-  const step = stabilizer.push(decision, { chartVisible: data.chartVisible, context });
+  const step = stabilizer.push(decision, { chartVisible: data.chartVisible, context, strong: Boolean(data.verdict?.strong) });
   // A different market: levels and readings of the previous one must not come back.
   if (step.contextChanged) lastByDecision = {};
   if (data.chartVisible) lastByDecision[decision] = data;

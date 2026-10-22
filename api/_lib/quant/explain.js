@@ -39,8 +39,8 @@ function whyTrend(dir, snap, ctx) {
   }
   if (Number.isFinite(snap?.vwap)) {
     lines.push(up
-      ? 'O preço está acima do "preço médio do dia" (VWAP), sinal de que os compradores estão no controlo.'
-      : 'O preço está abaixo do "preço médio do dia" (VWAP), sinal de que os vendedores estão no controlo.');
+      ? 'O preço está acima do preço médio do dia: quem compra está a mandar.'
+      : 'O preço está abaixo do preço médio do dia: quem vende está a mandar.');
   }
   addContext(lines, dir, ctx);
   return lines;
@@ -64,8 +64,8 @@ function addContext(lines, dir, ctx) {
   if (!ctx) return;
   if (Number.isFinite(ctx.score) && Math.abs(ctx.score) > 0.2) {
     lines.push(ctx.score * dir > 0
-      ? 'O que está a acontecer agora (ordens a entrar, livro de ordens e notícias) também puxa para o mesmo lado.'
-      : 'Atenção: o que está a acontecer agora (ordens, livro e notícias) puxa um pouco para o lado contrário. Usa sempre o stop.');
+      ? 'As ordens a entrar agora e as notícias também puxam para o mesmo lado.'
+      : 'Atenção: as ordens a entrar agora e as notícias puxam um pouco para o lado contrário. Usa sempre o stop.');
   }
   if (ctx.global && Math.abs(ctx.global.score) > 0.15) {
     lines.push(ctx.global.score > 0
@@ -277,14 +277,14 @@ function withLivePlan(guidance, verdict, vision, state, money) {
     } else if (vision.waitFor) {
       guidance.now = `Fica de fora por agora. Espera: ${vision.waitFor}`;
     } else if (verdict.agreement === 'diverge') {
-      guidance.now = 'A imagem e os dados ao vivo apontam para lados diferentes. Fica de fora até concordarem.';
+      guidance.now = 'O teu gráfico e os dados ao vivo dizem coisas diferentes. Quando há dúvida, não se entra: espera.';
     } else {
       const why = firstSentence(guidance.why[0]);
       guidance.now = why ? `${why} Fica de fora e espera pelo próximo sinal.` : guidance.now;
     }
   } else if (pullback && pullback.side === verdict.direction) {
     const up = verdict.direction > 0;
-    guidance.now = `Boa oportunidade de ${up ? 'compra' : 'venda'}, mas não persigas o preço: o ideal é ${up ? 'comprar num recuo' : 'vender num repique'} até perto de ${money(pullback.zone)}.`;
+    guidance.now = `Boa oportunidade de ${up ? 'compra' : 'venda'}, mas não corras atrás do preço: o ideal é esperar que ${up ? 'desça' : 'suba'} um pouco, até perto de ${money(pullback.zone)}, e ${up ? 'comprar' : 'vender'} aí.`;
   }
   guidance.manage = vision.position ? manageOpen(vision.position, state, verdict.direction, money) || visionManage(vision) : null;
   if (guidance.manage) {

@@ -49,3 +49,11 @@ test('a different market on screen starts the confirmation again', () => {
   assert.equal(step.shown, 'AGUARDAR', 'no trade carried over from the previous market');
   assert.equal(step.pending, 'VENDER');
 });
+
+test('a strong reading is shown at once; a normal one still waits for its confirmation', async () => {
+  const { createStabilizer } = await import('../src/lib/watch-core.js');
+  const s = createStabilizer({ confirmations: 2 });
+  assert.equal(s.push('AGUARDAR', { context: 'EURUSD|1m' }).shown, 'AGUARDAR');
+  assert.equal(s.push('VENDER', { context: 'EURUSD|1m' }).shown, 'AGUARDAR', 'normal: waits');
+  assert.equal(s.push('COMPRAR', { context: 'EURUSD|1m', strong: true }).shown, 'COMPRAR', 'strong: at once');
+});

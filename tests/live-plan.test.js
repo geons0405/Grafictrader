@@ -28,7 +28,7 @@ test('a clear downtrend after a big drop is "stretched": wait for a pullback, wi
   assert.equal(state.stretched, true);
   assert.ok(state.zone > state.price && state.stop > state.zone, 'sell zone above price, stop above zone');
   const advice = pullbackAdvice(state, money);
-  assert.match(advice.text, /Tendência de descida.*repique até perto de 1\.12\d{3} para vender, com stop acima de 1\.12\d{3}/);
+  assert.match(advice.text, /O preço vem a cair.*volte a subir um pouco, até perto de 1\.12\d{3}, e aí vende\. Põe o stop \(onde sais se correr mal\) acima de 1\.12\d{3}/);
   assert.doesNotMatch(advice.text, /\$/);
 });
 
@@ -37,15 +37,15 @@ test('an open sell gets a stop above the last top, then break-even, and "close" 
   const hold = manageOpen({ side: -1, price: state.price + 0.0001 }, state, 0, money);
   assert.equal(hold.action, 'manter');
   assert.ok(hold.stop > state.price);
-  assert.match(hold.text, /VENDA a 1\.12\d{3}: põe o stop em 1\.12\d{3} \(acima do último topo\)/);
+  assert.match(hold.text, /VENDA a 1\.12\d{3}: põe o stop em 1\.12\d{3} \(logo acima do ponto mais alto recente\)/);
 
   const winning = manageOpen({ side: -1, price: state.price + 0.002 }, state, 0, money);
   assert.equal(winning.action, 'proteger');
-  assert.match(winning.text, /Move o stop para 1\.12\d{3}/);
+  assert.match(winning.text, /Muda o stop para 1\.12\d{3}, o preço a que entraste/);
 
   const turned = manageOpen({ side: 1, price: state.price + 0.0005 }, state, 0, money);
   assert.equal(turned.action, 'fechar', 'a buy against a downtrend');
-  assert.match(turned.text, /virou contra ela.*Considera fechar/);
+  assert.match(turned.text, /virou contra ti.*O mais seguro é fechar já/);
   assert.equal(manageOpen({ side: -1, price: null }, state, 1, money).action, 'fechar', 'the reading now says buy');
 });
 
@@ -57,7 +57,7 @@ test('the live guidance explains the wait and manages the open trade', () => {
   const reading = { symbol: 'EURUSD', price: state.price, snapshot: { regime: 'trend', atr: state.atr }, signal: { direction: 0, reasons: [] }, context: {}, patterns: [], trendState: state };
   const verdict = { direction: 0, decision: 'AGUARDAR', agreement: 'neutro', reasons: ['Confiança final abaixo de 50%.'] };
   const g = photoGuidance(verdict, vision, reading);
-  assert.match(g.now, /repique/);
+  assert.match(g.now, /volte a subir um pouco/);
   assert.ok(g.wait.zone && g.wait.stop);
   assert.equal(g.manage.action, 'manter');
   assert.match(g.manage.stop, /^1\.12\d{3}$/);
