@@ -57,3 +57,19 @@ test('a strong reading is shown at once; a normal one still waits for its confir
   assert.equal(s.push('VENDER', { context: 'EURUSD|1m' }).shown, 'AGUARDAR', 'normal: waits');
   assert.equal(s.push('COMPRAR', { context: 'EURUSD|1m', strong: true }).shown, 'COMPRAR', 'strong: at once');
 });
+
+test('one hesitant reading in the middle does not cancel a buy/sell being confirmed', async () => {
+  const { createStabilizer } = await import('../src/lib/watch-core.js');
+  const s = createStabilizer({ confirmations: 2 });
+  s.push('AGUARDAR', { context: 'EURUSD|1m' });
+  assert.equal(s.push('VENDER', { context: 'EURUSD|1m' }).pending, 'VENDER');
+  assert.equal(s.push('AGUARDAR', { context: 'EURUSD|1m' }).pending, 'VENDER', 'kept through one cautious reading');
+  assert.equal(s.push('VENDER', { context: 'EURUSD|1m' }).shown, 'VENDER');
+  // Two cautious readings in a row do cancel it.
+  const t = createStabilizer({ confirmations: 2 });
+  t.push('AGUARDAR');
+  t.push('COMPRAR');
+  t.push('AGUARDAR');
+  assert.equal(t.push('AGUARDAR').pending, null);
+  assert.equal(t.push('COMPRAR').shown, 'AGUARDAR');
+});

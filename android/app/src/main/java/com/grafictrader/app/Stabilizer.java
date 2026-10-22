@@ -28,6 +28,7 @@ final class Stabilizer {
     private String shown;
     private String pending;
     private int count;
+    private boolean skipped;
     private String lastContext;
 
     String shown() {
@@ -50,6 +51,7 @@ final class Stabilizer {
             shown = null;
             pending = null;
             count = 0;
+            skipped = false;
             contextChanged = true;
         }
         if (context != null) lastContext = context;
@@ -65,8 +67,15 @@ final class Stabilizer {
             return new Step(shown, pending, true, contextChanged);
         }
         if (decision.equals(shown)) {
+            // One cautious reading in the middle of a confirmation does not cancel it:
+            // the AI often hesitates for a frame while the opportunity is still there.
+            if ("AGUARDAR".equals(decision) && pending != null && !skipped) {
+                skipped = true;
+                return new Step(shown, pending, false);
+            }
             pending = null;
             count = 0;
+            skipped = false;
             return new Step(shown, null, false);
         }
         if ("AGUARDAR".equals(decision)) {
@@ -79,11 +88,13 @@ final class Stabilizer {
         else {
             pending = decision;
             count = 1;
+            skipped = false;
         }
         if (count >= needed) {
             shown = decision;
             pending = null;
             count = 0;
+            skipped = false;
             return new Step(shown, null, true);
         }
         return new Step(shown, pending, false);

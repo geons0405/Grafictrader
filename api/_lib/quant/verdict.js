@@ -187,12 +187,18 @@ export function mergeVerdict(vision, reading) {
       reasons.push('Os dados ao vivo do mercado confirmam.');
     } else if (direction !== 0 && q === -direction) {
       agreement = 'diverge';
-      reasons.push('Os dados ao vivo apontam para o lado contrário.');
-      direction = 0;
+      // The chart on the person's screen leads; the live data only blocks a weak reading
+      // when it is itself sure of the opposite side.
+      if (vision.confidence >= 70 || (reading.signal.confidence ?? 0) < 55) {
+        confidence = Math.max(0, confidence - 10);
+        reasons.push('Os dados ao vivo não concordam totalmente: usa sempre o stop.');
+      } else {
+        reasons.push('Os dados ao vivo apontam com força para o lado contrário.');
+        direction = 0;
+      }
     } else if (direction !== 0) {
+      // The live engine is cautious and rarely has its own signal: no signal is not a "no".
       agreement = 'neutro';
-      confidence = Math.max(0, confidence - 10);
-      reasons.push('Os dados ao vivo ainda não confirmam este sinal.');
       if (ctx * direction < -0.35) {
         reasons.push('As ordens a entrar e as notícias estão contra este lado.');
         direction = 0;
@@ -218,7 +224,7 @@ export function mergeVerdict(vision, reading) {
       ? 'O gráfico tende a descer'
       : 'Mercado instável: melhor aguardar';
   // Strong enough to show at once, without waiting for a second reading.
-  const strong = direction !== 0 && ((agreement === 'confirma' && confidence >= 70) || (!reading?.signal && confidence >= 80));
+  const strong = direction !== 0 && ((agreement === 'confirma' && confidence >= 70) || (agreement !== 'diverge' && confidence >= 80));
   return { decision, direction, confidence: direction === 0 ? Math.min(confidence, 40) : confidence, agreement, headline, reasons, strong };
 }
 

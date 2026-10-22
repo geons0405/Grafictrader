@@ -95,8 +95,15 @@ test('photo verdict merges vision with the live engine', () => {
   assert.equal(confirm.decision, 'COMPRAR');
   assert.equal(confirm.agreement, 'confirma');
 
-  const diverge = mergeVerdict(vision, { signal: { direction: -1, confidence: 70, regimeLabel: 'Tendência persistente' }, context: { score: 0 }, snapshot: { regime: 'trend' } });
-  assert.equal(diverge.decision, 'AGUARDAR');
+  const against = { signal: { direction: -1, confidence: 70, regimeLabel: 'Tendência persistente' }, context: { score: 0 }, snapshot: { regime: 'trend' } };
+  const diverge = mergeVerdict(normalizeVision({ decisao: 'COMPRAR', confianca: 60 }), against);
+  assert.equal(diverge.decision, 'AGUARDAR', 'a weak chart reading against a sure live market');
+  const clear = mergeVerdict(vision, against);
+  assert.equal(clear.decision, 'COMPRAR', 'a clear chart reading still shows, with less certainty');
+  assert.equal(clear.confidence, 60);
+  const quiet = mergeVerdict(normalizeVision({ decisao: 'VENDER', confianca: 60 }), { signal: { direction: 0, confidence: 0, regimeLabel: 'Ruído' }, context: {}, snapshot: { regime: 'noise' } });
+  assert.equal(quiet.decision, 'VENDER', 'no live signal is not a no');
+  assert.equal(quiet.confidence, 60);
 
   assert.equal(mergeVerdict(normalizeVision({ decisao: 'VENDER', confianca: 30 }), null).decision, 'AGUARDAR');
   assert.equal(mergeVerdict(normalizeVision({ decisao: 'VENDER', confianca: 75 }), null).decision, 'VENDER');

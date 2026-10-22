@@ -50,7 +50,7 @@ test('global risk sentiment reads equities and fear', () => {
 });
 
 test('photo guidance explains divergence and unsupported assets', () => {
-  const vision = normalizeVision({ decisao: 'COMPRAR', confianca: 70, explicacaoSimples: 'Parece querer subir.', entrada: '1.0850', stop: '1.0820', alvos: ['1.0910'] });
+  const vision = normalizeVision({ decisao: 'COMPRAR', confianca: 60, explicacaoSimples: 'Parece querer subir.', entrada: '1.0850', stop: '1.0820', alvos: ['1.0910'] });
   const reading = { snapshot: snap, signal: { direction: -1, confidence: 70, regimeLabel: 'Tendência persistente', reasons: [] }, context: null, price: 110 };
   const diverge = mergeVerdict(vision, reading);
   assert.match(photoGuidance(diverge, vision, reading).why[0], /não concordam/);
