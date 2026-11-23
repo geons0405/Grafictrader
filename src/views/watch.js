@@ -13,7 +13,6 @@ import { Native } from '../lib/native.js';
 const MAX_SIDE = 1280;
 const MIN_GAP_MS = 6000;
 const MAX_GAP_MS = 45000;
-const SESSION_LIMIT_MS = 45 * 60 * 1000;
 const PREFS_KEY = 'grafictrader.watchPrefs';
 const LABEL = { COMPRAR: 'BOA OPORTUNIDADE DE COMPRA', VENDER: 'BOA OPORTUNIDADE DE VENDA', AGUARDAR: 'NÃO OPERAR' };
 // For sentences and the compact history list.
@@ -31,7 +30,6 @@ let inflight = false;
 let lastSig = null;
 let lastSentAt = null;
 let minGap = MIN_GAP_MS;
-let startedAt = null;
 let analyses = 0;
 let history = [];
 let lastByDecision = {};
@@ -42,7 +40,7 @@ let current = null;
 // shown buy/sell advice is an older reading waiting for its confirmation.
 let latest = null;
 let pipWindow = null;
-let prefs = { voice: false, alerts: false };
+let prefs = { voice: false, alerts: false, mode: 'market', expirySeconds: 60, payoutPercent: 80 };
 const stabilizer = createStabilizer({ confirmations: 2 });
 const tiny = document.createElement('canvas');
 tiny.width = 96;
@@ -106,10 +104,6 @@ function toJpeg(source) {
 
 async function tick() {
   if (!isRunning() || inflight) return;
-  if (Date.now() - startedAt > SESSION_LIMIT_MS) {
-    stop('Sessão terminada ao fim de 45 minutos para poupar análises. Toca para continuar quando quiseres.');
-    return;
-  }
   const source = await grabSource();
   if (!source) return;
   const release = () => source.close?.();
@@ -132,7 +126,9 @@ async function tick() {
   const mine = session;
   try {
     const previous = current ? { decision: current.verdict.decision, asset: current.vision.asset, timeframe: current.vision.timeframe } : null;
-    const data = await api('/api/watch', { method: 'POST', body: { image, previous }, timeoutMs: 70_000 });
+    const body = { image, previous };
+    if (prefs.mode === 'binary-options') Object.assign(body, { mode: 'binary-options', expirySeconds: Number(prefs.expirySeconds), payoutPercent: Number(prefs.payoutPercent) });
+    const data = await api('/api/watch', { method: 'POST', body, timeoutMs: 70_000 });
     // Stopped (or restarted) while this frame was being analysed: drop it, say nothing.
     if (mine !== session) return;
     analyses += 1;
@@ -214,7 +210,6 @@ async function begin(newStream, newKind, { keepSource = false } = {}) {
     track?.addEventListener('ended', () => stop('A partilha terminou.'));
   }
   if (kind !== 'native') await video.play().catch(() => {});
-  startedAt = Date.now();
   analyses = 0;
   lastError = null;
   lastSig = null;
@@ -325,6 +320,20 @@ function render(data, step, latest) {
   $('#watchSub').textContent = bits.join(' · ');
   $('#watchPending').hidden = !step.pending || step.noChart;
   if (step.pending) $('#watchPending').textContent = `A IA começa a ver ${CHANCE[step.pending] || 'um sinal'}. Vai confirmar na próxima leitura antes de mudar.`;
+  const binary = latest.binaryOptions;
+  const binaryBox = $('#binaryOptionsResult');
+  binaryBox.hidden = !binary;
+  if (binary) {
+    binaryBox.dataset.status = binary.status || 'WAIT';
+    $('#binaryOptionsTitle').textContent = binary.status === 'VALIDATED_SETUP'
+      ? (binary.decision === 'CALL' ? 'CALL — cenário validado' : 'PUT — cenário validado')
+      : 'Opções Binárias — aguardar';
+    const expiry = binary.expirySeconds ? `Expiração: ${binary.expirySeconds >= 60 ? (binary.expirySeconds / 60) + ' min' : binary.expirySeconds + ' s'}.` : '';
+    const probability = binary.probability != null ? ` Taxa histórica: ${(binary.probability * 100).toFixed(1)}% em ${binary.sampleSize} operações independentes.` : '';
+    const breakeven = binary.breakEvenProbability != null ? ` Ponto de equilíbrio do payout: ${(binary.breakEvenProbability * 100).toFixed(1)}%.` : '';
+    $('#binaryOptionsDetail').textContent = expiry + probability + breakeven;
+    $('#binaryOptionsReasons').innerHTML = (binary.reasons || []).map(reason => `<li>${escapeHtml(reason)}</li>`).join('');
+  }
   // Exact engine levels when the market is tracked; otherwise what the AI read on screen.
   const levels = g.levels || { entry: vis.entry, stop: vis.stop, target: vis.targets?.join(' · ') };
   const showLevels = !step.noChart && !unconfirmed && decision !== 'AGUARDAR' && Boolean(levels.entry || levels.stop || levels.target);
@@ -449,7 +458,7 @@ function initNative() {
     if (!(await confirmCapture('bubble'))) return;
     if (!(await liveMinutesLeft())) return;
     try {
-      await Native.startWatch({ serverUrl: location.origin, voice: prefs.voice });
+      await Native.startWatch({ serverUrl: location.origin, voice: prefs.voice, mode: prefs.mode, expirySeconds: Number(prefs.expirySeconds), payoutPercent: Number(prefs.payoutPercent) });
       await begin(null, 'native');
     } catch (error) {
       setStatus(error?.message || 'Não foi possível começar a captura do ecrã.');
@@ -546,6 +555,23 @@ export function initWatch() {
     savePrefs();
     syncToggles();
   };
+  const modeSelect = $('#watchAnalysisMode');
+  const expirySelect = $('#binaryExpiry');
+  const payoutInput = $('#binaryPayout');
+  modeSelect.value = prefs.mode || 'market';
+  expirySelect.value = String(prefs.expirySeconds || 60);
+  payoutInput.value = String(prefs.payoutPercent || 80);
+  const syncBinaryControls = () => {
+    prefs.mode = modeSelect.value;
+    prefs.expirySeconds = Number(expirySelect.value);
+    prefs.payoutPercent = Number(payoutInput.value);
+    $('#binaryOptionsControls').hidden = prefs.mode !== 'binary-options';
+    savePrefs();
+  };
+  modeSelect.addEventListener('change', syncBinaryControls);
+  expirySelect.addEventListener('change', syncBinaryControls);
+  payoutInput.addEventListener('change', syncBinaryControls);
+  syncBinaryControls();
   syncToggles();
   renderHistory();
   renderIcons();
