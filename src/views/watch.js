@@ -357,9 +357,16 @@ function render(data, step, latest) {
     $('#learningMemoryNote').textContent = memory.unverified
       ? `${memory.unverified} resultado(s) não foram usados porque a confirmação chegou tarde. As skills só são propostas após evidência suficiente.`
       : 'Cada previsão é comparada com o preço observado. As novas skills são testadas antes de poderem influenciar sinais.';
-    $('#learningSkills').innerHTML = (memory.skills || []).slice(0, 3).map(skill =>
-      `<li><b>${escapeHtml(skill.status === 'candidate_for_out_of_sample_test' ? 'Candidata a teste' : 'Em aprendizagem')}</b>: ${escapeHtml(skill.rule)} (${skill.samples} resultados)</li>`
-    ).join('');
+    $('#learningSkills').innerHTML = (memory.skills || []).slice(0, 3).map(skill => {
+      const status = skill.status === 'validated' ? 'Validada fora da amostra'
+        : skill.status === 'validated_avoid' ? 'Evitar contexto — validado'
+        : skill.status === 'rejected' ? 'Rejeitada no teste'
+        : skill.status === 'inconclusive' ? 'Teste inconclusivo'
+        : 'Em validação independente';
+      const training = skill.training?.samples || 0;
+      const validation = skill.validation?.samples || 0;
+      return `<li><b>${escapeHtml(status)}</b>: ${escapeHtml(skill.rule)} (treino: ${training}; teste futuro: ${validation}/100)</li>`;
+    }).join('');
   }
   // Exact engine levels when the market is tracked; otherwise what the AI read on screen.
   const levels = g.levels || { entry: vis.entry, stop: vis.stop, target: vis.targets?.join(' · ') };
