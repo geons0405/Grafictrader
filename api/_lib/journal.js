@@ -2,7 +2,7 @@ import { redis, redisConfigured } from './redis.js';
 import { getSessionUser } from './auth.js';
 import { rateLimit, sendRateLimited } from './rate-limit.js';
 import { crossSite } from './validate.js';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 // Trading journal: the user's own trades, to see what really works for them.
 // Served by /api/auth?action=journal (Vercel Hobby allows 12 functions):
@@ -77,4 +77,118 @@ export async function journalHandler(req, res) {
     return res.status(405).json({ ok: false, error: 'Método não permitido.' });
   }
   return res.status(200).json({ ok: true, entries, totals: journalTotals(entries) });
+}
+
+
+// Continuous learning memory. Only compact market context and outcomes are stored;
+// screenshots, credentials, account balances and personal notes are never retained.
+const LEARNING_MAX = 500;
+const LEARNING_MIN_SKILL = 20;
+const learningUserKey = user => 'grafictrader:learning:' + createHash('sha256').update(String(user)).digest('hex').slice(0, 32);
+const learningMarketKey = market => String(market || '').toLowerCase().replace(/[^a-z0-9:_-]/g, '').slice(0, 80);
+const wilsonLower = (wins, total) => {
+  if (!total) return 0;
+  const z = 1.96, p = wins / total, z2 = z * z, d = 1 + z2 / total;
+  return Math.max(0, (p + z2 / (2 * total) - z * Math.sqrt(p * (1 - p) / total + z2 / (4 * total * total))) / d);
+};
+async function learningRead(key) {
+  try { return JSON.parse((await redis(['GET', key])) || 'null') ?? { pending: [], settled: [], skills: [] }; }
+  catch { return { pending: [], settled: [], skills: [] }; }
+}
+function learningSignature(p) {
+  return [p.mode, p.interval, p.direction, p.regime || 'unknown',
+    p.confidence >= 80 ? 'high' : p.confidence >= 60 ? 'medium' : 'low',
+    p.expirySeconds || 0].join('|');
+}
+
+export async function learnFromObservation(user, observation) {
+  if (!redisConfigured() || !user || !observation?.market || !Number.isFinite(observation.price) || observation.price <= 0) {
+    return { stored: false, reason: 'learning_storage_or_market_unavailable' };
+  }
+  const key = learningUserKey(user) + ':' + learningMarketKey(observation.market);
+  const now = Number.isFinite(observation.at) ? observation.at : Date.now();
+  const state = await learningRead(key);
+  let settledNow = 0;
+  const remaining = [];
+  for (const p of state.pending || []) {
+    if (now < p.dueAt) { remaining.push(p); continue; }
+    const delta = observation.price - p.entryPrice;
+    const delayMs = now - p.dueAt;
+    const toleranceMs = p.mode === 'binary-options'
+      ? Math.max(2_000, (p.expirySeconds || 60) * 50)
+      : Math.max(15_000, (p.horizonMs || 300_000) * 0.2);
+    const outcome = delayMs > toleranceMs ? 'unverified'
+      : Math.abs(delta) <= Math.max(p.tickSize || 0, p.entryPrice * 1e-8) ? 'tie'
+      : Math.sign(delta) === p.direction ? 'win' : 'loss';
+    state.settled.unshift({ ...p, settledAt: now, settlementDelayMs: delayMs,
+      exitPrice: observation.price, outcome,
+      returnPct: outcome === 'unverified' ? null : Number(((delta * p.direction / p.entryPrice) * 100).toFixed(5)) });
+    settledNow++;
+  }
+  state.pending = remaining;
+  const p = observation.prediction;
+  let recorded = false;
+  if (p && [-1, 1].includes(p.direction) && Number.isFinite(p.confidence) && p.confidence >= 0 && p.confidence <= 100) {
+    const horizonMs = p.mode === 'binary-options' ? Number(p.expirySeconds) * 1000 : Number(p.horizonMs);
+    if (Number.isFinite(horizonMs) && horizonMs >= 30_000 && horizonMs <= 86_400_000 && Number.isFinite(p.entryPrice) && p.entryPrice > 0) {
+      const signature = learningSignature(p);
+      const duplicate = state.pending.some(x => x.signature === signature && now - x.createdAt < Math.min(horizonMs, 300_000));
+      if (!duplicate) {
+        state.pending.unshift({
+          id: randomBytes(8).toString('hex'), market: observation.market,
+          mode: p.mode === 'binary-options' ? 'binary-options' : 'market',
+          interval: String(p.interval || '').slice(0, 12), direction: p.direction,
+          confidence: p.confidence, regime: String(p.regime || 'unknown').slice(0, 30),
+          expirySeconds: p.mode === 'binary-options' ? Number(p.expirySeconds) : null,
+          horizonMs: p.mode === 'binary-options' ? null : horizonMs,
+          entryPrice: p.entryPrice, tickSize: Number.isFinite(p.tickSize) ? p.tickSize : 0,
+          createdAt: now, dueAt: now + horizonMs, signature
+        });
+        recorded = true;
+      }
+    }
+  }
+  const groups = new Map();
+  for (const trade of state.settled || []) {
+    const g = groups.get(trade.signature) || { wins: 0, losses: 0, ties: 0, latestAt: trade.settledAt };
+    if (trade.outcome === 'win') g.wins++;
+    else if (trade.outcome === 'loss') g.losses++;
+    else if (trade.outcome === 'tie') g.ties++;
+    g.latestAt = Math.max(g.latestAt, trade.settledAt);
+    groups.set(trade.signature, g);
+  }
+  state.skills = [...groups.entries()].flatMap(([signature, g]) => {
+    const samples = g.wins + g.losses;
+    if (samples < LEARNING_MIN_SKILL) return [];
+    const [mode, interval, direction, regime, confidenceBand, expiry] = signature.split('|');
+    const lower = wilsonLower(g.wins, samples);
+    return [{
+      id: 'skill_' + createHash('sha256').update(signature).digest('hex').slice(0, 20),
+      signature, mode, interval, direction: Number(direction), regime, confidenceBand,
+      expirySeconds: Number(expiry) || null, samples, wins: g.wins, losses: g.losses, ties: g.ties,
+      observedWinRate: Number((g.wins / samples).toFixed(4)),
+      winRateLower95: Number(lower.toFixed(4)),
+      status: samples >= 100 && lower > 0.5 ? 'candidate_for_out_of_sample_test' : 'learning',
+      rule: `Contexto ${mode}, ${interval}, regime ${regime}, confiança ${confidenceBand}: ${g.wins} vitórias em ${samples} resultados.`,
+      autoApplied: false, updatedAt: g.latestAt
+    }];
+  }).sort((a, b) => b.samples - a.samples).slice(0, 100);
+  state.pending = state.pending.slice(0, LEARNING_MAX);
+  state.settled = (state.settled || []).slice(0, LEARNING_MAX);
+  await redis(['SET', key, JSON.stringify(state)]);
+  return { stored: recorded || settledNow > 0, recorded, settled: settledNow,
+    pending: state.pending.length, skills: state.skills.slice(0, 10) };
+}
+
+export async function getLearningSummary(user, market) {
+  if (!redisConfigured() || !user) return { available: false, reason: 'Memória de aprendizagem não configurada.' };
+  const state = await learningRead(learningUserKey(user) + ':' + learningMarketKey(market));
+  const settled = state.settled || [];
+  const wins = settled.filter(x => x.outcome === 'win').length;
+  const losses = settled.filter(x => x.outcome === 'loss').length;
+  return { available: true, pending: (state.pending || []).length, settled: settled.length,
+    wins, losses, ties: settled.filter(x => x.outcome === 'tie').length,
+    unverified: settled.filter(x => x.outcome === 'unverified').length,
+    winRate: wins + losses ? Number((wins / (wins + losses)).toFixed(4)) : null,
+    skills: state.skills || [] };
 }
