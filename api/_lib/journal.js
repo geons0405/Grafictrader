@@ -86,7 +86,7 @@ const LEARNING_MAX = 500;
 const LEARNING_MIN_SKILL = 20;
 const learningUserKey = user => 'grafictrader:learning:' + createHash('sha256').update(String(user)).digest('hex').slice(0, 32);
 const learningMarketKey = market => String(market || '').toLowerCase().replace(/[^a-z0-9:_-]/g, '').slice(0, 80);
-const wilsonLower = (wins, total) => {
+export const wilsonLower = (wins, total) => {
   if (!total) return 0;
   const z = 1.96, p = wins / total, z2 = z * z, d = 1 + z2 / total;
   return Math.max(0, (p + z2 / (2 * total) - z * Math.sqrt(p * (1 - p) / total + z2 / (4 * total * total))) / d);
