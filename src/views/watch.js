@@ -74,6 +74,13 @@ function isRunning() {
   return Boolean(stream || kind === 'file' || kind === 'native');
 }
 
+function decisionFor(data) {
+  if (prefs.mode !== 'binary-options') return data?.verdict?.decision || 'AGUARDAR';
+  const binary = data?.binaryOptions;
+  if (binary?.status !== 'VALIDATED_SETUP') return 'AGUARDAR';
+  return binary.decision === 'CALL' ? 'COMPRAR' : binary.decision === 'PUT' ? 'VENDER' : 'AGUARDAR';
+}
+
 /* ---------- capture ---------- */
 
 async function grabSource() {
@@ -271,7 +278,7 @@ function handleResult(data) {
     lastSentAt = Date.now();
     setStatus(`Ao vivo no telemóvel · ${analyses} análise(s) · a bolha mostra a orientação por cima da corretora${minutesText()}`);
   }
-  const decision = data.verdict.decision;
+  const decision = decisionFor(data);
   // Only a market named in full (asset and timeframe) can count as a different one.
   const context = data.chartVisible ? data.market || null : null;
   const step = stabilizer.push(decision, { chartVisible: data.chartVisible, context, strong: Boolean(data.verdict?.strong) });
@@ -287,7 +294,7 @@ function handleResult(data) {
   latest = data;
   render(shownData, step, data);
   if (step.changed) {
-    history.unshift({ at: data.at, decision: step.shown, asset: shownData.vision.asset, timeframe: shownData.vision.timeframe, confidence: shownData.verdict.confidence });
+    history.unshift({ at: data.at, decision: step.shown, asset: shownData.vision.asset, timeframe: shownData.vision.timeframe, confidence: prefs.mode === 'binary-options' ? (shownData.binaryOptions?.probability == null ? null : Math.round(shownData.binaryOptions.probability * 100)) : shownData.verdict.confidence });
     history = history.slice(0, 30);
     renderHistory();
     // The Android app vibrates and speaks itself.
@@ -304,10 +311,11 @@ function render(data, step, latest) {
   const v = data.verdict;
   const vis = data.vision;
   // Without a chart on screen nothing is shown as a trade, not even the last one.
-  const decision = step.noChart ? 'AGUARDAR' : step.shown || v.decision;
+  const effectiveDecision = decisionFor(latest);
+  const decision = step.noChart ? 'AGUARDAR' : step.shown || effectiveDecision;
   // Shown advice differs from this reading (a new direction still waiting for its
   // confirmation): this reading's trade texts and levels must not be shown.
-  const unconfirmed = !step.noChart && decision !== v.decision;
+  const unconfirmed = !step.noChart && decision !== effectiveDecision;
   const badgeText = step.noChart ? 'SEM GRÁFICO' : LABEL[decision] || decision;
   const badge = $('#watchBadge');
   badge.textContent = badgeText;
@@ -315,7 +323,9 @@ function render(data, step, latest) {
   $('#watchOverlay').textContent = badgeText;
   $('#watchOverlay').dataset.side = SIDE[decision] || '';
   $('#watchTitle').textContent = step.noChart ? 'Não vejo um gráfico no ecrã' : unconfirmed ? 'A confirmar o sinal…' : g.headline || v.headline;
-  const bits = [vis.asset || 'ativo ?', vis.timeframe || 'timeframe ?', `confiança ${v.confidence}%`];
+  const bits = [vis.asset || 'ativo ?', vis.timeframe || 'timeframe ?', prefs.mode === 'binary-options'
+    ? (latest.binaryOptions?.probability == null ? 'sem taxa validada' : `taxa histórica ${(latest.binaryOptions.probability * 100).toFixed(1)}%`)
+    : `confiança ${v.confidence}%`];
   if (latest.live) bits.push(v.agreement === 'confirma' ? 'mercado ao vivo confirma' : v.agreement === 'diverge' ? 'mercado ao vivo diverge' : 'mercado ao vivo sem sinal');
   $('#watchSub').textContent = bits.join(' · ');
   $('#watchPending').hidden = !step.pending || step.noChart;
@@ -336,7 +346,7 @@ function render(data, step, latest) {
   }
   // Exact engine levels when the market is tracked; otherwise what the AI read on screen.
   const levels = g.levels || { entry: vis.entry, stop: vis.stop, target: vis.targets?.join(' · ') };
-  const showLevels = !step.noChart && !unconfirmed && decision !== 'AGUARDAR' && Boolean(levels.entry || levels.stop || levels.target);
+  const showLevels = prefs.mode !== 'binary-options' && !step.noChart && !unconfirmed && decision !== 'AGUARDAR' && Boolean(levels.entry || levels.stop || levels.target);
   $('#watchLevels').hidden = !showLevels;
   if (showLevels) {
     $('#wlEntry').textContent = levels.entry || '—';
@@ -345,12 +355,14 @@ function render(data, step, latest) {
   }
   $('#watchNow').textContent = step.noChart
     ? 'Enquadra o gráfico da corretora inteiro no ecrã partilhado ou na câmara.'
-    : unconfirmed
+    : prefs.mode === 'binary-options' && !unconfirmed
+      ? (latest.binaryOptions?.reasons || []).join(' ')
+      : unconfirmed
       ? `Não operes ainda: a IA vê ${CHANCE[v.decision] || 'um possível sinal'} e confirma-a na próxima leitura.`
       : g.now || '—';
   $('#watchHudNow').textContent = $('#watchNow').textContent;
   // The trade already open on screen, from the newest reading: where the stop goes, when to close.
-  const manage = step.noChart ? null : latest.guidance?.manage;
+  const manage = step.noChart || prefs.mode === 'binary-options' ? null : latest.guidance?.manage;
   $('#watchManage').hidden = !manage;
   if (manage) {
     $('#watchManage').dataset.action = manage.action || '';
@@ -380,7 +392,7 @@ function renderHistory() {
 }
 
 function announce(data) {
-  const label = LABEL[data.verdict.decision];
+  const label = LABEL[decisionFor(data)];
   if (prefs.voice && 'speechSynthesis' in window) {
     const text = `${label}. ${data.guidance?.now || ''}`;
     const utterance = new SpeechSynthesisUtterance(text);
@@ -399,7 +411,7 @@ function pipMarkup() {
   if (!current) return '<p class="pip-wait">À espera da primeira análise…</p>';
   // The current frame has no chart: show that, never the last stabilised trade.
   const noChart = current.chartVisible === false;
-  const d = noChart ? 'AGUARDAR' : stabilizer.shown || current.verdict.decision;
+  const d = noChart ? 'AGUARDAR' : stabilizer.shown || decisionFor(current);
   return `<div class="pip-badge" data-side="${SIDE[d] || ''}">${noChart ? 'SEM GRÁFICO' : LABEL[d] || d}</div>
     <p class="pip-asset">${escapeHtml(current.vision.asset || '')} ${escapeHtml(current.vision.timeframe || '')} · ${current.verdict.confidence}%</p>
     <p class="pip-now">${escapeHtml(current.guidance?.now || '')}</p>
