@@ -12,7 +12,7 @@ test('a high-confidence visual BUY is blocked when the chart trend is down', () 
 
 test('a quantitative SELL blocks a visual BUY even when visual confidence is high', () => {
   const vision = normalizeVision({ decisao: 'COMPRAR', confianca: 95, tendencia: 'indefinida' });
-  const reading = { signal: { direction: -1, confidence: 80 }, snapshot: { regime: 'trend', kalmanZ: -1.8 }, context: { score: 0 } };
+  const reading = { signal: { direction: -1, confidence: 80 }, snapshot: { regime: 'noise', kalmanZ: -1.8 }, context: { score: 0 } };
   const verdict = mergeVerdict(vision, reading);
   assert.equal(verdict.decision, 'AGUARDAR');
   assert.equal(verdict.agreement, 'diverge');
