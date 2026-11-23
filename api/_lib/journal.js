@@ -153,15 +153,19 @@ function updateSkillValidation(skill, trades) {
   const baselineRate = skill.validation.baselineWins / baselineN;
   const lower = wilsonLower(skill.validation.wins, n);
   const upper = wilsonUpper(skill.validation.wins, n);
+  const baselineLower = wilsonLower(skill.validation.baselineWins, baselineN);
+  const baselineUpper = wilsonUpper(skill.validation.baselineWins, baselineN);
   skill.validation.winRate = Number((skill.validation.wins / n).toFixed(4));
   skill.validation.baselineWinRate = Number(baselineRate.toFixed(4));
   skill.validation.wilsonLower95 = Number(lower.toFixed(4));
   skill.validation.wilsonUpper95 = Number(upper.toFixed(4));
-  if (n >= 100) {
-    if (skill.action === 'support' && lower > baselineRate + 0.02) skill.status = 'validated';
-    else if (skill.action === 'avoid' && upper < baselineRate - 0.02) skill.status = 'validated_avoid';
-    else if ((skill.action === 'support' && upper < baselineRate) || (skill.action === 'avoid' && lower > baselineRate)) skill.status = 'rejected';
-    else if (n >= 300) skill.status = 'inconclusive';
+  skill.validation.baselineWilsonLower95 = Number(baselineLower.toFixed(4));
+  skill.validation.baselineWilsonUpper95 = Number(baselineUpper.toFixed(4));
+  if (n >= 100 && baselineN >= 100) {
+    if (skill.action === 'support' && lower > baselineUpper + 0.02) skill.status = 'validated';
+    else if (skill.action === 'avoid' && upper < baselineLower - 0.02) skill.status = 'validated_avoid';
+    else if ((skill.action === 'support' && upper < baselineLower) || (skill.action === 'avoid' && lower > baselineUpper)) skill.status = 'rejected';
+    else if (n >= 300 && baselineN >= 300) skill.status = 'inconclusive';
   }
   skill.updatedAt = trades.at(-1)?.settledAt || skill.updatedAt;
 }
@@ -200,7 +204,7 @@ function buildSkillCandidates(state, now) {
       id: 'skill_' + createHash('sha256').update(signature).digest('hex').slice(0, 20),
       signature, mode, interval, direction: Number(direction), regime, confidenceBand,
       expirySeconds: Number(expiry) || null, action,
-      training: { samples: counts.samples, wins: counts.wins, losses: counts.losses, winRate: Number(rate.toFixed(4)), baselineSamples: baseline.samples, baselineWinRate: Number(baselineRate.toFixed(4)), wilsonLower95: Number(lower.toFixed(4)), wilsonUpper95: Number(upper.toFixed(4)) },
+      training: { samples: counts.samples, wins: counts.wins, losses: counts.losses, winRate: Number(rate.toFixed(4)), baselineSamples: baseline.samples, baselineWinRate: Number(baselineRate.toFixed(4)), wilsonLower95: Number(lower.toFixed(4)), wilsonUpper95: Number(upper.toFixed(4)), baselineWilsonLower95: Number(baselineLower.toFixed(4)), baselineWilsonUpper95: Number(baselineUpper.toFixed(4)) },
       validation: { samples: 0, wins: 0, losses: 0, baselineSamples: 0, baselineWins: 0 },
       featureAverages, featureInsight: featureInsight(featureAverages),
       status: 'validating', autoApplied: false, createdAt: now, updatedAt: now,
@@ -320,8 +324,10 @@ export async function settleDueLearning({ getPrice, limit = 50, now = Date.now()
   if (!redisConfigured()) return { processed: 0, settled: 0, skipped: 0, reason: 'redis_unavailable' };
   const members = await redis(['ZRANGEBYSCORE', LEARNING_DUE_INDEX, '-inf', String(now), 'LIMIT', '0', String(Math.max(1, Math.min(100, limit)))]) || [];
   let processed = 0, settled = 0, skipped = 0;
+  const startedAt = Date.now();
   const priceCache = new Map();
   for (const member of members) {
+    if (Date.now() - startedAt > 45_000) break;
     const [userHash, market, id] = String(member).split('~');
     if (!userHash || !market || !id) { await redis(['ZREM', LEARNING_DUE_INDEX, member]); continue; }
     const key = learningUserKeyFromHash(userHash) + ':' + learningMarketKey(market);
