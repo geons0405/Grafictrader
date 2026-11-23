@@ -29,7 +29,7 @@ globalThis.fetch = async (url, init = {}) => {
     }
     if (command === 'ZRANGEBYSCORE') {
       const rows = [...(sorted.get(key) || new Map()).entries()]
-        .filter(([, score]) => score <= Number(value))
+        .filter(([, score]) => score >= Number(value) && score <= Number(args[0]))
         .sort((a, b) => a[1] - b[1]);
       const limitAt = args.indexOf('LIMIT');
       result = limitAt >= 0 ? rows.slice(Number(args[limitAt + 1]), Number(args[limitAt + 1]) + Number(args[limitAt + 2])).map(([member]) => member) : rows.map(([member]) => member);
