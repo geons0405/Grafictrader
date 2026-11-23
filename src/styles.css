@@ -1228,6 +1228,32 @@ button.asset-pill svg.lucide { position: static; }
 .binary-options-result li { color: var(--text-2); font-size: 12px; line-height: 1.45; }
 .binary-options-result ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 .binary-options-result[data-status="VALIDATED_SETUP"] { border-color: var(--up); }
+.learning-memory {
+  display: grid;
+  gap: 9px;
+  margin: 10px 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--well);
+}
+.learning-memory-head,
+.learning-memory-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.learning-memory-head b { font-size: 13px; }
+.learning-memory-head span,
+.learning-memory p,
+.learning-memory li { color: var(--text-2); font-size: 11px; line-height: 1.45; }
+.learning-memory-stats span { color: var(--text-2); font-size: 11px; }
+.learning-memory-stats strong { color: var(--text); font-size: 15px; }
+.learning-memory p { margin: 0; }
+.learning-memory ul { margin: 0; padding-left: 17px; display: grid; gap: 5px; }
+.learning-memory li b { color: var(--text); }
 .watch-tools { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip-toggle {
   display: inline-flex;
