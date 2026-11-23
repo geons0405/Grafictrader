@@ -15,7 +15,7 @@ globalThis.fetch = async (url, init = {}) => {
 process.env.KV_REST_API_URL = 'http://learning.test';
 process.env.KV_REST_API_TOKEN = 'test-token';
 
-const { learnFromObservation, getLearningSummary, wilsonLower } = await import('../api/_lib/learning.js');
+const { learnFromObservation, getLearningSummary, wilsonLower } = await import('../api/_lib/journal.js');
 
 test('learning stores compact predictions and settles them against later observed prices', async () => {
   store.clear();
