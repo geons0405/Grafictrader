@@ -178,6 +178,24 @@ export function mergeVerdict(vision, reading) {
     reasons.push(vision.direction === 0 ? 'No gráfico não se vê uma entrada clara.' : 'O gráfico ainda não mostra o sinal com certeza suficiente.');
   }
 
+  // A directional trend read from the chart is a hard safety constraint:
+  // do not issue a counter-trend entry merely because the image model reports high confidence.
+  const visualTrend = String(vision.trend || '').toLowerCase();
+  if (direction > 0 && /baixa|bear|down|descend/.test(visualTrend)) {
+    direction = 0;
+    reasons.push('A tendência visível é de baixa: compra bloqueada até existir confirmação de reversão.');
+  } else if (direction < 0 && /alta|bull|up|ascend/.test(visualTrend)) {
+    direction = 0;
+    reasons.push('A tendência visível é de alta: venda bloqueada até existir confirmação de reversão.');
+  }
+
+  if (reading?.snapshot?.regime === 'trend' && Number.isFinite(reading.snapshot.kalmanZ)) {
+    if (direction !== 0 && reading.snapshot.kalmanZ * direction < -1.2) {
+      direction = 0;
+      reasons.push('A deriva estatística forte aponta para o lado contrário: entrada cancelada.');
+    }
+  }
+
   if (reading?.signal) {
     const q = reading.signal.direction;
     const ctx = reading.context?.score ?? 0;
@@ -187,15 +205,10 @@ export function mergeVerdict(vision, reading) {
       reasons.push('Os dados ao vivo do mercado confirmam.');
     } else if (direction !== 0 && q === -direction) {
       agreement = 'diverge';
-      // The chart on the person's screen leads; the live data only blocks a weak reading
-      // when it is itself sure of the opposite side.
-      if (vision.confidence >= 70 || (reading.signal.confidence ?? 0) < 55) {
-        confidence = Math.max(0, confidence - 10);
-        reasons.push('Os dados ao vivo não concordam totalmente: usa sempre o stop.');
-      } else {
-        reasons.push('Os dados ao vivo apontam com força para o lado contrário.');
-        direction = 0;
-      }
+      // A confirmed opposite live signal always blocks the visual direction.
+      // Model-reported visual confidence is not calibrated enough to overrule market data.
+      reasons.push('Os dados quantitativos ao vivo apontam para o lado contrário: entrada cancelada.');
+      direction = 0;
     } else if (direction !== 0) {
       // The live engine is cautious and rarely has its own signal: no signal is not a "no".
       agreement = 'neutro';
