@@ -403,7 +403,7 @@ function renderHistory() {
   $('#watchHistory').innerHTML = history.map(h => `
     <div class="op">
       <span class="op-side" data-side="${SIDE[h.decision] || ''}">${SHORT[h.decision] || h.decision}</span>
-      <span class="op-prices">${escapeHtml(h.asset || 'ativo ?')} ${escapeHtml(h.timeframe || '')}<small>confiança ${h.confidence}%</small></span>
+      <span class="op-prices">${escapeHtml(h.asset || 'ativo ?')} ${escapeHtml(h.timeframe || '')}<small>${h.confidence == null ? "sem taxa validada" : `taxa histórica ${h.confidence}%`}</small></span>
       <small>${fmtTime(h.at)}</small>
     </div>`).join('') || '<p class="muted-line">As mudanças de orientação desta sessão aparecem aqui.</p>';
 }
