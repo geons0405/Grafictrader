@@ -146,6 +146,28 @@ export const shellTemplate = `
           </div>
         </div>
         <div class="watch-controls" id="watchStarts">
+          <label class="binary-mode-control">
+            <span>Modo de análise</span>
+            <select id="watchAnalysisMode">
+              <option value="market">Mercados (Forex, cripto, ouro e índices)</option>
+              <option value="binary-options">Opções Binárias</option>
+            </select>
+          </label>
+          <div class="binary-options-controls" id="binaryOptionsControls" hidden>
+            <label>Expiração
+              <select id="binaryExpiry">
+                <option value="60">1 minuto</option>
+                <option value="120">2 minutos</option>
+                <option value="180">3 minutos</option>
+                <option value="300">5 minutos</option>
+                <option value="600">10 minutos</option>
+                <option value="900">15 minutos</option>
+              </select>
+            </label>
+            <label>Payout da corretora (%)
+              <input id="binaryPayout" type="number" min="50" max="100" step="1" value="80" inputmode="decimal">
+            </label>
+          </div>
           <button class="btn btn-primary" type="button" id="watchNative" hidden><i data-lucide="smartphone"></i>Analisar a corretora neste telemóvel</button>
           <p class="fine-print left" id="watchNativeHint" hidden>Quando o telemóvel perguntar, escolhe partilhar o «Ecrã inteiro». Abre depois a tua corretora: a IA vê o ecrã e mostra COMPRAR, VENDER ou NÃO OPERAR numa bolha por cima dela. Toca na bolha para ver o que fazer.</p>
           <button class="btn btn-primary" type="button" id="watchShare"><i data-lucide="monitor"></i>Partilhar ecrã</button>
@@ -169,6 +191,11 @@ export const shellTemplate = `
           <div class="position-main"><b id="watchTitle">—</b><small id="watchSub">—</small></div>
         </div>
         <p class="watch-pending" id="watchPending" hidden></p>
+        <div class="binary-options-result" id="binaryOptionsResult" hidden>
+          <b id="binaryOptionsTitle">Análise de Opções Binárias</b>
+          <p id="binaryOptionsDetail"></p>
+          <ul id="binaryOptionsReasons"></ul>
+        </div>
         <div class="levels levels-3" id="watchLevels" hidden>
           <div><small>Entrar em</small><b id="wlEntry">—</b></div>
           <div><small>Stop loss</small><b id="wlStop" class="neg">—</b></div>
