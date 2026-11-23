@@ -196,6 +196,19 @@ export const shellTemplate = `
           <p id="binaryOptionsDetail"></p>
           <ul id="binaryOptionsReasons"></ul>
         </div>
+        <div class="learning-memory" id="learningMemory" hidden>
+          <div class="learning-memory-head">
+            <b>Memória de aprendizagem</b>
+            <span id="learningMemoryStatus">A recolher experiências</span>
+          </div>
+          <div class="learning-memory-stats">
+            <span><strong id="learningWins">0</strong> acertos</span>
+            <span><strong id="learningLosses">0</strong> erros</span>
+            <span><strong id="learningPending">0</strong> pendentes</span>
+          </div>
+          <p id="learningMemoryNote">O sistema compara cada previsão com o resultado observado.</p>
+          <ul id="learningSkills"></ul>
+        </div>
         <div class="levels levels-3" id="watchLevels" hidden>
           <div><small>Entrar em</small><b id="wlEntry">—</b></div>
           <div><small>Stop loss</small><b id="wlStop" class="neg">—</b></div>
