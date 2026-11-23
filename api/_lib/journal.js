@@ -95,10 +95,30 @@ async function learningRead(key) {
   try { return JSON.parse((await redis(['GET', key])) || 'null') ?? { pending: [], settled: [], skills: [] }; }
   catch { return { pending: [], settled: [], skills: [] }; }
 }
+const FEATURE_KEYS = ['hurst', 'varianceRatio', 'kalmanZ', 'entropy', 'volPercentile', 'flowImbalance', 'flowImbalanceShort', 'vwapZ', 'atrPct', 'autocorr'];
+function cleanFeatures(input = {}) {
+  const out = {};
+  for (const name of FEATURE_KEYS) {
+    const value = Number(input[name]);
+    if (input[name] !== null && input[name] !== undefined && Number.isFinite(value)) {
+      out[name] = Math.max(-1_000_000, Math.min(1_000_000, value));
+    }
+  }
+  return out;
+}
 function learningSignature(p) {
   return [p.mode, p.interval, p.direction, p.regime || 'unknown',
     p.confidence >= 80 ? 'high' : p.confidence >= 60 ? 'medium' : 'low',
     p.expirySeconds || 0].join('|');
+}
+function featureInsight(avg = {}) {
+  const notes = [];
+  if (Number.isFinite(avg.kalmanZ)) notes.push(avg.kalmanZ > 0.8 ? 'deriva de Kalman positiva' : avg.kalmanZ < -0.8 ? 'deriva de Kalman negativa' : 'deriva de Kalman fraca');
+  if (Number.isFinite(avg.flowImbalance)) notes.push(avg.flowImbalance > 0.08 ? 'fluxo comprador' : avg.flowImbalance < -0.08 ? 'fluxo vendedor' : 'fluxo equilibrado');
+  if (Number.isFinite(avg.vwapZ)) notes.push(avg.vwapZ > 1.5 ? 'preço acima do VWAP' : avg.vwapZ < -1.5 ? 'preço abaixo do VWAP' : 'preço próximo do VWAP');
+  if (Number.isFinite(avg.entropy)) notes.push(avg.entropy > 0.98 ? 'entropia elevada' : 'entropia controlada');
+  if (Number.isFinite(avg.volPercentile)) notes.push(avg.volPercentile > 0.85 ? 'volatilidade elevada' : 'volatilidade moderada');
+  return notes.slice(0, 4).join('; ') || 'contexto quantitativo ainda incompleto';
 }
 
 export async function learnFromObservation(user, observation) {
@@ -142,6 +162,7 @@ export async function learnFromObservation(user, observation) {
           expirySeconds: p.mode === 'binary-options' ? Number(p.expirySeconds) : null,
           horizonMs: p.mode === 'binary-options' ? null : horizonMs,
           entryPrice: p.entryPrice, tickSize: Number.isFinite(p.tickSize) ? p.tickSize : 0,
+          features: cleanFeatures(p.features),
           createdAt: now, dueAt: now + horizonMs, signature
         });
         recorded = true;
@@ -150,11 +171,16 @@ export async function learnFromObservation(user, observation) {
   }
   const groups = new Map();
   for (const trade of state.settled || []) {
-    const g = groups.get(trade.signature) || { wins: 0, losses: 0, ties: 0, latestAt: trade.settledAt };
+    const g = groups.get(trade.signature) || { wins: 0, losses: 0, ties: 0, latestAt: trade.settledAt, featureSums: {}, featureCounts: {} };
     if (trade.outcome === 'win') g.wins++;
     else if (trade.outcome === 'loss') g.losses++;
     else if (trade.outcome === 'tie') g.ties++;
     g.latestAt = Math.max(g.latestAt, trade.settledAt);
+    for (const [name, value] of Object.entries(trade.features || {})) {
+      if (!FEATURE_KEYS.includes(name) || !Number.isFinite(value)) continue;
+      g.featureSums[name] = (g.featureSums[name] || 0) + value;
+      g.featureCounts[name] = (g.featureCounts[name] || 0) + 1;
+    }
     groups.set(trade.signature, g);
   }
   state.skills = [...groups.entries()].flatMap(([signature, g]) => {
@@ -162,14 +188,16 @@ export async function learnFromObservation(user, observation) {
     if (samples < LEARNING_MIN_SKILL) return [];
     const [mode, interval, direction, regime, confidenceBand, expiry] = signature.split('|');
     const lower = wilsonLower(g.wins, samples);
+    const featureAverages = Object.fromEntries(Object.entries(g.featureSums).map(([name, sum]) => [name, Number((sum / g.featureCounts[name]).toFixed(5))]));
     return [{
       id: 'skill_' + createHash('sha256').update(signature).digest('hex').slice(0, 20),
       signature, mode, interval, direction: Number(direction), regime, confidenceBand,
       expirySeconds: Number(expiry) || null, samples, wins: g.wins, losses: g.losses, ties: g.ties,
-      observedWinRate: Number((g.wins / samples).toFixed(4)),
+      observedWinRate: Number((g.wins / samples).toFixed(4)), featureAverages,
+      featureInsight: featureInsight(featureAverages),
       winRateLower95: Number(lower.toFixed(4)),
       status: samples >= 100 && lower > 0.5 ? 'candidate_for_out_of_sample_test' : 'learning',
-      rule: `Contexto ${mode}, ${interval}, regime ${regime}, confiança ${confidenceBand}: ${g.wins} vitórias em ${samples} resultados.`,
+      rule: `Contexto ${mode}, ${interval}, regime ${regime}, confiança ${confidenceBand}; ${featureInsight(featureAverages)}: ${g.wins} vitórias em ${samples} resultados.`,
       autoApplied: false, updatedAt: g.latestAt
     }];
   }).sort((a, b) => b.samples - a.samples).slice(0, 100);
