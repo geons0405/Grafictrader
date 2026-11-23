@@ -190,13 +190,15 @@ function buildSkillCandidates(state, now) {
     const first = g.trades[0];
     const baselineRows = eligible.filter(t => t.mode === first.mode && t.interval === first.interval && t.signature !== signature);
     const baseline = resultCounts(baselineRows);
-    if (!baseline.samples) continue;
+    if (baseline.samples < LEARNING_MIN_SKILL) continue;
     const rate = counts.wins / counts.samples;
     const baselineRate = baseline.wins / baseline.samples;
     const lower = wilsonLower(counts.wins, counts.samples);
     const upper = wilsonUpper(counts.wins, counts.samples);
-    const action = lower > baselineRate + 0.02 ? 'support'
-      : upper < baselineRate - 0.02 ? 'avoid' : null;
+    const baselineLower = wilsonLower(baseline.wins, baseline.samples);
+    const baselineUpper = wilsonUpper(baseline.wins, baseline.samples);
+    const action = lower > baselineUpper + 0.02 ? 'support'
+      : upper < baselineLower - 0.02 ? 'avoid' : null;
     if (!action) continue;
     const [mode, interval, direction, regime, confidenceBand, expiry] = signature.split('|');
     const featureAverages = Object.fromEntries(Object.entries(g.featureSums).map(([name, sum]) => [name, Number((sum / g.featureCounts[name]).toFixed(5))]));
