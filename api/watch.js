@@ -3,6 +3,7 @@ import { rateLimit, sendRateLimited, aiQuota, liveMinutes, liveMinutesFor } from
 import { clientIp, crossSite } from './_lib/validate.js';
 import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
 import { marketReading } from './_lib/quant/service.js';
+import { evaluateBinaryOptions } from './_lib/quant/binary-options.js';
 import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance, guardImageQuality } from './_lib/quant/verdict.js';
 import { rulesBlock } from './_lib/ai-rules.js';
 import { recordSignal } from './_lib/signals.js';
@@ -84,7 +85,8 @@ export default async function handler(req, res) {
   if (crossSite(req)) return res.status(403).json({ ok: false, error: 'Pedido recusado.' });
   res.setHeader('Cache-Control', 'no-store');
 
-  const { image, previous } = req.body || {};
+  const { image, previous, mode, expirySeconds, payoutPercent } = req.body || {};
+  const binaryOptionsMode = mode === 'binary-options';
   if (typeof image !== 'string' || image.length > MAX_IMAGE_CHARS) {
     return res.status(413).json({ ok: false, error: 'Imagem demasiado grande ou inválida.' });
   }
@@ -152,8 +154,13 @@ export default async function handler(req, res) {
   }
   // Not a chart: neutral verdict, no levels, no live market mixed in.
   const verdict = chartVisible ? mergeVerdict(normalized, reading) : noChartVerdict();
+  // Binary options need expiry-specific validation; do not reuse the normal spot/CFD stop-target tracker.
+  const binaryOptions = binaryOptionsMode
+    ? evaluateBinaryOptions({ vision: normalized, verdict, reading: reading ? { ...reading, interval } : null, expirySeconds: Number(expirySeconds), payoutPercent: Number(payoutPercent), calibration: null })
+    : null;
+
   // Track record: at most one BUY/SELL per market and candle is checked later against the real price.
-  if (reading && verdict.direction) {
+  if (!binaryOptionsMode && reading && verdict.direction) {
     await recordSignal({ source: 'corretora', symbol, interval, side: verdict.direction, price: reading.price, atr: reading.snapshot?.atr, confidence: verdict.confidence });
   }
   const guidance = chartVisible ? photoGuidance(verdict, normalized, reading) : { ...noChartGuidance(normalized, 'ecrã'), headline: 'Não vejo um gráfico no ecrã' };
@@ -170,6 +177,7 @@ export default async function handler(req, res) {
     change: chartVisible && vision.raw?.mudanca ? String(vision.raw.mudanca).slice(0, 200) : null,
     vision: normalized,
     verdict,
+    binaryOptions,
     guidance,
     live: reading && {
       symbol,
