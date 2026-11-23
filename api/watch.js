@@ -181,6 +181,18 @@ export default async function handler(req, res) {
         confidence: verdict.confidence,
         interval,
         regime: reading.snapshot?.regime || 'unknown',
+        features: {
+          hurst: reading.snapshot?.hurst,
+          varianceRatio: reading.snapshot?.varianceRatio,
+          kalmanZ: reading.snapshot?.kalmanZ,
+          entropy: reading.snapshot?.entropy,
+          volPercentile: reading.snapshot?.volPercentile,
+          flowImbalance: reading.snapshot?.flowImbalance,
+          flowImbalanceShort: reading.snapshot?.flowImbalanceShort,
+          vwapZ: reading.snapshot?.vwapZ,
+          atrPct: reading.snapshot?.atr && reading.price ? reading.snapshot.atr / reading.price * 100 : null,
+          autocorr: reading.snapshot?.autocorr
+        },
         entryPrice: reading.price,
         horizonMs: binaryOptionsMode ? undefined : intervalMs,
         expirySeconds: binaryOptionsMode ? Number(expirySeconds) : undefined
