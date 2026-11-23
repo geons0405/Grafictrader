@@ -83,17 +83,25 @@ export async function journalHandler(req, res) {
 // Continuous learning memory. Only compact market context and outcomes are stored;
 // screenshots, credentials, account balances and personal notes are never retained.
 const LEARNING_MAX = 500;
-const LEARNING_MIN_SKILL = 20;
-const learningUserKey = user => 'grafictrader:learning:' + createHash('sha256').update(String(user)).digest('hex').slice(0, 32);
+const LEARNING_MIN_SKILL = 100;
+const LEARNING_DUE_INDEX = 'grafictrader:learning:due';
+const learningUserHash = user => createHash('sha256').update(String(user)).digest('hex').slice(0, 32);
+const learningUserKeyFromHash = hash => 'grafictrader:learning:' + hash;
+const learningUserKey = user => learningUserKeyFromHash(learningUserHash(user));
 const learningMarketKey = market => String(market || '').toLowerCase().replace(/[^a-z0-9:_-]/g, '').slice(0, 80);
+const dueMember = (hash, market, id) => hash + '~' + String(market).slice(0, 100) + '~' + id;
 export const wilsonLower = (wins, total) => {
   if (!total) return 0;
   const z = 1.96, p = wins / total, z2 = z * z, d = 1 + z2 / total;
   return Math.max(0, (p + z2 / (2 * total) - z * Math.sqrt(p * (1 - p) / total + z2 / (4 * total * total))) / d);
 };
+export const wilsonUpper = (wins, total) => {
+  if (!total) return 1;
+  const z = 1.96, p = wins / total, z2 = z * z, d = 1 + z2 / total;
+  return Math.min(1, (p + z2 / (2 * total) + z * Math.sqrt(p * (1 - p) / total + z2 / (4 * total * total))) / d);
+};
 async function learningRead(key) {
-  // A failed read must never be treated as an empty account state: doing so
-  // could overwrite the user's learning history on the next SET.
+  // A failed read must never be treated as an empty account state.
   return JSON.parse((await redis(['GET', key])) || 'null') ?? { pending: [], settled: [], skills: [] };
 }
 const FEATURE_KEYS = ['hurst', 'varianceRatio', 'kalmanZ', 'entropy', 'volPercentile', 'flowImbalance', 'flowImbalanceShort', 'vwapZ', 'atrPct', 'autocorr'];
@@ -121,30 +129,127 @@ function featureInsight(avg = {}) {
   if (Number.isFinite(avg.volPercentile)) notes.push(avg.volPercentile > 0.85 ? 'volatilidade elevada' : 'volatilidade moderada');
   return notes.slice(0, 4).join('; ') || 'contexto quantitativo ainda incompleto';
 }
-
-async function learnFromObservationUnlocked(user, observation) {
-  if (!redisConfigured() || !user || !observation?.market || !Number.isFinite(observation.price) || observation.price <= 0) {
+function resultCounts(rows) {
+  const valid = rows.filter(x => x.outcome === 'win' || x.outcome === 'loss');
+  return { samples: valid.length, wins: valid.filter(x => x.outcome === 'win').length, losses: valid.filter(x => x.outcome === 'loss').length };
+}
+function updateSkillValidation(skill, trades) {
+  if (skill.status !== 'validating') return;
+  for (const trade of trades) {
+    if (trade.settledAt <= skill.createdAt || !['win', 'loss'].includes(trade.outcome)) continue;
+    if (trade.mode !== skill.mode || trade.interval !== skill.interval) continue;
+    skill.validation.baselineSamples++;
+    if (trade.outcome === 'win') skill.validation.baselineWins++;
+    if (trade.signature === skill.signature) {
+      skill.validation.samples++;
+      if (trade.outcome === 'win') skill.validation.wins++;
+      else skill.validation.losses++;
+    }
+  }
+  const n = skill.validation.samples;
+  const baselineN = skill.validation.baselineSamples;
+  if (!n || !baselineN) return;
+  const baselineRate = skill.validation.baselineWins / baselineN;
+  const lower = wilsonLower(skill.validation.wins, n);
+  const upper = wilsonUpper(skill.validation.wins, n);
+  skill.validation.winRate = Number((skill.validation.wins / n).toFixed(4));
+  skill.validation.baselineWinRate = Number(baselineRate.toFixed(4));
+  skill.validation.wilsonLower95 = Number(lower.toFixed(4));
+  skill.validation.wilsonUpper95 = Number(upper.toFixed(4));
+  if (n >= 100) {
+    if (skill.action === 'support' && lower > baselineRate + 0.02) skill.status = 'validated';
+    else if (skill.action === 'avoid' && upper < baselineRate - 0.02) skill.status = 'validated_avoid';
+    else if ((skill.action === 'support' && upper < baselineRate) || (skill.action === 'avoid' && lower > baselineRate)) skill.status = 'rejected';
+    else if (n >= 300) skill.status = 'inconclusive';
+  }
+  skill.updatedAt = trades.at(-1)?.settledAt || skill.updatedAt;
+}
+function buildSkillCandidates(state, now) {
+  const groups = new Map();
+  const eligible = (state.settled || []).filter(t => ['win', 'loss'].includes(t.outcome));
+  for (const trade of eligible) {
+    const g = groups.get(trade.signature) || { trades: [], featureSums: {}, featureCounts: {} };
+    g.trades.push(trade);
+    for (const [name, value] of Object.entries(trade.features || {})) {
+      if (!FEATURE_KEYS.includes(name) || !Number.isFinite(value)) continue;
+      g.featureSums[name] = (g.featureSums[name] || 0) + value;
+      g.featureCounts[name] = (g.featureCounts[name] || 0) + 1;
+    }
+    groups.set(trade.signature, g);
+  }
+  const existing = new Set((state.skills || []).map(s => s.signature));
+  const created = [];
+  for (const [signature, g] of groups) {
+    const counts = resultCounts(g.trades);
+    if (counts.samples < LEARNING_MIN_SKILL || existing.has(signature)) continue;
+    const first = g.trades[0];
+    const baselineRows = eligible.filter(t => t.mode === first.mode && t.interval === first.interval);
+    const baseline = resultCounts(baselineRows);
+    if (!baseline.samples) continue;
+    const rate = counts.wins / counts.samples;
+    const baselineRate = baseline.wins / baseline.samples;
+    const lower = wilsonLower(counts.wins, counts.samples);
+    const upper = wilsonUpper(counts.wins, counts.samples);
+    const action = lower > baselineRate + 0.02 ? 'support'
+      : upper < baselineRate - 0.02 ? 'avoid' : null;
+    if (!action) continue;
+    const [mode, interval, direction, regime, confidenceBand, expiry] = signature.split('|');
+    const featureAverages = Object.fromEntries(Object.entries(g.featureSums).map(([name, sum]) => [name, Number((sum / g.featureCounts[name]).toFixed(5))]));
+    const skill = {
+      id: 'skill_' + createHash('sha256').update(signature).digest('hex').slice(0, 20),
+      signature, mode, interval, direction: Number(direction), regime, confidenceBand,
+      expirySeconds: Number(expiry) || null, action,
+      training: { samples: counts.samples, wins: counts.wins, losses: counts.losses, winRate: Number(rate.toFixed(4)), baselineSamples: baseline.samples, baselineWinRate: Number(baselineRate.toFixed(4)), wilsonLower95: Number(lower.toFixed(4)), wilsonUpper95: Number(upper.toFixed(4)) },
+      validation: { samples: 0, wins: 0, losses: 0, baselineSamples: 0, baselineWins: 0 },
+      featureAverages, featureInsight: featureInsight(featureAverages),
+      status: 'validating', autoApplied: false, createdAt: now, updatedAt: now,
+      rule: action === 'support'
+        ? 'Contexto com desempenho histórico acima da linha de base; em validação independente.'
+        : 'Contexto historicamente fraco; testar se evitar este sinal melhora a estratégia.'
+    };
+    state.skills.push(skill);
+    created.push(skill);
+  }
+  state.skills = (state.skills || []).slice(-100);
+  return created;
+}
+async function learnFromObservationUnlocked(user, observation, userHashOverride = null) {
+  const userHash = userHashOverride || learningUserHash(user);
+  if (!redisConfigured() || !userHash || !observation?.market ||
+      (!observation.unverifiedOnly && (!Number.isFinite(observation.price) || observation.price <= 0))) {
     return { stored: false, reason: 'learning_storage_or_market_unavailable' };
   }
-  const key = learningUserKey(user) + ':' + learningMarketKey(observation.market);
+  const key = learningUserKeyFromHash(userHash) + ':' + learningMarketKey(observation.market);
   const now = Number.isFinite(observation.at) ? observation.at : Date.now();
+  const priceAt = Number.isFinite(observation.priceAt) ? observation.priceAt : now;
   const state = await learningRead(key);
   let settledNow = 0;
+  const newlySettled = [];
+  const removeMembers = [];
   const remaining = [];
   for (const p of state.pending || []) {
-    if (now < p.dueAt) { remaining.push(p); continue; }
+    if (priceAt < p.dueAt) { remaining.push(p); continue; }
+    // An external market quote is not proof of the broker's binary-options expiry price.
+    if (p.mode === 'binary-options' && observation.priceSource !== 'broker') {
+      const trade = { ...p, settledAt: now, observedAt: now, settlementDelayMs: now - p.dueAt, exitPrice: null, outcome: 'unverified', returnPct: null };
+      state.settled.unshift(trade); newlySettled.push(trade); settledNow++;
+      if (p.indexMember) removeMembers.push(p.indexMember);
+      continue;
+    }
+    if (observation.unverifiedOnly && p.mode !== 'binary-options') { remaining.push(p); continue; }
     const delta = observation.price - p.entryPrice;
-    const delayMs = now - p.dueAt;
+    const delayMs = priceAt - p.dueAt;
     const toleranceMs = p.mode === 'binary-options'
       ? Math.max(2_000, (p.expirySeconds || 60) * 50)
       : Math.max(15_000, (p.horizonMs || 300_000) * 0.2);
-    const outcome = delayMs > toleranceMs ? 'unverified'
+    const outcome = observation.unverifiedOnly || delayMs > toleranceMs ? 'unverified'
       : Math.abs(delta) <= Math.max(p.tickSize || 0, p.entryPrice * 1e-8) ? 'tie'
       : Math.sign(delta) === p.direction ? 'win' : 'loss';
-    state.settled.unshift({ ...p, settledAt: now, settlementDelayMs: delayMs,
-      exitPrice: observation.price, outcome,
-      returnPct: outcome === 'unverified' ? null : Number(((delta * p.direction / p.entryPrice) * 100).toFixed(5)) });
-    settledNow++;
+    const trade = { ...p, settledAt: priceAt, observedAt: now, settlementDelayMs: delayMs,
+      exitPrice: Number.isFinite(observation.price) ? observation.price : null, outcome,
+      returnPct: outcome === 'unverified' ? null : Number(((delta * p.direction / p.entryPrice) * 100).toFixed(5)) };
+    state.settled.unshift(trade); newlySettled.push(trade); settledNow++;
+    if (p.indexMember) removeMembers.push(p.indexMember);
   }
   state.pending = remaining;
   const p = observation.prediction;
@@ -155,8 +260,10 @@ async function learnFromObservationUnlocked(user, observation) {
       const signature = learningSignature(p);
       const duplicate = state.pending.some(x => x.signature === signature && now - x.createdAt < Math.min(horizonMs, 300_000));
       if (!duplicate) {
+        const id = randomBytes(8).toString('hex');
+        const member = dueMember(userHash, observation.market, id);
         state.pending.unshift({
-          id: randomBytes(8).toString('hex'), market: observation.market,
+          id, indexMember: member, market: observation.market,
           mode: p.mode === 'binary-options' ? 'binary-options' : 'market',
           interval: String(p.interval || '').slice(0, 12), direction: p.direction,
           confidence: p.confidence, regime: String(p.regime || 'unknown').slice(0, 30),
@@ -172,39 +279,14 @@ async function learnFromObservationUnlocked(user, observation) {
   }
   state.pending = (state.pending || []).slice(0, LEARNING_MAX);
   state.settled = (state.settled || []).slice(0, LEARNING_MAX);
-  const groups = new Map();
-  for (const trade of state.settled) {
-    const g = groups.get(trade.signature) || { wins: 0, losses: 0, ties: 0, latestAt: trade.settledAt, featureSums: {}, featureCounts: {} };
-    if (trade.outcome === 'win') g.wins++;
-    else if (trade.outcome === 'loss') g.losses++;
-    else if (trade.outcome === 'tie') g.ties++;
-    g.latestAt = Math.max(g.latestAt, trade.settledAt);
-    for (const [name, value] of Object.entries(trade.features || {})) {
-      if (!['win', 'loss'].includes(trade.outcome) || !FEATURE_KEYS.includes(name) || !Number.isFinite(value)) continue;
-      g.featureSums[name] = (g.featureSums[name] || 0) + value;
-      g.featureCounts[name] = (g.featureCounts[name] || 0) + 1;
-    }
-    groups.set(trade.signature, g);
-  }
-  state.skills = [...groups.entries()].flatMap(([signature, g]) => {
-    const samples = g.wins + g.losses;
-    if (samples < LEARNING_MIN_SKILL) return [];
-    const [mode, interval, direction, regime, confidenceBand, expiry] = signature.split('|');
-    const lower = wilsonLower(g.wins, samples);
-    const featureAverages = Object.fromEntries(Object.entries(g.featureSums).map(([name, sum]) => [name, Number((sum / g.featureCounts[name]).toFixed(5))]));
-    return [{
-      id: 'skill_' + createHash('sha256').update(signature).digest('hex').slice(0, 20),
-      signature, mode, interval, direction: Number(direction), regime, confidenceBand,
-      expirySeconds: Number(expiry) || null, samples, wins: g.wins, losses: g.losses, ties: g.ties,
-      observedWinRate: Number((g.wins / samples).toFixed(4)), featureAverages,
-      featureInsight: featureInsight(featureAverages),
-      winRateLower95: Number(lower.toFixed(4)),
-      status: samples >= 100 && lower > 0.5 ? 'candidate_for_out_of_sample_test' : 'learning',
-      rule: `Contexto ${mode}, ${interval}, regime ${regime}, confiança ${confidenceBand}; ${featureInsight(featureAverages)}: ${g.wins} vitórias em ${samples} resultados.`,
-      autoApplied: false, updatedAt: g.latestAt
-    }];
-  }).sort((a, b) => b.samples - a.samples).slice(0, 100);
+  for (const skill of state.skills || []) updateSkillValidation(skill, newlySettled);
+  buildSkillCandidates(state, now);
   await redis(['SET', key, JSON.stringify(state)]);
+  for (const member of removeMembers) await redis(['ZREM', LEARNING_DUE_INDEX, member]);
+  if (recorded) {
+    const pending = state.pending[0];
+    if (pending?.indexMember) await redis(['ZADD', LEARNING_DUE_INDEX, String(pending.dueAt), pending.indexMember]);
+  }
   const wins = state.settled.filter(x => x.outcome === 'win').length;
   const losses = state.settled.filter(x => x.outcome === 'loss').length;
   return { stored: recorded || settledNow > 0, recorded, settled: settledNow,
@@ -212,17 +294,8 @@ async function learnFromObservationUnlocked(user, observation) {
     unverified: state.settled.filter(x => x.outcome === 'unverified').length,
     skills: state.skills.slice(0, 10) };
 }
-
-
-/**
- * Serializes each user's market learning update with a short Redis lease.
- * If the lease is busy, skip this sample rather than risk overwriting newer state.
- */
-export async function learnFromObservation(user, observation) {
-  if (!redisConfigured() || !user || !observation?.market) {
-    return { stored: false, reason: 'learning_storage_or_market_unavailable' };
-  }
-  const key = learningUserKey(user) + ':' + learningMarketKey(observation.market);
+async function withLearningLock(userHash, market, fn) {
+  const key = learningUserKeyFromHash(userHash) + ':' + learningMarketKey(market);
   const lock = key + ':lock';
   const token = randomBytes(16).toString('hex');
   let acquired = false;
@@ -232,12 +305,41 @@ export async function learnFromObservation(user, observation) {
     if (attempt < 4) await new Promise(resolve => setTimeout(resolve, 40 * (attempt + 1)));
   }
   if (!acquired) return { stored: false, reason: 'learning_update_busy' };
-  try {
-    return await learnFromObservationUnlocked(user, observation);
-  } finally {
-    // A release failure is harmless: the short lease expires automatically.
+  try { return await fn(); }
+  finally {
     try { if ((await redis(['GET', lock])) === token) await redis(['DEL', lock]); } catch { /* lease expiry releases it */ }
   }
+}
+export async function learnFromObservation(user, observation) {
+  if (!redisConfigured() || !user || !observation?.market) return { stored: false, reason: 'learning_storage_or_market_unavailable' };
+  return withLearningLock(learningUserHash(user), observation.market,
+    () => learnFromObservationUnlocked(user, observation));
+}
+export async function settleDueLearning({ getPrice, limit = 50, now = Date.now() } = {}) {
+  if (!redisConfigured()) return { processed: 0, settled: 0, skipped: 0, reason: 'redis_unavailable' };
+  const members = await redis(['ZRANGEBYSCORE', LEARNING_DUE_INDEX, '-inf', String(now), 'LIMIT', '0', String(Math.max(1, Math.min(100, limit)))]) || [];
+  let processed = 0, settled = 0, skipped = 0;
+  for (const member of members) {
+    const [userHash, market, id] = String(member).split('~');
+    if (!userHash || !market || !id) { await redis(['ZREM', LEARNING_DUE_INDEX, member]); continue; }
+    const key = learningUserKeyFromHash(userHash) + ':' + learningMarketKey(market);
+    const state = await learningRead(key);
+    const pending = (state.pending || []).find(p => p.id === id);
+    if (!pending) { await redis(['ZREM', LEARNING_DUE_INDEX, member]); continue; }
+    let quote = null;
+    if (pending.mode !== 'binary-options') {
+      const [symbol, interval] = String(market).split('|');
+      try { quote = await getPrice?.(symbol, interval); } catch { quote = null; }
+      if (!Number.isFinite(quote?.price) || quote.price <= 0) { skipped++; continue; }
+    }
+    const result = await withLearningLock(userHash, market, () => learnFromObservationUnlocked(null, {
+      market, price: quote?.price, at: now, priceAt: quote?.at || now,
+      priceSource: 'external-market-feed', unverifiedOnly: pending.mode === 'binary-options'
+    }, userHash));
+    if (result.stored) { processed++; settled += result.settled || 0; }
+    else skipped++;
+  }
+  return { processed, settled, skipped };
 }
 
 export async function getLearningSummary(user, market) {
