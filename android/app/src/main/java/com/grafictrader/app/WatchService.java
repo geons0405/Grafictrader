@@ -78,7 +78,6 @@ public class WatchService extends Service {
     private static final long MIN_GAP_MS = 6000;
     private static final long SLOW_GAP_MS = 20000;
     private static final long MAX_GAP_MS = 45000;
-    private static final long SESSION_LIMIT_MS = 45 * 60 * 1000;
     private static final double THRESHOLD = 1.5;
     private static final int SIG_W = 96;
     private static final int SIG_H = 54;
@@ -140,7 +139,6 @@ public class WatchService extends Service {
     private volatile long frameCount;
     private long lastSentAt;
     private volatile long minGap = MIN_GAP_MS;
-    private long startedAt;
     private int analyses;
     private volatile JSONObject current;
     private boolean blankShown;
@@ -178,14 +176,14 @@ public class WatchService extends Service {
         }
         running = true;
         remember(true, null);
-        startedAt = System.currentTimeMillis();
         lastManageAction = null;
         ending = false;
         endingMessage = null;
         projection.registerCallback(new MediaProjection.Callback() {
             @Override
             public void onStop() {
-                main.post(() -> finish("A partilha do ecrã terminou."));
+                // Keep the stopped state visible long enough for the user to see why capture ended.
+                main.post(() -> finishVisibly("A partilha do ecrã terminou. Volta a iniciar a análise para autorizar uma nova captura."));
             }
         }, main);
 
@@ -402,10 +400,7 @@ public class WatchService extends Service {
     private void step() {
         if (ending) return;
         long now = System.currentTimeMillis();
-        if (now - startedAt > SESSION_LIMIT_MS) {
-            main.post(() -> finish("Sessão terminada ao fim de 45 minutos para poupar análises."));
-            return;
-        }
+        // No arbitrary 45-minute cutoff: the user controls when the live session ends.
         if (lastSentAt != 0 && now - lastSentAt < minGap) return;
         Bitmap bitmap = latestBitmap();
         if (bitmap == null) return;
