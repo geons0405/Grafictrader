@@ -2,12 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 const store = new Map();
+let failReads = false;
 globalThis.fetch = async (url, init = {}) => {
   if (String(url).startsWith('http://learning.test')) {
-    const [command, key, value] = JSON.parse(init.body);
+    const [command, key, value, ...options] = JSON.parse(init.body);
     let result = null;
-    if (command === 'GET') result = store.get(key) ?? null;
-    if (command === 'SET') { store.set(key, value); result = 'OK'; }
+    if (command === 'GET') {
+      if (failReads && !String(key).endsWith(':lock')) return new Response('temporary redis error', { status: 503 });
+      result = store.get(key) ?? null;
+    }
+    if (command === 'SET') {
+      if (options.includes('NX') && store.has(key)) result = null;
+      else { store.set(key, value); result = 'OK'; }
+    }
+    if (command === 'DEL') { store.delete(key); result = 1; }
     return new Response(JSON.stringify({ result }), { status: 200 });
   }
   return new Response('offline', { status: 503 });
@@ -18,7 +26,7 @@ process.env.KV_REST_API_TOKEN = 'test-token';
 const { learnFromObservation, getLearningSummary, wilsonLower } = await import('../api/_lib/journal.js');
 
 test('learning stores compact predictions and settles them against later observed prices', async () => {
-  store.clear();
+  store.clear(); failReads = false;
   const first = await learnFromObservation('user@example.com', {
     market: 'BTCUSDT|5m', price: 100, at: 1_000_000,
     prediction: { mode: 'market', direction: 1, confidence: 75, interval: '5m', regime: 'trend', entryPrice: 100, horizonMs: 30_000 }
@@ -35,7 +43,7 @@ test('learning stores compact predictions and settles them against later observe
 });
 
 test('learning identifies losing predictions and creates a skill proposal only after enough evidence', async () => {
-  store.clear();
+  store.clear(); failReads = false;
   const user = 'skills@example.com';
   const market = 'ETHUSDT|1m';
   let now = 2_000_000;
@@ -56,6 +64,27 @@ test('learning identifies losing predictions and creates a skill proposal only a
   assert.match(summary.skills[0].featureInsight, /deriva de Kalman negativa/);
   assert.match(summary.skills[0].featureInsight, /fluxo vendedor/);
   assert.equal(summary.skills[0].featureAverages.kalmanZ, -1.4);
+});
+
+test('concurrent updates are serialized and a Redis read failure cannot erase history', async () => {
+  store.clear(); failReads = false;
+  const user = 'concurrent@example.com';
+  const market = 'BTCUSDT|5m';
+  const make = (direction, at) => ({
+    market, price: 100, at,
+    prediction: { mode: 'market', direction, confidence: 70, interval: '5m', regime: 'trend', entryPrice: 100, horizonMs: 60_000 }
+  });
+  await Promise.all([
+    learnFromObservation(user, make(1, 3_000_000)),
+    learnFromObservation(user, make(-1, 3_000_000))
+  ]);
+  const before = await getLearningSummary(user, market);
+  assert.equal(before.pending, 2);
+  failReads = true;
+  await assert.rejects(() => learnFromObservation(user, { market, price: 101, at: 3_060_000 }));
+  failReads = false;
+  const after = await getLearningSummary(user, market);
+  assert.equal(after.pending, 2);
 });
 
 test('Wilson lower bound is conservative and invalid samples are rejected', () => {
