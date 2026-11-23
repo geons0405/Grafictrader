@@ -92,8 +92,9 @@ export const wilsonLower = (wins, total) => {
   return Math.max(0, (p + z2 / (2 * total) - z * Math.sqrt(p * (1 - p) / total + z2 / (4 * total * total))) / d);
 };
 async function learningRead(key) {
-  try { return JSON.parse((await redis(['GET', key])) || 'null') ?? { pending: [], settled: [], skills: [] }; }
-  catch { return { pending: [], settled: [], skills: [] }; }
+  // A failed read must never be treated as an empty account state: doing so
+  // could overwrite the user's learning history on the next SET.
+  return JSON.parse((await redis(['GET', key])) || 'null') ?? { pending: [], settled: [], skills: [] };
 }
 const FEATURE_KEYS = ['hurst', 'varianceRatio', 'kalmanZ', 'entropy', 'volPercentile', 'flowImbalance', 'flowImbalanceShort', 'vwapZ', 'atrPct', 'autocorr'];
 function cleanFeatures(input = {}) {
@@ -121,7 +122,7 @@ function featureInsight(avg = {}) {
   return notes.slice(0, 4).join('; ') || 'contexto quantitativo ainda incompleto';
 }
 
-export async function learnFromObservation(user, observation) {
+async function learnFromObservationUnlocked(user, observation) {
   if (!redisConfigured() || !user || !observation?.market || !Number.isFinite(observation.price) || observation.price <= 0) {
     return { stored: false, reason: 'learning_storage_or_market_unavailable' };
   }
@@ -169,15 +170,17 @@ export async function learnFromObservation(user, observation) {
       }
     }
   }
+  state.pending = (state.pending || []).slice(0, LEARNING_MAX);
+  state.settled = (state.settled || []).slice(0, LEARNING_MAX);
   const groups = new Map();
-  for (const trade of state.settled || []) {
+  for (const trade of state.settled) {
     const g = groups.get(trade.signature) || { wins: 0, losses: 0, ties: 0, latestAt: trade.settledAt, featureSums: {}, featureCounts: {} };
     if (trade.outcome === 'win') g.wins++;
     else if (trade.outcome === 'loss') g.losses++;
     else if (trade.outcome === 'tie') g.ties++;
     g.latestAt = Math.max(g.latestAt, trade.settledAt);
     for (const [name, value] of Object.entries(trade.features || {})) {
-      if (!FEATURE_KEYS.includes(name) || !Number.isFinite(value)) continue;
+      if (!['win', 'loss'].includes(trade.outcome) || !FEATURE_KEYS.includes(name) || !Number.isFinite(value)) continue;
       g.featureSums[name] = (g.featureSums[name] || 0) + value;
       g.featureCounts[name] = (g.featureCounts[name] || 0) + 1;
     }
@@ -201,8 +204,6 @@ export async function learnFromObservation(user, observation) {
       autoApplied: false, updatedAt: g.latestAt
     }];
   }).sort((a, b) => b.samples - a.samples).slice(0, 100);
-  state.pending = state.pending.slice(0, LEARNING_MAX);
-  state.settled = (state.settled || []).slice(0, LEARNING_MAX);
   await redis(['SET', key, JSON.stringify(state)]);
   const wins = state.settled.filter(x => x.outcome === 'win').length;
   const losses = state.settled.filter(x => x.outcome === 'loss').length;
@@ -210,6 +211,32 @@ export async function learnFromObservation(user, observation) {
     pending: state.pending.length, wins, losses,
     unverified: state.settled.filter(x => x.outcome === 'unverified').length,
     skills: state.skills.slice(0, 10) };
+}
+
+
+/**
+ * Serializes each user's market learning update with a short Redis lease.
+ * If the lease is busy, skip this sample rather than risk overwriting newer state.
+ */
+export async function learnFromObservation(user, observation) {
+  if (!redisConfigured() || !user || !observation?.market) {
+    return { stored: false, reason: 'learning_storage_or_market_unavailable' };
+  }
+  const key = learningUserKey(user) + ':' + learningMarketKey(observation.market);
+  const lock = key + ':lock';
+  const token = randomBytes(16).toString('hex');
+  let acquired = false;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const result = await redis(['SET', lock, token, 'NX', 'EX', '10']);
+    if (result === 'OK') { acquired = true; break; }
+    if (attempt < 4) await new Promise(resolve => setTimeout(resolve, 40 * (attempt + 1)));
+  }
+  if (!acquired) return { stored: false, reason: 'learning_update_busy' };
+  try {
+    return await learnFromObservationUnlocked(user, observation);
+  } finally {
+    if ((await redis(['GET', lock])) === token) await redis(['DEL', lock]);
+  }
 }
 
 export async function getLearningSummary(user, market) {
