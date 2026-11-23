@@ -138,12 +138,13 @@ function updateSkillValidation(skill, trades) {
   for (const trade of trades) {
     if (trade.settledAt <= skill.createdAt || !['win', 'loss'].includes(trade.outcome)) continue;
     if (trade.mode !== skill.mode || trade.interval !== skill.interval) continue;
-    skill.validation.baselineSamples++;
-    if (trade.outcome === 'win') skill.validation.baselineWins++;
     if (trade.signature === skill.signature) {
       skill.validation.samples++;
       if (trade.outcome === 'win') skill.validation.wins++;
       else skill.validation.losses++;
+    } else {
+      skill.validation.baselineSamples++;
+      if (trade.outcome === 'win') skill.validation.baselineWins++;
     }
   }
   const n = skill.validation.samples;
@@ -183,7 +184,7 @@ function buildSkillCandidates(state, now) {
     const counts = resultCounts(g.trades);
     if (counts.samples < LEARNING_MIN_SKILL || existing.has(signature)) continue;
     const first = g.trades[0];
-    const baselineRows = eligible.filter(t => t.mode === first.mode && t.interval === first.interval);
+    const baselineRows = eligible.filter(t => t.mode === first.mode && t.interval === first.interval && t.signature !== signature);
     const baseline = resultCounts(baselineRows);
     if (!baseline.samples) continue;
     const rate = counts.wins / counts.samples;
@@ -319,6 +320,7 @@ export async function settleDueLearning({ getPrice, limit = 50, now = Date.now()
   if (!redisConfigured()) return { processed: 0, settled: 0, skipped: 0, reason: 'redis_unavailable' };
   const members = await redis(['ZRANGEBYSCORE', LEARNING_DUE_INDEX, '-inf', String(now), 'LIMIT', '0', String(Math.max(1, Math.min(100, limit)))]) || [];
   let processed = 0, settled = 0, skipped = 0;
+  const priceCache = new Map();
   for (const member of members) {
     const [userHash, market, id] = String(member).split('~');
     if (!userHash || !market || !id) { await redis(['ZREM', LEARNING_DUE_INDEX, member]); continue; }
@@ -329,13 +331,20 @@ export async function settleDueLearning({ getPrice, limit = 50, now = Date.now()
     let quote = null;
     if (pending.mode !== 'binary-options') {
       const [symbol, interval] = String(market).split('|');
-      try { quote = await getPrice?.(symbol, interval); } catch { quote = null; }
+      const cacheKey = symbol + '|' + interval;
+      if (priceCache.has(cacheKey)) quote = priceCache.get(cacheKey);
+      else {
+        try { quote = await getPrice?.(symbol, interval); } catch { quote = null; }
+        priceCache.set(cacheKey, quote);
+      }
       if (!Number.isFinite(quote?.price) || quote.price <= 0) { skipped++; continue; }
     }
     const result = await withLearningLock(userHash, market, () => learnFromObservationUnlocked(null, {
       market, price: quote?.price, at: now, priceAt: quote?.at || now,
       priceSource: 'external-market-feed', unverifiedOnly: pending.mode === 'binary-options'
     }, userHash));
+    const refreshed = await learningRead(key);
+    if (!(refreshed.pending || []).some(p => p.id === id)) await redis(['ZREM', LEARNING_DUE_INDEX, member]);
     if (result.stored) { processed++; settled += result.settled || 0; }
     else skipped++;
   }
