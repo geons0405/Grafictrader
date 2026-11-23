@@ -2,6 +2,8 @@ import { verifySignals } from './signals.js';
 import { runInstructor } from './quant/service.js';
 import { SYMBOLS } from './validate.js';
 import { runAlerts } from './push.js';
+import { marketReading } from './quant/service.js';
+import { settleDueLearning } from './journal.js';
 import { MAIN_FOREX } from './markets.js';
 
 // Daily job, GET /api/instructor?cron=1 (vercel.json "crons"): settles the signals whose horizon has
@@ -21,6 +23,17 @@ export async function cronHandler(req, res) {
   // Without CRON_SECRET the job is off: a user agent can be faked by anyone.
   if (!secret || auth !== `Bearer ${secret}`) {
     return res.status(401).json({ ok: false });
+  }
+  if (req.query?.learning) {
+    const learning = await settleDueLearning({
+      limit: 50,
+      getPrice: async (symbol, interval) => {
+        // Use the same quant market-data adapter used to record the original entry.
+        const reading = await marketReading(symbol, interval, { withContext: false });
+        return { price: reading.price, at: Date.now() };
+      }
+    });
+    return res.status(200).json({ ok: true, learning });
   }
   const started = Date.now();
   const settled = await verifySignals({ maxFetches: 30 }).catch(() => 0);
