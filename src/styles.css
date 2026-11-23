@@ -1183,6 +1183,51 @@ button.asset-pill svg.lucide { position: static; }
 @media (max-width: 420px) { .watch-stage:not(.active) { aspect-ratio: auto; min-height: 260px; } }
 .watch-controls { display: grid; gap: 8px; }
 .watch-controls[hidden] { display: none !important; }
+.binary-mode-control,
+.binary-options-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.binary-mode-control select,
+.binary-options-controls select,
+.binary-options-controls input {
+  width: 100%;
+  min-width: 0;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+  background: var(--well);
+  color: var(--text);
+  outline: 0;
+  font-size: 13px;
+}
+.binary-options-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--well);
+}
+.binary-options-result {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--well);
+}
+.binary-options-result b { font-size: 14px; }
+.binary-options-result p,
+.binary-options-result li { color: var(--text-2); font-size: 12px; line-height: 1.45; }
+.binary-options-result ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.binary-options-result[data-status="VALIDATED_SETUP"] { border-color: var(--up); }
 .watch-tools { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip-toggle {
   display: inline-flex;
