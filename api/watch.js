@@ -8,6 +8,7 @@ import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, 
 import { rulesBlock } from './_lib/ai-rules.js';
 import { recordSignal } from './_lib/signals.js';
 import { photoGuidance } from './_lib/quant/explain.js';
+import { learnFromObservation } from './_lib/learning.js';
 
 // Live analysis of the user's broker: the app sends one frame of the shared
 // screen (or camera) every few seconds, only when the chart changed.
@@ -165,6 +166,32 @@ export default async function handler(req, res) {
   }
   const guidance = chartVisible ? photoGuidance(verdict, normalized, reading) : { ...noChartGuidance(normalized, 'ecrã'), headline: 'Não vejo um gráfico no ecrã' };
 
+  // Learning runs after the fast decision and is bounded so Redis latency cannot
+  // hold the live response. Only compact numeric context is stored; never images.
+  let learning = null;
+  if (chartVisible && reading?.price > 0 && marketKey(normalized)) {
+    const intervalMs = ({ '1m': 60_000, '5m': 300_000, '15m': 900_000, '1h': 3_600_000, '4h': 14_400_000 })[interval] || 300_000;
+    const learnPromise = learnFromObservation(who, {
+      market: marketKey(normalized),
+      price: reading.price,
+      at: Date.now(),
+      prediction: verdict.direction ? {
+        mode: binaryOptionsMode ? 'binary-options' : 'market',
+        direction: verdict.direction,
+        confidence: verdict.confidence,
+        interval,
+        regime: reading.snapshot?.regime || 'unknown',
+        entryPrice: reading.price,
+        horizonMs: binaryOptionsMode ? undefined : intervalMs,
+        expirySeconds: binaryOptionsMode ? Number(expirySeconds) : undefined
+      } : null
+    });
+    learning = await Promise.race([
+      learnPromise.catch(() => null),
+      new Promise(resolve => setTimeout(() => resolve(null), 300))
+    ]);
+  }
+
   return res.status(200).json({
     ok: true,
     provider: vision.provider,
@@ -178,6 +205,7 @@ export default async function handler(req, res) {
     vision: normalized,
     verdict,
     binaryOptions,
+    learning,
     guidance,
     live: reading && {
       symbol,
