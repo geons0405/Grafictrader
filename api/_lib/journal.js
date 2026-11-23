@@ -227,7 +227,7 @@ export async function learnFromObservation(user, observation) {
   const token = randomBytes(16).toString('hex');
   let acquired = false;
   for (let attempt = 0; attempt < 5; attempt++) {
-    const result = await redis(['SET', lock, token, 'NX', 'EX', '10']);
+    const result = await redis(['SET', lock, token, 'NX', 'EX', '30']);
     if (result === 'OK') { acquired = true; break; }
     if (attempt < 4) await new Promise(resolve => setTimeout(resolve, 40 * (attempt + 1)));
   }
@@ -235,7 +235,8 @@ export async function learnFromObservation(user, observation) {
   try {
     return await learnFromObservationUnlocked(user, observation);
   } finally {
-    if ((await redis(['GET', lock])) === token) await redis(['DEL', lock]);
+    // A release failure is harmless: the short lease expires automatically.
+    try { if ((await redis(['GET', lock])) === token) await redis(['DEL', lock]); } catch { /* lease expiry releases it */ }
   }
 }
 
