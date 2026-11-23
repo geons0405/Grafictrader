@@ -42,7 +42,7 @@ test('learning identifies losing predictions and creates a skill proposal only a
   for (let i = 0; i < 20; i++) {
     await learnFromObservation(user, {
       market, price: 100, at: now,
-      prediction: { mode: 'market', direction: 1, confidence: 65, interval: '1m', regime: 'range', entryPrice: 100, horizonMs: 30_000 }
+      prediction: { mode: 'market', direction: 1, confidence: 65, interval: '1m', regime: 'range', features: { kalmanZ: -1.4, flowImbalance: -0.12, vwapZ: 1.8, entropy: 0.91, volPercentile: 0.4 }, entryPrice: 100, horizonMs: 30_000 }
     });
     const result = await learnFromObservation(user, { market, price: 99, at: now + 30_000 });
     assert.equal(result.settled, 1);
@@ -53,6 +53,9 @@ test('learning identifies losing predictions and creates a skill proposal only a
   assert.equal(summary.skills.length, 1);
   assert.equal(summary.skills[0].autoApplied, false);
   assert.equal(summary.skills[0].status, 'learning');
+  assert.match(summary.skills[0].featureInsight, /deriva de Kalman negativa/);
+  assert.match(summary.skills[0].featureInsight, /fluxo vendedor/);
+  assert.equal(summary.skills[0].featureAverages.kalmanZ, -1.4);
 });
 
 test('Wilson lower bound is conservative and invalid samples are rejected', () => {
