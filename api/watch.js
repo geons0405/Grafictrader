@@ -8,7 +8,7 @@ import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, 
 import { rulesBlock } from './_lib/ai-rules.js';
 import { recordSignal } from './_lib/signals.js';
 import { photoGuidance } from './_lib/quant/explain.js';
-import { learnFromObservation } from './_lib/learning.js';
+import { learnFromObservation } from './_lib/journal.js';
 
 // Live analysis of the user's broker: the app sends one frame of the shared
 // screen (or camera) every few seconds, only when the chart changed.
