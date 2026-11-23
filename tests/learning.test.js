@@ -108,11 +108,12 @@ test('scheduled worker settles regular market predictions and excludes unverifie
     market: 'EURUSD|1m', price: 1.1, at: 4_000_000,
     prediction: { mode: 'binary-options', direction: 1, confidence: 80, interval: '1m', regime: 'trend', entryPrice: 1.1, expirySeconds: 60 }
   });
+  assert.equal([...sorted.values()].reduce((n, rows) => n + rows.size, 0), 2, 'both pending predictions must be indexed');
   const result = await settleDueLearning({
     now: 7_700_000,
     getPrice: async () => ({ price: 101, at: 7_700_000 })
   });
-  assert.equal(result.settled, 2);
+  assert.equal(result.settled, 2, JSON.stringify({ result, sorted: [...sorted.entries()] }));
   const regular = await getLearningSummary(user, market);
   assert.equal(regular.wins, 1);
   const binary = await getLearningSummary(user, 'EURUSD|1m');
