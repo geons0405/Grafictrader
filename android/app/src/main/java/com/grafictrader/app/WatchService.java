@@ -603,8 +603,8 @@ public class WatchService extends Service {
         render(shown, data, step, chartVisible);
         if (step.contextChanged) lastManageAction = null;
         if (step.changed) announce(shown, step.shown);
-        // Independent of the buy/sell advice: an open trade that needs action is always announced.
-        announceManage(chartVisible ? data : null);
+        // Binary expiry mode must not announce spot/CFD position-management instructions.
+        if (!"binary-options".equals(analysisMode)) announceManage(chartVisible ? data : null);
 
         Listener target = listener;
         if (target != null) target.onResult(text);
