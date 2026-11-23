@@ -131,7 +131,10 @@ public class GrafictraderNativePlugin extends Plugin {
                 .putExtra(WatchService.EXTRA_RESULT_CODE, result.getResultCode())
                 .putExtra(WatchService.EXTRA_DATA, result.getData())
                 .putExtra(WatchService.EXTRA_SERVER, server)
-                .putExtra(WatchService.EXTRA_VOICE, Boolean.TRUE.equals(call.getBoolean("voice", false)));
+                .putExtra(WatchService.EXTRA_VOICE, Boolean.TRUE.equals(call.getBoolean("voice", false)))
+                .putExtra(WatchService.EXTRA_MODE, call.getString("mode", "market"))
+                .putExtra(WatchService.EXTRA_EXPIRY_SECONDS, call.getInt("expirySeconds", 60))
+                .putExtra(WatchService.EXTRA_PAYOUT_PERCENT, call.getInt("payoutPercent", 80));
         ContextCompat.startForegroundService(getContext(), intent);
         // Leave the broker in front: send this app to the background.
         getActivity().moveTaskToBack(true);

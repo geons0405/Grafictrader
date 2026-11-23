@@ -13,7 +13,6 @@ import { Native } from '../lib/native.js';
 const MAX_SIDE = 1280;
 const MIN_GAP_MS = 6000;
 const MAX_GAP_MS = 45000;
-const SESSION_LIMIT_MS = 45 * 60 * 1000;
 const PREFS_KEY = 'grafictrader.watchPrefs';
 const LABEL = { COMPRAR: 'BOA OPORTUNIDADE DE COMPRA', VENDER: 'BOA OPORTUNIDADE DE VENDA', AGUARDAR: 'NÃO OPERAR' };
 // For sentences and the compact history list.
@@ -31,7 +30,6 @@ let inflight = false;
 let lastSig = null;
 let lastSentAt = null;
 let minGap = MIN_GAP_MS;
-let startedAt = null;
 let analyses = 0;
 let history = [];
 let lastByDecision = {};
@@ -42,7 +40,7 @@ let current = null;
 // shown buy/sell advice is an older reading waiting for its confirmation.
 let latest = null;
 let pipWindow = null;
-let prefs = { voice: false, alerts: false };
+let prefs = { voice: false, alerts: false, mode: 'market', expirySeconds: 60, payoutPercent: 80 };
 const stabilizer = createStabilizer({ confirmations: 2 });
 const tiny = document.createElement('canvas');
 tiny.width = 96;
@@ -76,6 +74,13 @@ function isRunning() {
   return Boolean(stream || kind === 'file' || kind === 'native');
 }
 
+function decisionFor(data) {
+  if (prefs.mode !== 'binary-options') return data?.verdict?.decision || 'AGUARDAR';
+  const binary = data?.binaryOptions;
+  if (binary?.status !== 'VALIDATED_SETUP') return 'AGUARDAR';
+  return binary.decision === 'CALL' ? 'COMPRAR' : binary.decision === 'PUT' ? 'VENDER' : 'AGUARDAR';
+}
+
 /* ---------- capture ---------- */
 
 async function grabSource() {
@@ -106,10 +111,6 @@ function toJpeg(source) {
 
 async function tick() {
   if (!isRunning() || inflight) return;
-  if (Date.now() - startedAt > SESSION_LIMIT_MS) {
-    stop('Sessão terminada ao fim de 45 minutos para poupar análises. Toca para continuar quando quiseres.');
-    return;
-  }
   const source = await grabSource();
   if (!source) return;
   const release = () => source.close?.();
@@ -132,7 +133,9 @@ async function tick() {
   const mine = session;
   try {
     const previous = current ? { decision: current.verdict.decision, asset: current.vision.asset, timeframe: current.vision.timeframe } : null;
-    const data = await api('/api/watch', { method: 'POST', body: { image, previous }, timeoutMs: 70_000 });
+    const body = { image, previous };
+    if (prefs.mode === 'binary-options') Object.assign(body, { mode: 'binary-options', expirySeconds: Number(prefs.expirySeconds), payoutPercent: Number(prefs.payoutPercent) });
+    const data = await api('/api/watch', { method: 'POST', body, timeoutMs: 70_000 });
     // Stopped (or restarted) while this frame was being analysed: drop it, say nothing.
     if (mine !== session) return;
     analyses += 1;
@@ -214,7 +217,6 @@ async function begin(newStream, newKind, { keepSource = false } = {}) {
     track?.addEventListener('ended', () => stop('A partilha terminou.'));
   }
   if (kind !== 'native') await video.play().catch(() => {});
-  startedAt = Date.now();
   analyses = 0;
   lastError = null;
   lastSig = null;
@@ -276,7 +278,7 @@ function handleResult(data) {
     lastSentAt = Date.now();
     setStatus(`Ao vivo no telemóvel · ${analyses} análise(s) · a bolha mostra a orientação por cima da corretora${minutesText()}`);
   }
-  const decision = data.verdict.decision;
+  const decision = decisionFor(data);
   // Only a market named in full (asset and timeframe) can count as a different one.
   const context = data.chartVisible ? data.market || null : null;
   const step = stabilizer.push(decision, { chartVisible: data.chartVisible, context, strong: Boolean(data.verdict?.strong) });
@@ -292,7 +294,7 @@ function handleResult(data) {
   latest = data;
   render(shownData, step, data);
   if (step.changed) {
-    history.unshift({ at: data.at, decision: step.shown, asset: shownData.vision.asset, timeframe: shownData.vision.timeframe, confidence: shownData.verdict.confidence });
+    history.unshift({ at: data.at, decision: step.shown, asset: shownData.vision.asset, timeframe: shownData.vision.timeframe, confidence: prefs.mode === 'binary-options' ? (shownData.binaryOptions?.probability == null ? null : Math.round(shownData.binaryOptions.probability * 100)) : shownData.verdict.confidence });
     history = history.slice(0, 30);
     renderHistory();
     // The Android app vibrates and speaks itself.
@@ -309,10 +311,11 @@ function render(data, step, latest) {
   const v = data.verdict;
   const vis = data.vision;
   // Without a chart on screen nothing is shown as a trade, not even the last one.
-  const decision = step.noChart ? 'AGUARDAR' : step.shown || v.decision;
+  const effectiveDecision = decisionFor(latest);
+  const decision = step.noChart ? 'AGUARDAR' : step.shown || effectiveDecision;
   // Shown advice differs from this reading (a new direction still waiting for its
   // confirmation): this reading's trade texts and levels must not be shown.
-  const unconfirmed = !step.noChart && decision !== v.decision;
+  const unconfirmed = !step.noChart && decision !== effectiveDecision;
   const badgeText = step.noChart ? 'SEM GRÁFICO' : LABEL[decision] || decision;
   const badge = $('#watchBadge');
   badge.textContent = badgeText;
@@ -320,14 +323,54 @@ function render(data, step, latest) {
   $('#watchOverlay').textContent = badgeText;
   $('#watchOverlay').dataset.side = SIDE[decision] || '';
   $('#watchTitle').textContent = step.noChart ? 'Não vejo um gráfico no ecrã' : unconfirmed ? 'A confirmar o sinal…' : g.headline || v.headline;
-  const bits = [vis.asset || 'ativo ?', vis.timeframe || 'timeframe ?', `confiança ${v.confidence}%`];
+  const bits = [vis.asset || 'ativo ?', vis.timeframe || 'timeframe ?', prefs.mode === 'binary-options'
+    ? (latest.binaryOptions?.probability == null ? 'sem taxa validada' : `taxa histórica ${(latest.binaryOptions.probability * 100).toFixed(1)}%`)
+    : `confiança ${v.confidence}%`];
   if (latest.live) bits.push(v.agreement === 'confirma' ? 'mercado ao vivo confirma' : v.agreement === 'diverge' ? 'mercado ao vivo diverge' : 'mercado ao vivo sem sinal');
   $('#watchSub').textContent = bits.join(' · ');
   $('#watchPending').hidden = !step.pending || step.noChart;
   if (step.pending) $('#watchPending').textContent = `A IA começa a ver ${CHANCE[step.pending] || 'um sinal'}. Vai confirmar na próxima leitura antes de mudar.`;
+  const binary = latest.binaryOptions;
+  const binaryBox = $('#binaryOptionsResult');
+  binaryBox.hidden = !binary;
+  if (binary) {
+    binaryBox.dataset.status = binary.status || 'WAIT';
+    $('#binaryOptionsTitle').textContent = binary.status === 'VALIDATED_SETUP'
+      ? (binary.decision === 'CALL' ? 'CALL — cenário validado' : 'PUT — cenário validado')
+      : 'Opções Binárias — aguardar';
+    const expiry = binary.expirySeconds ? `Expiração: ${binary.expirySeconds >= 60 ? (binary.expirySeconds / 60) + ' min' : binary.expirySeconds + ' s'}.` : '';
+    const probability = binary.probability != null ? ` Taxa histórica: ${(binary.probability * 100).toFixed(1)}% em ${binary.sampleSize} operações independentes.` : '';
+    const breakeven = binary.breakEvenProbability != null ? ` Ponto de equilíbrio do payout: ${(binary.breakEvenProbability * 100).toFixed(1)}%.` : '';
+    $('#binaryOptionsDetail').textContent = expiry + probability + breakeven;
+    $('#binaryOptionsReasons').innerHTML = (binary.reasons || []).map(reason => `<li>${escapeHtml(reason)}</li>`).join('');
+  }
+  const memory = latest.learning;
+  const memoryBox = $('#learningMemory');
+  memoryBox.hidden = !memory;
+  if (memory) {
+    $('#learningMemoryStatus').textContent = memory.settled
+      ? `${memory.settled} resultado(s) avaliado(s) nesta leitura`
+      : 'A recolher experiências';
+    $('#learningWins').textContent = String(memory.wins ?? 0);
+    $('#learningLosses').textContent = String(memory.losses ?? 0);
+    $('#learningPending').textContent = String(memory.pending ?? 0);
+    $('#learningMemoryNote').textContent = memory.unverified
+      ? `${memory.unverified} resultado(s) não foram usados porque a confirmação chegou tarde. As skills só são propostas após evidência suficiente.`
+      : 'Cada previsão é comparada com o preço observado. As novas skills são testadas antes de poderem influenciar sinais.';
+    $('#learningSkills').innerHTML = (memory.skills || []).slice(0, 3).map(skill => {
+      const status = skill.status === 'validated' ? 'Validada fora da amostra'
+        : skill.status === 'validated_avoid' ? 'Evitar contexto — validado'
+        : skill.status === 'rejected' ? 'Rejeitada no teste'
+        : skill.status === 'inconclusive' ? 'Teste inconclusivo'
+        : 'Em validação independente';
+      const training = skill.training?.samples || 0;
+      const validation = skill.validation?.samples || 0;
+      return `<li><b>${escapeHtml(status)}</b>: ${escapeHtml(skill.rule)} (treino: ${training}; teste futuro: ${validation}/100)</li>`;
+    }).join('');
+  }
   // Exact engine levels when the market is tracked; otherwise what the AI read on screen.
   const levels = g.levels || { entry: vis.entry, stop: vis.stop, target: vis.targets?.join(' · ') };
-  const showLevels = !step.noChart && !unconfirmed && decision !== 'AGUARDAR' && Boolean(levels.entry || levels.stop || levels.target);
+  const showLevels = prefs.mode !== 'binary-options' && !step.noChart && !unconfirmed && decision !== 'AGUARDAR' && Boolean(levels.entry || levels.stop || levels.target);
   $('#watchLevels').hidden = !showLevels;
   if (showLevels) {
     $('#wlEntry').textContent = levels.entry || '—';
@@ -336,12 +379,14 @@ function render(data, step, latest) {
   }
   $('#watchNow').textContent = step.noChart
     ? 'Enquadra o gráfico da corretora inteiro no ecrã partilhado ou na câmara.'
-    : unconfirmed
+    : prefs.mode === 'binary-options' && !unconfirmed
+      ? (latest.binaryOptions?.reasons || []).join(' ')
+      : unconfirmed
       ? `Não operes ainda: a IA vê ${CHANCE[v.decision] || 'um possível sinal'} e confirma-a na próxima leitura.`
       : g.now || '—';
   $('#watchHudNow').textContent = $('#watchNow').textContent;
   // The trade already open on screen, from the newest reading: where the stop goes, when to close.
-  const manage = step.noChart ? null : latest.guidance?.manage;
+  const manage = step.noChart || prefs.mode === 'binary-options' ? null : latest.guidance?.manage;
   $('#watchManage').hidden = !manage;
   if (manage) {
     $('#watchManage').dataset.action = manage.action || '';
@@ -365,13 +410,13 @@ function renderHistory() {
   $('#watchHistory').innerHTML = history.map(h => `
     <div class="op">
       <span class="op-side" data-side="${SIDE[h.decision] || ''}">${SHORT[h.decision] || h.decision}</span>
-      <span class="op-prices">${escapeHtml(h.asset || 'ativo ?')} ${escapeHtml(h.timeframe || '')}<small>confiança ${h.confidence}%</small></span>
+      <span class="op-prices">${escapeHtml(h.asset || 'ativo ?')} ${escapeHtml(h.timeframe || '')}<small>${h.confidence == null ? "sem taxa validada" : `taxa histórica ${h.confidence}%`}</small></span>
       <small>${fmtTime(h.at)}</small>
     </div>`).join('') || '<p class="muted-line">As mudanças de orientação desta sessão aparecem aqui.</p>';
 }
 
 function announce(data) {
-  const label = LABEL[data.verdict.decision];
+  const label = LABEL[decisionFor(data)];
   if (prefs.voice && 'speechSynthesis' in window) {
     const text = `${label}. ${data.guidance?.now || ''}`;
     const utterance = new SpeechSynthesisUtterance(text);
@@ -390,7 +435,7 @@ function pipMarkup() {
   if (!current) return '<p class="pip-wait">À espera da primeira análise…</p>';
   // The current frame has no chart: show that, never the last stabilised trade.
   const noChart = current.chartVisible === false;
-  const d = noChart ? 'AGUARDAR' : stabilizer.shown || current.verdict.decision;
+  const d = noChart ? 'AGUARDAR' : stabilizer.shown || decisionFor(current);
   return `<div class="pip-badge" data-side="${SIDE[d] || ''}">${noChart ? 'SEM GRÁFICO' : LABEL[d] || d}</div>
     <p class="pip-asset">${escapeHtml(current.vision.asset || '')} ${escapeHtml(current.vision.timeframe || '')} · ${current.verdict.confidence}%</p>
     <p class="pip-now">${escapeHtml(current.guidance?.now || '')}</p>
@@ -449,7 +494,7 @@ function initNative() {
     if (!(await confirmCapture('bubble'))) return;
     if (!(await liveMinutesLeft())) return;
     try {
-      await Native.startWatch({ serverUrl: location.origin, voice: prefs.voice });
+      await Native.startWatch({ serverUrl: location.origin, voice: prefs.voice, mode: prefs.mode, expirySeconds: Number(prefs.expirySeconds), payoutPercent: Number(prefs.payoutPercent) });
       await begin(null, 'native');
     } catch (error) {
       setStatus(error?.message || 'Não foi possível começar a captura do ecrã.');
@@ -546,6 +591,23 @@ export function initWatch() {
     savePrefs();
     syncToggles();
   };
+  const modeSelect = $('#watchAnalysisMode');
+  const expirySelect = $('#binaryExpiry');
+  const payoutInput = $('#binaryPayout');
+  modeSelect.value = prefs.mode || 'market';
+  expirySelect.value = String(prefs.expirySeconds || 60);
+  payoutInput.value = String(prefs.payoutPercent || 80);
+  const syncBinaryControls = () => {
+    prefs.mode = modeSelect.value;
+    prefs.expirySeconds = Number(expirySelect.value);
+    prefs.payoutPercent = Number(payoutInput.value);
+    $('#binaryOptionsControls').hidden = prefs.mode !== 'binary-options';
+    savePrefs();
+  };
+  modeSelect.addEventListener('change', syncBinaryControls);
+  expirySelect.addEventListener('change', syncBinaryControls);
+  payoutInput.addEventListener('change', syncBinaryControls);
+  syncBinaryControls();
   syncToggles();
   renderHistory();
   renderIcons();

@@ -70,6 +70,9 @@ public class WatchService extends Service {
     static final String EXTRA_DATA = "data";
     static final String EXTRA_SERVER = "server";
     static final String EXTRA_VOICE = "voice";
+    static final String EXTRA_MODE = "analysisMode";
+    static final String EXTRA_EXPIRY_SECONDS = "binaryExpirySeconds";
+    static final String EXTRA_PAYOUT_PERCENT = "binaryPayoutPercent";
 
     private static final String CHANNEL = "watch";
     private static final int NOTIFICATION_ID = 41;
@@ -78,7 +81,6 @@ public class WatchService extends Service {
     private static final long MIN_GAP_MS = 6000;
     private static final long SLOW_GAP_MS = 20000;
     private static final long MAX_GAP_MS = 45000;
-    private static final long SESSION_LIMIT_MS = 45 * 60 * 1000;
     private static final double THRESHOLD = 1.5;
     private static final int SIG_W = 96;
     private static final int SIG_H = 54;
@@ -134,13 +136,15 @@ public class WatchService extends Service {
 
     private String server;
     private boolean voice;
+    private String analysisMode = "market";
+    private int binaryExpirySeconds = 60;
+    private int binaryPayoutPercent = 80;
     private volatile boolean inflight;
     private byte[] lastSig;
     private volatile float captureScale = 1f;
     private volatile long frameCount;
     private long lastSentAt;
     private volatile long minGap = MIN_GAP_MS;
-    private long startedAt;
     private int analyses;
     private volatile JSONObject current;
     private boolean blankShown;
@@ -166,6 +170,10 @@ public class WatchService extends Service {
         Intent data = parcelable(intent);
         server = intent.getStringExtra(EXTRA_SERVER);
         voice = intent.getBooleanExtra(EXTRA_VOICE, false);
+        analysisMode = intent.getStringExtra(EXTRA_MODE);
+        if (analysisMode == null) analysisMode = "market";
+        binaryExpirySeconds = intent.getIntExtra(EXTRA_EXPIRY_SECONDS, 60);
+        binaryPayoutPercent = intent.getIntExtra(EXTRA_PAYOUT_PERCENT, 80);
         MediaProjectionManager manager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
         try {
             projection = manager.getMediaProjection(resultCode, data);
@@ -178,14 +186,14 @@ public class WatchService extends Service {
         }
         running = true;
         remember(true, null);
-        startedAt = System.currentTimeMillis();
         lastManageAction = null;
         ending = false;
         endingMessage = null;
         projection.registerCallback(new MediaProjection.Callback() {
             @Override
             public void onStop() {
-                main.post(() -> finish("A partilha do ecrã terminou."));
+                // Keep the stopped state visible long enough for the user to see why capture ended.
+                main.post(() -> finishVisibly("A partilha do ecrã terminou. Volta a iniciar a análise para autorizar uma nova captura."));
             }
         }, main);
 
@@ -402,10 +410,7 @@ public class WatchService extends Service {
     private void step() {
         if (ending) return;
         long now = System.currentTimeMillis();
-        if (now - startedAt > SESSION_LIMIT_MS) {
-            main.post(() -> finish("Sessão terminada ao fim de 45 minutos para poupar análises."));
-            return;
-        }
+        // No arbitrary 45-minute cutoff: the user controls when the live session ends.
         if (lastSentAt != 0 && now - lastSentAt < minGap) return;
         Bitmap bitmap = latestBitmap();
         if (bitmap == null) return;
@@ -472,6 +477,11 @@ public class WatchService extends Service {
         try {
             JSONObject body = new JSONObject();
             body.put("image", image);
+            if ("binary-options".equals(analysisMode)) {
+                body.put("mode", "binary-options");
+                body.put("expirySeconds", binaryExpirySeconds);
+                body.put("payoutPercent", binaryPayoutPercent);
+            }
             if (current != null) {
                 JSONObject previous = new JSONObject();
                 previous.put("decision", stabilizer.shown() != null ? stabilizer.shown() : current.optJSONObject("verdict").optString("decision"));
@@ -569,6 +579,13 @@ public class WatchService extends Service {
 
         JSONObject verdict = data.optJSONObject("verdict");
         String decision = verdict == null ? "AGUARDAR" : verdict.optString("decision", "AGUARDAR");
+        if ("binary-options".equals(analysisMode)) {
+            JSONObject binary = data.optJSONObject("binaryOptions");
+            String statusValue = binary == null ? "WAIT" : binary.optString("status", "WAIT");
+            String binaryDecision = binary == null ? "AGUARDAR" : binary.optString("decision", "AGUARDAR");
+            decision = "VALIDATED_SETUP".equals(statusValue) && "CALL".equals(binaryDecision) ? "COMPRAR"
+                    : "VALIDATED_SETUP".equals(statusValue) && "PUT".equals(binaryDecision) ? "VENDER" : "AGUARDAR";
+        }
         // Only an explicit "true" from the server counts as a chart.
         boolean chartVisible = data.optBoolean("chartVisible", false);
         // The server names the market in one stable spelling; null when asset or timeframe is missing.
@@ -586,8 +603,8 @@ public class WatchService extends Service {
         render(shown, data, step, chartVisible);
         if (step.contextChanged) lastManageAction = null;
         if (step.changed) announce(shown, step.shown);
-        // Independent of the buy/sell advice: an open trade that needs action is always announced.
-        announceManage(chartVisible ? data : null);
+        // Binary expiry mode must not announce spot/CFD position-management instructions.
+        if (!"binary-options".equals(analysisMode)) announceManage(chartVisible ? data : null);
 
         Listener target = listener;
         if (target != null) target.onResult(text);
@@ -645,6 +662,13 @@ public class WatchService extends Service {
 
         StringBuilder detail = new StringBuilder();
         String readDecision = verdict == null ? "AGUARDAR" : verdict.optString("decision", "AGUARDAR");
+        JSONObject binary = latest == null ? null : latest.optJSONObject("binaryOptions");
+        if ("binary-options".equals(analysisMode)) {
+            String statusValue = binary == null ? "WAIT" : binary.optString("status", "WAIT");
+            String binaryDecision = binary == null ? "AGUARDAR" : binary.optString("decision", "AGUARDAR");
+            readDecision = "VALIDATED_SETUP".equals(statusValue) && "CALL".equals(binaryDecision) ? "COMPRAR"
+                    : "VALIDATED_SETUP".equals(statusValue) && "PUT".equals(binaryDecision) ? "VENDER" : "AGUARDAR";
+        }
         // The advice shown is not this reading's (a new direction waiting for its confirmation).
         boolean unconfirmed = chartVisible && !decision.equals(readDecision);
         if (unconfirmed) {
@@ -654,16 +678,29 @@ public class WatchService extends Service {
             if (!saw.isEmpty()) detail.append("A IA vê: ").append(saw.length() > 120 ? saw.substring(0, 120) + "…" : saw).append('\n');
             detail.append("Não vejo um gráfico. Mostra o gráfico da corretora inteiro.");
         }
-        else if (guidance != null) detail.append(guidance.optString("now", ""));
+        else if ("binary-options".equals(analysisMode)) {
+            if (binary != null && binary.optBoolean("validated", false)) {
+                detail.append(binary.optString("decision", "CALL")).append(" · expiração ")
+                        .append(binary.optInt("expirySeconds", binaryExpirySeconds)).append("s · amostra ")
+                        .append(binary.optInt("sampleSize", 0)).append(" operações · taxa histórica ")
+                        .append(Math.round(binary.optDouble("probability", 0) * 100)).append('%');
+            } else {
+                detail.append("Sem entrada binária validada. ");
+                if (binary != null && binary.optJSONArray("reasons") != null) {
+                    org.json.JSONArray reasons = binary.optJSONArray("reasons");
+                    for (int i = 0; i < reasons.length(); i++) detail.append(reasons.optString(i)).append(' ');
+                }
+            }
+        } else if (guidance != null) detail.append(guidance.optString("now", ""));
         JSONObject levels = guidance == null ? null : guidance.optJSONObject("levels");
-        if (chartVisible && !unconfirmed && levels != null && !"AGUARDAR".equals(decision)) {
+        if (!"binary-options".equals(analysisMode) && chartVisible && !unconfirmed && levels != null && !"AGUARDAR".equals(decision)) {
             detail.append("\nEntrada ").append(levels.optString("entry", "—"))
                     .append(" · Stop ").append(levels.optString("stop", "—"))
                     .append(" · Alvo ").append(levels.optString("target", "—"));
         }
         if (chartVisible && step.pending != null) detail.append("\nA confirmar sinal de ").append(label(step.pending)).append("…");
         // The trade already open on screen: where the stop goes, when to close.
-        JSONObject manage = chartVisible ? manageOf(latest) : null;
+        JSONObject manage = chartVisible && !"binary-options".equals(analysisMode) ? manageOf(latest) : null;
         if (manage != null) {
             String prefix = "fechar".equals(manage.optString("action")) ? "\n⚠ " : "\n📌 ";
             detail.append(prefix).append(manage.optString("text", ""));

@@ -3,10 +3,12 @@ import { rateLimit, sendRateLimited, aiQuota, liveMinutes, liveMinutesFor } from
 import { clientIp, crossSite } from './_lib/validate.js';
 import { MAX_IMAGE_CHARS, IMAGE_PATTERN, runVision } from './_lib/vision.js';
 import { marketReading } from './_lib/quant/service.js';
+import { evaluateBinaryOptions } from './_lib/quant/binary-options.js';
 import { mapAsset, mapTimeframe, normalizeVision, mergeVerdict, isChartVisible, noChartVision, noChartVerdict, noChartGuidance, guardImageQuality } from './_lib/quant/verdict.js';
 import { rulesBlock } from './_lib/ai-rules.js';
 import { recordSignal } from './_lib/signals.js';
 import { photoGuidance } from './_lib/quant/explain.js';
+import { learnFromObservation } from './_lib/journal.js';
 
 // Live analysis of the user's broker: the app sends one frame of the shared
 // screen (or camera) every few seconds, only when the chart changed.
@@ -14,12 +16,12 @@ import { photoGuidance } from './_lib/quant/explain.js';
 const WATCH_PROMPT = `És um analista técnico a acompanhar AO VIVO o ecrã da corretora de um utilizador.
 Esta imagem é um frame de uma sessão contínua. Lê só o que é visível: o ativo, o timeframe, o preço atual, as últimas velas, a estrutura (topos e fundos), suportes e resistências, padrões e indicadores visíveis.
 Foca-te no que está a acontecer AGORA, nas velas mais recentes à direita.
-Decide a orientação para a próxima fase:
-- "COMPRAR" quando a direção de subida é clara (fundos e topos a subir, velas fortes de alta, rompimento para cima);
-- "VENDER" quando a direção de descida é clara (topos e fundos a descer, velas fortes de baixa, rompimento para baixo);
-- "AGUARDAR" só quando está mesmo lateral, confuso, sem direção, ou se não há um gráfico visível.
-Quando a oportunidade é clara, diz COMPRAR ou VENDER com a confiança que ela merece (60 a 90): não escolhas AGUARDAR por excesso de cautela, quem usa a app precisa de saber quando há oportunidade.
-Se o preço já andou muito de uma vez, mantém a direção e usa "esperarPor" para dizer onde uma entrada seria ainda melhor.
+Decide com base na direção REAL que as últimas velas e a estrutura confirmam, não numa previsão otimista:
+- "COMPRAR" apenas quando há evidência observável de pressão compradora e estrutura de alta; não compres durante uma sequência de topos e fundos descendentes.
+- "VENDER" apenas quando há evidência observável de pressão vendedora e estrutura de baixa; não vendas durante uma sequência de topos e fundos ascendentes.
+- "AGUARDAR" sempre que a direção visual e os indicadores discordarem, houver uma reversão ainda não confirmada, faltarem velas/preço/timeframe legíveis, ou o movimento estiver demasiado esticado sem reteste.
+Uma queda forte NÃO é, por si só, motivo para comprar; uma subida forte NÃO é, por si só, motivo para vender. Reversões só são válidas depois de sinais visíveis de mudança de estrutura e confirmação, não apenas por o preço parecer barato/caro.
+Não inventes confiança nem níveis. A confiança é força relativa do cenário, nunca probabilidade de lucro. Se não houver confirmação suficiente, escolhe AGUARDAR e explica exatamente o que falta.
 O ecrã de uma corretora (Pocket Option, Quotex, IQ Option, MetaTrader…) tem o gráfico rodeado de saldo, botões, menus e foto de perfil: isso é um gráfico visível.
 Só indica graficoVisivel false se não houver velas, barras nem linha de preço (outra app, menu sem gráfico, ecrã preto, imagem tão tremida que não se vêem as velas).
 ${rulesBlock({ chart: true })}
@@ -66,10 +68,10 @@ async function cachedReading(symbol, interval) {
 
 function continuity(previous) {
   if (!previous?.decision) return '';
-  const parts = [`Leitura anterior desta sessão: ${String(previous.decision).slice(0, 12)}`];
+  const parts = [`Leitura anterior (apenas contexto, não é uma ordem para repetir): ${String(previous.decision).slice(0, 12)}`];
   if (previous.asset) parts.push(`ativo ${String(previous.asset).slice(0, 20)}`);
   if (previous.timeframe) parts.push(`timeframe ${String(previous.timeframe).slice(0, 8)}`);
-  return parts.join(', ') + '. Só muda a decisão se o gráfico mostrar uma razão clara.';
+  return parts.join(', ') + '. Reavalia as velas atuais de forma independente; muda para AGUARDAR ou para a direção oposta imediatamente se a estrutura atual o justificar.';
 }
 
 /** "BTCUSDT|5m" from whatever spelling the model used; null when the asset or timeframe is missing. */
@@ -84,7 +86,8 @@ export default async function handler(req, res) {
   if (crossSite(req)) return res.status(403).json({ ok: false, error: 'Pedido recusado.' });
   res.setHeader('Cache-Control', 'no-store');
 
-  const { image, previous } = req.body || {};
+  const { image, previous, mode, expirySeconds, payoutPercent } = req.body || {};
+  const binaryOptionsMode = mode === 'binary-options';
   if (typeof image !== 'string' || image.length > MAX_IMAGE_CHARS) {
     return res.status(413).json({ ok: false, error: 'Imagem demasiado grande ou inválida.' });
   }
@@ -152,11 +155,54 @@ export default async function handler(req, res) {
   }
   // Not a chart: neutral verdict, no levels, no live market mixed in.
   const verdict = chartVisible ? mergeVerdict(normalized, reading) : noChartVerdict();
+  // Binary options need expiry-specific validation; do not reuse the normal spot/CFD stop-target tracker.
+  const binaryOptions = binaryOptionsMode
+    ? evaluateBinaryOptions({ vision: normalized, verdict, reading: reading ? { ...reading, interval } : null, expirySeconds: Number(expirySeconds), payoutPercent: Number(payoutPercent), calibration: null })
+    : null;
+
   // Track record: at most one BUY/SELL per market and candle is checked later against the real price.
-  if (reading && verdict.direction) {
+  if (!binaryOptionsMode && reading && verdict.direction) {
     await recordSignal({ source: 'corretora', symbol, interval, side: verdict.direction, price: reading.price, atr: reading.snapshot?.atr, confidence: verdict.confidence });
   }
   const guidance = chartVisible ? photoGuidance(verdict, normalized, reading) : { ...noChartGuidance(normalized, 'ecrã'), headline: 'Não vejo um gráfico no ecrã' };
+
+  // Learning runs after the fast decision and is bounded so Redis latency cannot
+  // hold the live response. Only compact numeric context is stored; never images.
+  let learning = null;
+  if (chartVisible && reading?.price > 0 && marketKey(normalized)) {
+    const intervalMs = ({ '1m': 60_000, '5m': 300_000, '15m': 900_000, '1h': 3_600_000, '4h': 14_400_000 })[interval] || 300_000;
+    const learnPromise = learnFromObservation(who, {
+      market: marketKey(normalized),
+      price: reading.price,
+      at: Date.now(),
+      prediction: verdict.direction ? {
+        mode: binaryOptionsMode ? 'binary-options' : 'market',
+        direction: verdict.direction,
+        confidence: verdict.confidence,
+        interval,
+        regime: reading.snapshot?.regime || 'unknown',
+        features: {
+          hurst: reading.snapshot?.hurst,
+          varianceRatio: reading.snapshot?.varianceRatio,
+          kalmanZ: reading.snapshot?.kalmanZ,
+          entropy: reading.snapshot?.entropy,
+          volPercentile: reading.snapshot?.volPercentile,
+          flowImbalance: reading.snapshot?.flowImbalance,
+          flowImbalanceShort: reading.snapshot?.flowImbalanceShort,
+          vwapZ: reading.snapshot?.vwapZ,
+          atrPct: reading.snapshot?.atr && reading.price ? reading.snapshot.atr / reading.price * 100 : null,
+          autocorr: reading.snapshot?.autocorr
+        },
+        entryPrice: reading.price,
+        horizonMs: binaryOptionsMode ? undefined : intervalMs,
+        expirySeconds: binaryOptionsMode ? Number(expirySeconds) : undefined
+      } : null
+    });
+    learning = await Promise.race([
+      learnPromise.catch(() => null),
+      new Promise(resolve => setTimeout(() => resolve(null), 300))
+    ]);
+  }
 
   return res.status(200).json({
     ok: true,
@@ -170,6 +216,8 @@ export default async function handler(req, res) {
     change: chartVisible && vision.raw?.mudanca ? String(vision.raw.mudanca).slice(0, 200) : null,
     vision: normalized,
     verdict,
+    binaryOptions,
+    learning,
     guidance,
     live: reading && {
       symbol,
