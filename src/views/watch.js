@@ -344,6 +344,23 @@ function render(data, step, latest) {
     $('#binaryOptionsDetail').textContent = expiry + probability + breakeven;
     $('#binaryOptionsReasons').innerHTML = (binary.reasons || []).map(reason => `<li>${escapeHtml(reason)}</li>`).join('');
   }
+  const memory = latest.learning;
+  const memoryBox = $('#learningMemory');
+  memoryBox.hidden = !memory;
+  if (memory) {
+    $('#learningMemoryStatus').textContent = memory.settled
+      ? `${memory.settled} resultado(s) avaliado(s) nesta leitura`
+      : 'A recolher experiências';
+    $('#learningWins').textContent = String(memory.wins ?? 0);
+    $('#learningLosses').textContent = String(memory.losses ?? 0);
+    $('#learningPending').textContent = String(memory.pending ?? 0);
+    $('#learningMemoryNote').textContent = memory.unverified
+      ? `${memory.unverified} resultado(s) não foram usados porque a confirmação chegou tarde. As skills só são propostas após evidência suficiente.`
+      : 'Cada previsão é comparada com o preço observado. As novas skills são testadas antes de poderem influenciar sinais.';
+    $('#learningSkills').innerHTML = (memory.skills || []).slice(0, 3).map(skill =>
+      `<li><b>${escapeHtml(skill.status === 'candidate_for_out_of_sample_test' ? 'Candidata a teste' : 'Em aprendizagem')}</b>: ${escapeHtml(skill.rule)} (${skill.samples} resultados)</li>`
+    ).join('');
+  }
   // Exact engine levels when the market is tracked; otherwise what the AI read on screen.
   const levels = g.levels || { entry: vis.entry, stop: vis.stop, target: vis.targets?.join(' · ') };
   const showLevels = prefs.mode !== 'binary-options' && !step.noChart && !unconfirmed && decision !== 'AGUARDAR' && Boolean(levels.entry || levels.stop || levels.target);
