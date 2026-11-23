@@ -103,18 +103,18 @@ export function decide(snap, context = null) {
       reasons.push('Regime de tendência, mas deriva e fluxo ainda não estão alinhados.');
     }
   } else if (snap.regime === 'reversion') {
-    if (snap.vwapZ < -2 && snap.flowImbalanceShort > 0) {
+    if (snap.vwapZ < -2 && snap.flowImbalanceShort > 0 && snap.kalmanZ >= 0) {
       direction = 1;
       setup = 'reversion';
       strength = clamp((-snap.vwapZ - 2) / 1.5, 0, 1) * 0.6 + clamp((0.5 - snap.hurst) / 0.2, 0, 1) * 0.4;
       reasons.push('Preço ' + Math.abs(snap.vwapZ).toFixed(1) + ' desvios abaixo do VWAP.', 'Fluxo curto já a virar comprador: venda a perder força.', 'Hurst ' + snap.hurst.toFixed(2) + ': o mercado tende a reverter.');
-    } else if (snap.vwapZ > 2 && snap.flowImbalanceShort < 0) {
+    } else if (snap.vwapZ > 2 && snap.flowImbalanceShort < 0 && snap.kalmanZ <= 0) {
       direction = -1;
       setup = 'reversion';
       strength = clamp((snap.vwapZ - 2) / 1.5, 0, 1) * 0.6 + clamp((0.5 - snap.hurst) / 0.2, 0, 1) * 0.4;
       reasons.push('Preço ' + snap.vwapZ.toFixed(1) + ' desvios acima do VWAP.', 'Fluxo curto já a virar vendedor: compra a perder força.', 'Hurst ' + snap.hurst.toFixed(2) + ': o mercado tende a reverter.');
     } else {
-      reasons.push('Regime de reversão, mas o preço não está esticado o suficiente face ao VWAP.');
+      reasons.push('Regime de reversão sem confirmação: preço, fluxo curto e deriva ainda não estão alinhados.');
     }
   } else {
     reasons.push('Sem estrutura estatística clara (Hurst ' + (snap.hurst ?? 0).toFixed(2) + ', VR ' + (snap.varianceRatio ?? 1).toFixed(2) + ').');
