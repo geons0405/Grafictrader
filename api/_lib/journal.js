@@ -176,8 +176,12 @@ export async function learnFromObservation(user, observation) {
   state.pending = state.pending.slice(0, LEARNING_MAX);
   state.settled = (state.settled || []).slice(0, LEARNING_MAX);
   await redis(['SET', key, JSON.stringify(state)]);
+  const wins = state.settled.filter(x => x.outcome === 'win').length;
+  const losses = state.settled.filter(x => x.outcome === 'loss').length;
   return { stored: recorded || settledNow > 0, recorded, settled: settledNow,
-    pending: state.pending.length, skills: state.skills.slice(0, 10) };
+    pending: state.pending.length, wins, losses,
+    unverified: state.settled.filter(x => x.outcome === 'unverified').length,
+    skills: state.skills.slice(0, 10) };
 }
 
 export async function getLearningSummary(user, market) {
