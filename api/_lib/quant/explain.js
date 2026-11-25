@@ -246,9 +246,9 @@ export function photoGuidance(verdict, vision, reading) {
     if (!verdict.direction) {
       result.scenarios = buildConditionalScenarios(reading.snapshot, reading.context, verdict, money);
       const s = result.scenarios;
-      result.now += `\\n\\nPRÓXIMA AÇÃO — COMPRAR: ${s.buy.condition} ${s.buy.invalidation}`;
-      result.now += `\\nPRÓXIMA AÇÃO — VENDER: ${s.sell.condition} ${s.sell.invalidation}`;
-      result.now += `\\n${s.wait}`;
+      result.now += `\n\nPRÓXIMA AÇÃO — COMPRAR: ${s.buy.condition} ${s.buy.invalidation}`;
+      result.now += `\nPRÓXIMA AÇÃO — VENDER: ${s.sell.condition} ${s.sell.invalidation}`;
+      result.now += `\n${s.wait}`;
     }
     return result;
   }
