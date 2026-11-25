@@ -252,7 +252,7 @@ export function photoGuidance(verdict, vision, reading) {
     return result;
   }
   const dir = verdict.direction;
-  return {
+  const result = {
     action: dir > 0 ? 'COMPRAR' : dir < 0 ? 'VENDER' : 'NÃO OPERAR',
     tone: dir > 0 ? 'up' : dir < 0 ? 'down' : 'wait',
     headline: verdict.headline,
@@ -266,8 +266,16 @@ export function photoGuidance(verdict, vision, reading) {
         ]
       : ['Não abras operação agora.', 'Tira outra foto daqui a umas velas ou quando o gráfico mostrar uma direção clara.'],
     now: dir ? 'Segue os passos acima e respeita o stop.' : vision.waitFor ? `Fica de fora por agora. Espera: ${vision.waitFor}` : `${firstSentence(verdict.reasons[0] || vision.summary)} Fica de fora por agora.`.trim(),
+    scenarios: dir ? null : buildConditionalScenarios(null, null, verdict),
     manage: visionManage(vision)
   };
+  if (!dir) {
+    const s = result.scenarios;
+    result.now += `\n\nPRÓXIMA AÇÃO — COMPRAR: ${s.buy.condition} ${s.buy.invalidation}`;
+    result.now += `\nPRÓXIMA AÇÃO — VENDER: ${s.sell.condition} ${s.sell.invalidation}`;
+    result.now += `\n${s.wait}`;
+  }
+  return result;
 }
 
 const firstSentence = text => {
