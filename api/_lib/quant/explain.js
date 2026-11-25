@@ -210,6 +210,21 @@ export function buildPlan(summary, signal, snapshot, price) {
   return null;
 }
 
+/** Builds conditional breakout/retest actions for a WAIT reading from real engine levels. */
+export function buildConditionalScenarios(snapshot, context, verdict, money = value => String(value)) {
+  const high = Number(snapshot?.rangeHigh), low = Number(snapshot?.rangeLow);
+  const valid = Number.isFinite(high) && Number.isFinite(low) && high > low;
+  const blocked = Boolean(context?.eventRisk?.blocked) || snapshot?.regime === 'chaotic' || verdict?.agreement === 'diverge';
+  if (!valid) return { available: false, buy: { action: 'COMPRAR', condition: 'Só considerar depois de uma vela fechar acima da resistência e o reteste confirmar suporte.', invalidation: 'Se o preço voltar para baixo da resistência, cancelar.' }, sell: { action: 'VENDER', condition: 'Só considerar depois de uma vela fechar abaixo do suporte e o reteste confirmar resistência.', invalidation: 'Se o preço voltar para cima do suporte, cancelar.' }, wait: 'Sem níveis fiáveis: continuar em NÃO OPERAR até nova confirmação.' };
+  return {
+    available: !blocked,
+    reference: { resistance: money(high), support: money(low) },
+    buy: { action: 'COMPRAR', condition: `Só considerar COMPRA depois de uma vela fechar acima de ${money(high)} e o reteste segurar esse nível como suporte.`, invalidation: `Cancelar COMPRA se uma vela voltar a fechar abaixo de ${money(high)}.` },
+    sell: { action: 'VENDER', condition: `Só considerar VENDA depois de uma vela fechar abaixo de ${money(low)} e o reteste rejeitar esse nível como resistência.`, invalidation: `Cancelar VENDA se uma vela voltar a fechar acima de ${money(low)}.` },
+    wait: blocked ? 'NÃO OPERAR. Há risco elevado, notícia importante ou divergência entre as leituras; os cenários ficam suspensos.' : `Enquanto o preço ficar entre ${money(low)} e ${money(high)}, NÃO OPERAR. Esperar fecho de vela e reteste confirmado fora da zona.`
+  };
+}
+
 /**
  * Guidance for the photo analysis. Uses the live engine's plan when the
  * chart is a market we track; otherwise falls back to the vision model's
@@ -226,10 +241,18 @@ export function photoGuidance(verdict, vision, reading) {
       guidance.why.unshift('A foto e o mercado ao vivo não concordam: o gráfico da imagem sugere um lado, mas os dados em tempo real apontam para o outro. Quando há esta dúvida, o mais inteligente é não arriscar.');
     }
     if (vision.plain) guidance.why.push('Sobre a imagem: ' + vision.plain);
-    return withLivePlan(guidance, verdict, vision, reading, money);
+    const result = withLivePlan(guidance, verdict, vision, reading, money);
+    if (!verdict.direction) {
+      result.scenarios = buildConditionalScenarios(reading.snapshot, reading.context, verdict, money);
+      const s = result.scenarios;
+      result.now += `\n\nPRÓXIMA AÇÃO — COMPRAR: ${s.buy.condition} ${s.buy.invalidation}`;
+      result.now += `\nPRÓXIMA AÇÃO — VENDER: ${s.sell.condition} ${s.sell.invalidation}`;
+      result.now += `\n${s.wait}`;
+    }
+    return result;
   }
   const dir = verdict.direction;
-  return {
+  const result = {
     action: dir > 0 ? 'COMPRAR' : dir < 0 ? 'VENDER' : 'NÃO OPERAR',
     tone: dir > 0 ? 'up' : dir < 0 ? 'down' : 'wait',
     headline: verdict.headline,
@@ -243,8 +266,16 @@ export function photoGuidance(verdict, vision, reading) {
         ]
       : ['Não abras operação agora.', 'Tira outra foto daqui a umas velas ou quando o gráfico mostrar uma direção clara.'],
     now: dir ? 'Segue os passos acima e respeita o stop.' : vision.waitFor ? `Fica de fora por agora. Espera: ${vision.waitFor}` : `${firstSentence(verdict.reasons[0] || vision.summary)} Fica de fora por agora.`.trim(),
+    scenarios: dir ? null : buildConditionalScenarios(null, null, verdict),
     manage: visionManage(vision)
   };
+  if (!dir) {
+    const s = result.scenarios;
+    result.now += `\n\nPRÓXIMA AÇÃO — COMPRAR: ${s.buy.condition} ${s.buy.invalidation}`;
+    result.now += `\nPRÓXIMA AÇÃO — VENDER: ${s.sell.condition} ${s.sell.invalidation}`;
+    result.now += `\n${s.wait}`;
+  }
+  return result;
 }
 
 const firstSentence = text => {
