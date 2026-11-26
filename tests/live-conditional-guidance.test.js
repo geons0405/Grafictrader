@@ -38,7 +38,7 @@ test('without verified levels, guidance never invents a numeric entry price', ()
 
 test('beginner LIVE wait message is short and never lists hypothetical BUY and SELL plans', () => {
   const text = simpleWaitMessage(
-    { price: 1.09757, snapshot: { rangeHigh: 1.09794, rangeLow: 1.09709, regime: 'trend' }, context: {} },
+    { price: 1.09790, snapshot: { rangeHigh: 1.09794, rangeLow: 1.09709, regime: 'trend' }, context: {} },
     { agreement: 'neutro' },
     {}
   );
