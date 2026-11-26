@@ -24,6 +24,7 @@ let conversationHistory = [];
 let restoreHistoryPending = false;
 let connectionResuming = false;
 let liveTokenCache = null;
+let pendingToolControllers = new Map();
 
 const LIVE_TOOLS = [{
   functionDeclarations: [{
@@ -249,6 +250,9 @@ async function handleToolCalls(toolCall) {
   const calls = toolCall?.functionCalls || [];
   for (const call of calls) {
     if (call.name !== 'refresh_market_analysis') continue;
+    const callId = call.id || call.name;
+    const controller = new AbortController();
+    pendingToolControllers.set(callId, controller);
     let result;
     try {
       const response = await fetch('/api/instructor?liveMarket=1', {
@@ -256,6 +260,7 @@ async function handleToolCalls(toolCall) {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         cache: 'no-store',
+        signal: controller.signal,
         body: JSON.stringify({
           symbol: call.args?.symbol || currentSymbol(),
           interval: call.args?.interval || market.interval || '5m'
@@ -264,8 +269,13 @@ async function handleToolCalls(toolCall) {
       const data = await response.json().catch(() => ({}));
       result = response.ok && data.ok ? data.analysis : { error: data.error || 'A análise atual não está disponível.' };
     } catch {
+      if (controller.signal.aborted) {
+        pendingToolControllers.delete(callId);
+        continue;
+      }
       result = { error: 'Não foi possível contactar o motor GraficTrader.' };
     }
+    pendingToolControllers.delete(callId);
     if (liveSocket?.readyState === WebSocket.OPEN) {
       liveSocket.send(JSON.stringify({
         toolResponse: {
@@ -313,12 +323,12 @@ function handleLiveMessage(raw) {
     stopAudioPlayback();
     setStatus('Interrompeste a resposta · continua a falar');
   }
-  const inputText = server.inputTranscription?.text;
+  const inputText = message.inputTranscription?.text || server.inputTranscription?.text;
   if (inputText) {
     appendTranscript('user', inputText);
     setStatus('A ouvir a tua pergunta…');
   }
-  const outputText = server.outputTranscription?.text;
+  const outputText = message.outputTranscription?.text || server.outputTranscription?.text;
   if (outputText) appendTranscript('assistant', outputText);
 
   const parts = server.modelTurn?.parts || [];
@@ -335,6 +345,12 @@ function handleLiveMessage(raw) {
     setStatus('Estou ligado · podes continuar');
   }
   if (message.toolCall) handleToolCalls(message.toolCall);
+  if (message.toolCallCancellation?.ids) {
+    for (const id of message.toolCallCancellation.ids) {
+      pendingToolControllers.get(id)?.abort();
+      pendingToolControllers.delete(id);
+    }
+  }
   if (message.goAway && liveSocket?.readyState === WebSocket.OPEN) {
     liveSocket.close(1012, 'Gemini session renewal');
   }
@@ -483,9 +499,14 @@ function stopLiveSession() {
   liveTokenCache = null;
   if (reconnectTimer) clearTimeout(reconnectTimer);
   reconnectTimer = null;
+  for (const controller of pendingToolControllers.values()) controller.abort();
+  pendingToolControllers.clear();
   if (liveSocket) {
     const socket = liveSocket;
     liveSocket = null;
+    if (socket.readyState === WebSocket.OPEN) {
+      try { socket.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } })); } catch { /* socket closing */ }
+    }
     try { socket.close(1000, 'User ended LIVE session'); } catch { /* already closed */ }
   }
   releaseAudio();
