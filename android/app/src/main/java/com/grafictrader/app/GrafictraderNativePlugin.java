@@ -79,6 +79,16 @@ public class GrafictraderNativePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void consumeLaunchMode(PluginCall call) {
+        android.content.SharedPreferences prefs = getContext().getSharedPreferences("grafictrader_launch", Context.MODE_PRIVATE);
+        String mode = prefs.getString("mode", "");
+        prefs.edit().remove("mode").apply();
+        JSObject result = new JSObject();
+        result.put("mode", mode);
+        call.resolve(result);
+    }
+
+    @PluginMethod
     public void status(PluginCall call) {
         JSObject result = new JSObject();
         result.put("available", true);
