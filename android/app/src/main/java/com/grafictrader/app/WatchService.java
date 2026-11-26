@@ -131,6 +131,7 @@ public class WatchService extends Service {
     private ImageReader reader;
     private Image latest;
     private volatile Bubble bubble;
+    private NativeLiveAssistant liveAssistant;
     private TextToSpeech tts;
     private ComponentCallbacks configCallbacks;
 
@@ -164,7 +165,9 @@ public class WatchService extends Service {
 
         // Android 14+: the service must be in the foreground before the projection is used.
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification("A preparar a análise…"),
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION : 0);
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                        ? (ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+                        : Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION : 0);
 
         int resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
         Intent data = parcelable(intent);
@@ -214,7 +217,7 @@ public class WatchService extends Service {
         };
         registerComponentCallbacks(configCallbacks);
 
-        bubble = new Bubble(this, this::openApp, () -> finish(endingMessage));
+        bubble = new Bubble(this, this::openApp, this::toggleLiveAssistant, this::showBubbleMessages, () -> finish(endingMessage));
         try {
             bubble.show();
         } catch (Exception error) {
@@ -724,8 +727,43 @@ public class WatchService extends Service {
         }
     }
 
+    private void toggleLiveAssistant() {
+        if (bubble == null) return;
+        if (liveAssistant == null) {
+            liveAssistant = new NativeLiveAssistant(this, server, (status, transcript) -> {
+                Bubble shown = bubble;
+                if (shown != null) shown.updateLive(status, transcript);
+            });
+        }
+        JSONObject snapshot = current;
+        if (snapshot != null) liveAssistant.setSymbol(snapshot.optString("symbol", ""));
+        if (liveAssistant.isActive() && liveAssistant.isSpeaking()) {
+            liveAssistant.interruptSpeech();
+            bubble.showLiveMode(true);
+            return;
+        }
+        if (liveAssistant.isActive()) {
+            liveAssistant.stop();
+            bubble.showLiveMode(false);
+            bubble.updateLive("LIVE pausado", null);
+        } else {
+            bubble.showLiveMode(true);
+            bubble.updateLive("LIVE · a iniciar microfone", "Fala naturalmente. A resposta será falada.");
+            liveAssistant.start();
+        }
+    }
+
+    private void showBubbleMessages() {
+        if (liveAssistant != null) liveAssistant.stop();
+    }
+
     private void openApp() {
+        openApp(null);
+    }
+
+    private void openApp(String mode) {
         Intent intent = new Intent(this, MainActivity.class);
+        if (mode != null) intent.putExtra("grafictrader_mode", mode);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
         try {
             startActivity(intent);
@@ -815,6 +853,8 @@ public class WatchService extends Service {
         boolean wasRunning = running;
         running = false;
         if (wasRunning) remember(false, message);
+        if (liveAssistant != null) liveAssistant.destroy();
+        liveAssistant = null;
         if (bubble != null) bubble.remove();
         bubble = null;
         if (tts != null) tts.shutdown();

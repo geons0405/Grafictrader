@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [main, claude/app-inspection-analysis-mqt9rz, fix/watch-bubble-and-signal-safety]
+    branches: [main, claude/app-inspection-analysis-mqt9rz, fix/watch-bubble-and-signal-safety, feat/live-conversational-assistant]
     paths:
       - 'android/**'
       - 'android-shell/**'

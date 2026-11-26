@@ -25,7 +25,9 @@ final class Bubble {
     private final Context context;
     private final WindowManager windowManager;
     private final Runnable onOpenApp;
+    private final Runnable onOpenLive;
     private final Runnable onStop;
+    private final Runnable onMessages;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     private LinearLayout root;
@@ -36,19 +38,43 @@ final class Bubble {
     private TextView detail;
     private TextView hint;
     private TextView stop;
+    private LinearLayout shortcuts;
+    private TextView liveShortcut;
+    private TextView chatShortcut;
+    private TextView liveStatus;
+    private TextView liveTranscript;
+    private boolean liveMode;
     private WindowManager.LayoutParams params;
     private boolean expanded;
     private volatile Rect bounds;
 
-    Bubble(Context context, Runnable onOpenApp, Runnable onStop) {
+    Bubble(Context context, Runnable onOpenApp, Runnable onOpenLive, Runnable onMessages, Runnable onStop) {
         this.context = context;
         this.windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         this.onOpenApp = onOpenApp;
+        this.onOpenLive = onOpenLive;
+        this.onMessages = onMessages;
         this.onStop = onStop;
     }
 
     private int dp(float value) {
         return Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, value, context.getResources().getDisplayMetrics()));
+    }
+
+    private TextView shortcut(String label) {
+        TextView view = text(11, true);
+        view.setText(label);
+        view.setGravity(Gravity.CENTER);
+        view.setMaxLines(1);
+        view.setPadding(dp(5), 0, dp(5), 0);
+        GradientDrawable chip = new GradientDrawable();
+        chip.setColor(0xFF30343B);
+        chip.setCornerRadius(dp(10));
+        chip.setStroke(dp(1), 0xFF626873);
+        view.setBackground(chip);
+        view.setClickable(true);
+        view.setFocusable(true);
+        return view;
     }
 
     private TextView text(float sizeSp, boolean bold) {
@@ -93,11 +119,41 @@ final class Bubble {
         stop.setVisibility(View.GONE);
         stop.setOnClickListener(v -> onStop.run());
 
+        shortcuts = new LinearLayout(context);
+        shortcuts.setOrientation(LinearLayout.HORIZONTAL);
+        shortcuts.setGravity(Gravity.CENTER_VERTICAL);
+        shortcuts.setPadding(0, dp(8), 0, 0);
+        liveShortcut = shortcut("🎙  LIVE");
+        chatShortcut = shortcut("✉  Mensagens");
+        liveShortcut.setOnClickListener(v -> onOpenLive.run());
+        chatShortcut.setOnClickListener(v -> { onMessages.run(); showResponse(); });
+        LinearLayout.LayoutParams shortcutParams = new LinearLayout.LayoutParams(0, dp(36), 1f);
+        shortcutParams.setMargins(0, 0, dp(6), 0);
+        shortcuts.addView(liveShortcut, shortcutParams);
+        LinearLayout.LayoutParams chatParams = new LinearLayout.LayoutParams(0, dp(36), 1f);
+        shortcuts.addView(chatShortcut, chatParams);
+        shortcuts.setVisibility(View.GONE);
+
         root.addView(badge);
         root.addView(notice);
         root.addView(asset);
         root.addView(detail);
         root.addView(hint);
+        // Give the weighted shortcut buttons a real width. With WRAP_CONTENT,
+        // the horizontal row can measure to zero and remain invisible on Android.
+        root.addView(shortcuts, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+        liveStatus = text(12, true);
+        liveStatus.setText("LIVE · pronto para ouvir");
+        liveStatus.setVisibility(View.GONE);
+        liveTranscript = text(13, false);
+        liveTranscript.setText("Toca em LIVE para começar a conversar.");
+        liveTranscript.setMaxWidth(dp(270));
+        liveTranscript.setMaxLines(5);
+        liveTranscript.setVisibility(View.GONE);
+        root.addView(liveStatus);
+        root.addView(liveTranscript);
         root.addView(stop);
 
         int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
@@ -160,11 +216,59 @@ final class Bubble {
         bounds = null;
     }
 
+    void showLiveMode(boolean active) {
+        liveMode = true;
+        expanded = true;
+        detail.setVisibility(View.GONE);
+        hint.setVisibility(View.GONE);
+        stop.setVisibility(View.GONE);
+        liveStatus.setVisibility(View.VISIBLE);
+        liveTranscript.setVisibility(View.VISIBLE);
+        shortcuts.setVisibility(View.VISIBLE);
+        liveShortcut.setText(active ? "■  Parar LIVE" : "🎙  Retomar LIVE");
+        chatShortcut.setText("✉  Mensagens");
+        liveStatus.setText(active ? "LIVE · a ouvir" : "LIVE pausado");
+        root.requestLayout();
+    }
+
+    void updateLive(String status, String transcript) {
+        if (root == null) return;
+        if (liveStatus != null && status != null) liveStatus.setText(status);
+        if (status != null && liveShortcut != null) {
+            if (status.contains("a responder")) liveShortcut.setText("↪  Interromper");
+            else if (status.contains("a ouvir") || status.contains("a pensar")) liveShortcut.setText("■  Parar LIVE");
+            else if (status.contains("pausado")) liveShortcut.setText("🎙  Retomar LIVE");
+        }
+        if (liveTranscript != null && transcript != null) liveTranscript.setText(transcript);
+        root.requestLayout();
+    }
+
+    private void showResponse() {
+        liveMode = false;
+        liveStatus.setVisibility(View.GONE);
+        liveTranscript.setVisibility(View.GONE);
+        expanded = true;
+        detail.setVisibility(View.VISIBLE);
+        hint.setVisibility(View.VISIBLE);
+        shortcuts.setVisibility(View.GONE);
+        stop.setVisibility(View.VISIBLE);
+    }
+
     private void toggle() {
         expanded = !expanded;
         int visibility = expanded ? View.VISIBLE : View.GONE;
+        if (liveMode) {
+            liveStatus.setVisibility(visibility);
+            liveTranscript.setVisibility(visibility);
+            shortcuts.setVisibility(visibility);
+            detail.setVisibility(View.GONE);
+            hint.setVisibility(View.GONE);
+            stop.setVisibility(View.GONE);
+            return;
+        }
         detail.setVisibility(visibility);
         hint.setVisibility(visibility);
+        shortcuts.setVisibility(visibility);
         stop.setVisibility(visibility);
     }
 

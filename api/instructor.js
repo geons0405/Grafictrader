@@ -7,9 +7,11 @@ import { signalsHandler } from './_lib/signals-route.js';
 import { cronHandler } from './_lib/cron.js';
 import { runAlerts } from './_lib/push.js';
 import { MAIN_FOREX } from './_lib/markets.js';
+import { handleLiveChat } from './_lib/live-chat-handler.js';
 
 const DESK = [...SYMBOLS, ...MAIN_FOREX];
 
+// POST /api/instructor?chat=1                    → conversational LIVE assistant
 // GET /api/instructor?symbol=BTCUSDT&interval=5m  → full instructor view
 // GET /api/instructor?desk=1&interval=5m          → one summary per asset (crypto, main forex pairs, gold)
 // GET /api/instructor?council=1&symbol=…&interval=… → 7 analysts + AI judge verdict
@@ -18,12 +20,11 @@ const DESK = [...SYMBOLS, ...MAIN_FOREX];
 // GET /api/instructor?alerts=1                   → opportunity alerts round (public, runs at most every 4 min)
 // (Several routes share one function: Vercel Hobby allows 12 per deployment.)
 export default async function handler(req, res) {
+  if (req.method === 'POST' && req.query?.chat) return handleLiveChat(req, res);
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
   if (req.query?.cron) return cronHandler(req, res);
   if (req.query?.signals) return signalsHandler(req, res);
   if (req.query?.alerts) {
-    // Called every few minutes by a scheduled GitHub Action. Anyone may call it: it runs at most
-    // once every 4 minutes and each alert is sent once, so calling it more changes nothing.
     try {
       return res.status(200).json(await runAlerts());
     } catch (error) {
@@ -31,16 +32,12 @@ export default async function handler(req, res) {
       return res.status(502).json({ ok: false });
     }
   }
-
   if (req.query?.council) {
     const market = parseMarketQuery(req.query);
     if (!market) return res.status(400).json({ ok: false, error: 'Parâmetros inválidos.' });
-    // The council ends with a paid AI judge: signed-in users only, with the daily AI budget.
     const access = await requireUserIfConfigured(req, res);
     if (!access.ok) return;
     const who = access.user?.email || clientIp(req);
-    // The judge's answer is cached per market, so the council is limited per user but
-    // does not spend the daily AI budget that FOTO and the live watch need.
     const limit = await rateLimit('council', who, { limit: 40, windowSeconds: 600, failClosed: true });
     if (!limit.allowed) return sendRateLimited(res, limit);
     try {
@@ -51,7 +48,6 @@ export default async function handler(req, res) {
       return res.status(error.status || 502).json({ ok: false, error: error.message || 'Conselho indisponível.' });
     }
   }
-
   if (req.query?.desk) {
     const market = parseMarketQuery({ symbol: 'BTCUSDT', interval: req.query.interval });
     if (!market) return res.status(400).json({ ok: false, error: 'Parâmetros inválidos.' });
@@ -60,20 +56,15 @@ export default async function handler(req, res) {
     const settled = await Promise.allSettled(DESK.map(symbol => runInstructor(symbol, market.interval)));
     const desk = settled.map((result, i) => result.status === 'fulfilled'
       ? {
-          symbol: DESK[i],
-          ok: true,
-          price: result.value.price,
-          summary: result.value.summary,
+          symbol: DESK[i], ok: true, price: result.value.price, summary: result.value.summary,
           signal: { action: result.value.signal.action, confidence: result.value.signal.confidence, regimeLabel: result.value.signal.regimeLabel }
         }
       : { symbol: DESK[i], ok: false, error: result.reason?.message || 'Indisponível' });
     res.setHeader('Cache-Control', 's-maxage=20, stale-while-revalidate=40');
     return res.status(200).json({ ok: true, interval: market.interval, updatedAt: new Date().toISOString(), desk });
   }
-
   const market = parseMarketQuery(req.query);
   if (!market) return res.status(400).json({ ok: false, error: 'Parâmetros inválidos.' });
-  // Generous: many people share one mobile IP. It only stops scripted floods.
   const limit = await rateLimit('instructor', clientIp(req), { limit: 400, windowSeconds: 600 });
   if (!limit.allowed) return sendRateLimited(res, limit);
   try {

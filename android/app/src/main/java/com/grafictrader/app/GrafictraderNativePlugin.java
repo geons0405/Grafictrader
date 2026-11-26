@@ -6,9 +6,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.projection.MediaProjectionConfig;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
 import androidx.activity.result.ActivityResult;
@@ -20,16 +25,25 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 import org.json.JSONObject;
+import java.util.ArrayList;
+import java.util.Locale;
 
 /** Bridge between the web app and the native broker watcher. */
-@CapacitorPlugin(name = "GrafictraderNative")
+@CapacitorPlugin(name = "GrafictraderNative", permissions = {@Permission(alias = "microphone", strings = {Manifest.permission.RECORD_AUDIO})})
 public class GrafictraderNativePlugin extends Plugin {
 
     private static final String DEFAULT_SERVER = "https://grafictrader.vercel.app";
+    private SpeechRecognizer liveRecognizer;
+    private TextToSpeech liveTts;
+    private volatile boolean liveTtsReady;
+    private volatile String pendingSpeech;
 
     @Override
     public void load() {
+        initializeLiveTts();
         WatchService.setListener(new WatchService.Listener() {
             @Override
             public void onResult(String json) {
@@ -49,9 +63,26 @@ public class GrafictraderNativePlugin extends Plugin {
         });
     }
 
+    private void initializeLiveTts() {
+        liveTtsReady = false;
+        liveTts = new TextToSpeech(getContext(), status -> {
+            if (status == TextToSpeech.SUCCESS && liveTts != null) {
+                liveTts.setLanguage(new Locale("pt", "PT"));
+                liveTtsReady = true;
+                String queued = pendingSpeech;
+                pendingSpeech = null;
+                if (queued != null) liveTts.speak(queued, TextToSpeech.QUEUE_FLUSH, null, "grafictrader-live");
+            }
+        });
+    }
+
     @Override
     protected void handleOnDestroy() {
         WatchService.setListener(null);
+        if (liveRecognizer != null) { liveRecognizer.destroy(); liveRecognizer = null; }
+        if (liveTts != null) { liveTts.stop(); liveTts.shutdown(); liveTts = null; }
+        liveTtsReady = false;
+        pendingSpeech = null;
     }
 
     /**
@@ -79,6 +110,93 @@ public class GrafictraderNativePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void consumeLaunchMode(PluginCall call) {
+        android.content.SharedPreferences prefs = getContext().getSharedPreferences("grafictrader_launch", Context.MODE_PRIVATE);
+        String mode = prefs.getString("mode", "");
+        prefs.edit().remove("mode").apply();
+        JSObject result = new JSObject();
+        result.put("mode", mode);
+        call.resolve(result);
+    }
+
+
+    @PluginMethod
+    public void startVoiceRecognition(PluginCall call) {
+        if (!hasPermission("microphone")) {
+            requestPermissionForAlias("microphone", call, "microphonePermissionCallback");
+            return;
+        }
+        beginVoiceRecognition(call);
+    }
+
+    @PermissionCallback
+    private void microphonePermissionCallback(PluginCall call) {
+        if (call == null) return;
+        if (hasPermission("microphone")) beginVoiceRecognition(call);
+        else call.reject("Permite o acesso ao microfone para iniciar o LIVE.", "MICROPHONE_PERMISSION");
+    }
+
+    private void beginVoiceRecognition(PluginCall call) {
+        if (!SpeechRecognizer.isRecognitionAvailable(getContext())) {
+            call.reject("O reconhecimento de voz não está disponível neste telemóvel.", "VOICE_UNAVAILABLE");
+            return;
+        }
+        try {
+            if (liveRecognizer != null) liveRecognizer.destroy();
+            liveRecognizer = SpeechRecognizer.createSpeechRecognizer(getContext());
+            liveRecognizer.setRecognitionListener(new RecognitionListener() {
+                @Override public void onReadyForSpeech(Bundle params) { JSObject state = new JSObject(); state.put("status", "listening"); notifyListeners("voiceStatus", state); }
+                @Override public void onBeginningOfSpeech() { }
+                @Override public void onRmsChanged(float rmsdB) { }
+                @Override public void onBufferReceived(byte[] buffer) { }
+                @Override public void onEndOfSpeech() { JSObject state = new JSObject(); state.put("status", "processing"); notifyListeners("voiceStatus", state); }
+                @Override public void onError(int error) { JSObject data = new JSObject(); data.put("code", error); data.put("message", "Não consegui reconhecer a voz. Tenta novamente."); notifyListeners("voiceError", data); }
+                @Override public void onResults(Bundle results) {
+                    ArrayList<String> matches = results == null ? null : results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                    if (matches != null && !matches.isEmpty()) { JSObject data = new JSObject(); data.put("text", matches.get(0)); notifyListeners("voiceResult", data); }
+                    JSObject state = new JSObject(); state.put("status", "idle"); notifyListeners("voiceStatus", state);
+                }
+                @Override public void onPartialResults(Bundle partialResults) { }
+                @Override public void onEvent(int eventType, Bundle params) { }
+            });
+            Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-PT");
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "pt-PT");
+            intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
+            liveRecognizer.startListening(intent);
+            call.resolve();
+        } catch (Exception error) {
+            call.reject("Não foi possível iniciar o microfone.", "VOICE_START_FAILED");
+        }
+    }
+
+    @PluginMethod
+    public void stopVoiceRecognition(PluginCall call) {
+        if (liveRecognizer != null) { try { liveRecognizer.stopListening(); liveRecognizer.cancel(); } catch (Exception ignored) { } }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void speakText(PluginCall call) {
+        String spoken = call.getString("text", "");
+        if (spoken == null || spoken.trim().isEmpty()) { call.reject("Texto vazio."); return; }
+        pendingSpeech = spoken;
+        if (liveTts == null) initializeLiveTts();
+        else if (liveTtsReady) {
+            pendingSpeech = null;
+            liveTts.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "grafictrader-live");
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopSpeaking(PluginCall call) {
+        if (liveTts != null) liveTts.stop();
+        call.resolve();
+    }
+
+    @PluginMethod
     public void status(PluginCall call) {
         JSObject result = new JSObject();
         result.put("available", true);
@@ -90,6 +208,24 @@ public class GrafictraderNativePlugin extends Plugin {
 
     @PluginMethod
     public void startWatch(PluginCall call) {
+        if (!hasPermission("microphone")) {
+            requestPermissionForAlias("microphone", call, "watchMicrophonePermissionCallback");
+            return;
+        }
+        startWatchAfterMicrophonePermission(call);
+    }
+
+    @PermissionCallback
+    private void watchMicrophonePermissionCallback(PluginCall call) {
+        if (call == null) return;
+        if (!hasPermission("microphone")) {
+            call.reject("Permite o acesso ao microfone para poderes usar o LIVE por cima da corretora.", "MICROPHONE_PERMISSION");
+            return;
+        }
+        startWatchAfterMicrophonePermission(call);
+    }
+
+    private void startWatchAfterMicrophonePermission(PluginCall call) {
         if (WatchService.isRunning()) {
             call.resolve();
             return;
@@ -109,8 +245,6 @@ public class GrafictraderNativePlugin extends Plugin {
             return;
         }
         MediaProjectionManager manager = (MediaProjectionManager) getContext().getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-        // The bubble reads whatever app is in front, so ask for the whole screen:
-        // sharing a single app sends empty frames once the user switches to the broker.
         Intent capture = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
                 ? manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
                 : manager.createScreenCaptureIntent();
