@@ -287,10 +287,9 @@ export function photoGuidance(verdict, vision, reading) {
     manage: visionManage(vision)
   };
   if (!dir) {
-    const s = result.scenarios;
-    result.now += `\n\nPRÓXIMA AÇÃO — COMPRAR: ${s.buy.condition} ${s.buy.invalidation}`;
-    result.now += `\nPRÓXIMA AÇÃO — VENDER: ${s.sell.condition} ${s.sell.invalidation}`;
-    result.now += `\n${s.wait}`;
+    result.now = 'Não operes agora. A imagem não mostra uma entrada suficientemente clara. Espera por uma oportunidade mais segura.';
+    result.scenarios = null;
+    result.steps = ['Não abras nenhuma operação agora.', 'Aguarda uma indicação clara: COMPRA ou VENDA.'];
   }
   return result;
 }
