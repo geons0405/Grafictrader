@@ -22,6 +22,21 @@ let inputTranscript = '';
 let outputTranscript = '';
 let conversationHistory = [];
 
+const LIVE_TOOLS = [{
+  functionDeclarations: [{
+    name: 'refresh_market_analysis',
+    description: 'Obtém uma análise quantitativa atualizada do motor GraficTrader para um ativo e período suportados. Usa esta ferramenta antes de afirmar preços, indicadores ou sinais atuais.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        symbol: { type: 'STRING', description: 'Símbolo suportado, por exemplo BTCUSDT, EURUSD ou XAUUSD.' },
+        interval: { type: 'STRING', enum: ['1m', '5m', '15m', '1h', '4h'] }
+      },
+      required: ['symbol', 'interval']
+    }
+  }]
+}];
+
 const makeSessionId = () => 'gt_' + Array.from(crypto.getRandomValues(new Uint8Array(18)), n => n.toString(16).padStart(2, '0')).join('');
 const currentSymbol = () => market.source === 'mt5'
   ? market.mt5Symbol
@@ -219,9 +234,41 @@ function setupMessage(data) {
           silenceDurationMs: 850
         }
       },
-      sessionResumption: resumeHandle ? { handle: resumeHandle } : {}
+      sessionResumption: resumeHandle ? { handle: resumeHandle } : {},
+      tools: LIVE_TOOLS
     }
   };
+}
+
+async function handleToolCalls(toolCall) {
+  const calls = toolCall?.functionCalls || [];
+  for (const call of calls) {
+    if (call.name !== 'refresh_market_analysis') continue;
+    let result;
+    try {
+      const response = await fetch('/api/instructor?liveMarket=1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        cache: 'no-store',
+        body: JSON.stringify({
+          symbol: call.args?.symbol || currentSymbol(),
+          interval: call.args?.interval || market.interval || '5m'
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      result = response.ok && data.ok ? data.analysis : { error: data.error || 'A análise atual não está disponível.' };
+    } catch {
+      result = { error: 'Não foi possível contactar o motor GraficTrader.' };
+    }
+    if (liveSocket?.readyState === WebSocket.OPEN) {
+      liveSocket.send(JSON.stringify({
+        toolResponse: {
+          functionResponses: [{ id: call.id, name: call.name, response: result }]
+        }
+      }));
+    }
+  }
 }
 
 function handleLiveMessage(raw) {
@@ -268,6 +315,7 @@ function handleLiveMessage(raw) {
     finalizeTurn();
     setStatus('Estou ligado · podes continuar');
   }
+  if (message.toolCall) handleToolCalls(message.toolCall);
   if (message.goAway && liveSocket?.readyState === WebSocket.OPEN) {
     liveSocket.close(1012, 'Gemini session renewal');
   }
