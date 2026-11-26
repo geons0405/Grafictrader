@@ -8,7 +8,6 @@ import { cronHandler } from './_lib/cron.js';
 import { runAlerts } from './_lib/push.js';
 import { MAIN_FOREX } from './_lib/markets.js';
 import { handleLiveChat } from './_lib/live-chat-handler.js';
-import { handleLiveToken, handleLiveMarket } from './_lib/live-token-handler.js';
 
 const DESK = [...SYMBOLS, ...MAIN_FOREX];
 
@@ -21,8 +20,6 @@ const DESK = [...SYMBOLS, ...MAIN_FOREX];
 // GET /api/instructor?alerts=1                   → opportunity alerts round (public, runs at most every 4 min)
 // (Several routes share one function: Vercel Hobby allows 12 per deployment.)
 export default async function handler(req, res) {
-  if (req.method === 'POST' && req.query?.liveToken) return handleLiveToken(req, res);
-  if (req.method === 'POST' && req.query?.liveMarket) return handleLiveMarket(req, res);
   if (req.method === 'POST' && req.query?.chat) return handleLiveChat(req, res);
   if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
   if (req.query?.cron) return cronHandler(req, res);
