@@ -214,7 +214,7 @@ public class WatchService extends Service {
         };
         registerComponentCallbacks(configCallbacks);
 
-        bubble = new Bubble(this, this::openApp, () -> finish(endingMessage));
+        bubble = new Bubble(this, this::openApp, () -> openApp("live"), () -> openApp("chat"), () -> finish(endingMessage));
         try {
             bubble.show();
         } catch (Exception error) {
@@ -725,7 +725,12 @@ public class WatchService extends Service {
     }
 
     private void openApp() {
+        openApp(null);
+    }
+
+    private void openApp(String mode) {
         Intent intent = new Intent(this, MainActivity.class);
+        if (mode != null) intent.putExtra("grafictrader_mode", mode);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
         try {
             startActivity(intent);
