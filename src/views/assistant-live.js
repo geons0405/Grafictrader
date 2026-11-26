@@ -21,6 +21,7 @@ let activeOutputNode = null;
 let inputTranscript = '';
 let outputTranscript = '';
 let conversationHistory = [];
+let liveTokenCache = null;
 
 const LIVE_TOOLS = [{
   functionDeclarations: [{
@@ -195,6 +196,7 @@ function playAudioChunk(base64, mimeType = 'audio/pcm;rate=24000') {
 }
 
 async function fetchLiveToken() {
+  if (liveTokenCache && Date.parse(liveTokenCache.expiresAt) - Date.now() > 60000) return liveTokenCache;
   const response = await fetch('/api/instructor?liveToken=1', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -208,6 +210,7 @@ async function fetchLiveToken() {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.ok || !data.token) throw new Error(data.error || 'Não foi possível iniciar a sessão LIVE.');
+  liveTokenCache = data;
   return data;
 }
 
@@ -324,7 +327,7 @@ function handleLiveMessage(raw) {
 async function connectLive() {
   const data = await fetchLiveToken();
   if (!shouldRun) return;
-  const url = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=' + encodeURIComponent(data.token);
+  const url = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=' + encodeURIComponent(data.token);
   await new Promise((resolve, reject) => {
     let settled = false;
     const socket = new WebSocket(url);
@@ -425,6 +428,7 @@ async function startLiveSession() {
   shouldRun = true;
   reconnectAttempts = 0;
   resumeHandle = null;
+  liveTokenCache = null;
   conversationHistory = [];
   activeInputNode = null;
   activeOutputNode = null;
@@ -448,6 +452,7 @@ async function startLiveSession() {
 function stopLiveSession() {
   shouldRun = false;
   setupReady = false;
+  liveTokenCache = null;
   if (reconnectTimer) clearTimeout(reconnectTimer);
   reconnectTimer = null;
   if (liveSocket) {
