@@ -99,7 +99,7 @@ final class NativeLiveAssistant {
                 }
                 @Override public void onPartialResults(Bundle partial) {
                     java.util.ArrayList<String> values = partial.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                    if (values != null && !values.isEmpty()) emit("LIVE · a ouvir", conversationText + "\\nTu: " + values.get(0));
+                    if (values != null && !values.isEmpty()) emit("LIVE · a ouvir", conversationText + "\nTu: " + values.get(0));
                 }
                 @Override public void onEvent(int eventType, Bundle params) { }
             });
@@ -124,7 +124,7 @@ final class NativeLiveAssistant {
 
     private void ask(String message) {
         lastTranscript = message;
-        conversationText = trimConversation(conversationText + (conversationText.isEmpty() ? "" : "\\n") + "Tu: " + message);
+        conversationText = trimConversation(conversationText + (conversationText.isEmpty() ? "" : "\n") + "Tu: " + message);
         emit("LIVE · a pensar", conversationText);
         network.execute(() -> {
             HttpURLConnection connection = null;
@@ -188,7 +188,8 @@ final class NativeLiveAssistant {
         });
     }
 
-    private String trimConversation(String value) {\n        return value.length() > 1100 ? value.substring(value.length() - 1100) : value;
+    private String trimConversation(String value) {
+        return value.length() > 1100 ? value.substring(value.length() - 1100) : value;
     }
 
     private void emit(String status, String transcript) {
