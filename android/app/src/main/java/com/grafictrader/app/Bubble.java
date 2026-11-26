@@ -44,9 +44,6 @@ final class Bubble {
     private TextView liveStatus;
     private TextView liveTranscript;
     private boolean liveMode;
-    private TextView liveStatus;
-    private TextView liveTranscript;
-    private boolean liveMode;
     private WindowManager.LayoutParams params;
     private boolean expanded;
     private volatile Rect bounds;
