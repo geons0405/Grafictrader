@@ -15,6 +15,7 @@ import { initDiario, activateDiario } from './views/diario.js';
 import { initSheets, closeSheet } from './views/sheet.js';
 import { initAnalytics, track } from './lib/analytics.js';
 import { Native } from './lib/native.js';
+import { openAssistant } from './views/assistant-live.js';
 
 const PUBLIC_ROUTES = ['home', 'login', 'register'];
 const PRIVATE_ROUTES = ['live', 'foto', 'intel', 'perfil', 'diario'];
@@ -287,6 +288,8 @@ function wire() {
 
   onThemeChange(syncThemeControls);
   window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+  window.addEventListener('grafictrader:open-live-assistant', () => openAssistant('voice'));
+  window.addEventListener('grafictrader:chat-shortcut', () => openAssistant('text'));
 }
 
 async function boot() {
@@ -313,6 +316,7 @@ async function boot() {
       if (launch?.mode === 'live') {
         navigate('live');
         setLiveMode('broker');
+        window.dispatchEvent(new CustomEvent('grafictrader:open-live-assistant'));
       } else if (launch?.mode === 'chat') {
         // The existing written assistant chat is not yet present as a standalone view.
         // Keep the user inside the current LIVE screen rather than replacing the bubble UI.
