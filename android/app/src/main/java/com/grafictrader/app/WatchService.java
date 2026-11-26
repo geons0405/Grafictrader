@@ -214,7 +214,7 @@ public class WatchService extends Service {
         };
         registerComponentCallbacks(configCallbacks);
 
-        bubble = new Bubble(this, this::openApp, () -> openApp("live"), () -> finish(endingMessage));
+        bubble = new Bubble(this, this::openApp, this::openLiveOverlay, () -> finish(endingMessage));
         try {
             bubble.show();
         } catch (Exception error) {
@@ -721,6 +721,20 @@ public class WatchService extends Service {
             JSONObject guidance = data.optJSONObject("guidance");
             String now = guidance == null ? "" : guidance.optString("now", "");
             tts.speak(label(decision) + ". " + now, TextToSpeech.QUEUE_FLUSH, null, "watch");
+        }
+    }
+
+    private void openLiveOverlay() {
+        try {
+            getSharedPreferences("grafictrader_launch", MODE_PRIVATE)
+                    .edit().putString("mode", "live-overlay").apply();
+            Intent intent = new Intent(this, LiveOverlayActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            startActivity(intent);
+        } catch (Exception error) {
+            main.post(() -> Toast.makeText(this,
+                    "Não foi possível abrir a janela LIVE. Verifica as permissões do GraficTrader.",
+                    Toast.LENGTH_LONG).show());
         }
     }
 
