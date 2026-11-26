@@ -54,7 +54,7 @@ public class LiveOverlayActivity extends BridgeActivity {
     }
 
     @Override
-    protected void onDestroy() {
+    public void onDestroy() {
         if (audioManager != null) {
             audioManager.setSpeakerphoneOn(false);
             audioManager.setMode(previousAudioMode);
