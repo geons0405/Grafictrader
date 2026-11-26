@@ -23,7 +23,7 @@ public class MainActivity extends BridgeActivity {
     private void rememberMode(Intent intent) {
         if (intent == null) return;
         String mode = intent.getStringExtra("grafictrader_mode");
-        if ("live".equals(mode) || "chat".equals(mode)) {
+        if ("live".equals(mode)) {
             getSharedPreferences("grafictrader_launch", MODE_PRIVATE)
                     .edit().putString("mode", mode).apply();
         }
