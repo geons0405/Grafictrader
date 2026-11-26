@@ -165,7 +165,9 @@ public class WatchService extends Service {
 
         // Android 14+: the service must be in the foreground before the projection is used.
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification("A preparar a análise…"),
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION : 0);
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+                        ? (ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+                        : Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION : 0);
 
         int resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
         Intent data = parcelable(intent);
