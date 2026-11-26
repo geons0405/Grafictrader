@@ -225,6 +225,23 @@ export function buildConditionalScenarios(snapshot, context, verdict, money = va
   };
 }
 
+/** Short, beginner-friendly text for the Android LIVE bubble when there is no entry. */
+export function simpleWaitMessage(reading, verdict, vision) {
+  const snapshot = reading?.snapshot || {};
+  const risk = reading?.context?.eventRisk;
+  if (risk?.blocked) return 'Não operes agora. Há uma notícia importante e o preço pode mudar bruscamente. Espera o mercado acalmar.';
+  if (snapshot.regime === 'chaotic') return 'Não operes agora. O preço está a oscilar demasiado e ainda não há uma oportunidade segura. Espera o mercado acalmar.';
+  if (verdict?.agreement === 'diverge') return 'Não operes agora. A imagem e os dados do mercado não concordam. Espera por um sinal claro.';
+  const high = Number(snapshot.rangeHigh), low = Number(snapshot.rangeLow), price = Number(reading?.price);
+  if (Number.isFinite(high) && Number.isFinite(low) && high > low && Number.isFinite(price)) {
+    const width = high - low;
+    if (price >= high - width * 0.2) return 'Não operes agora. O preço está a aproximar-se de uma zona onde pode parar ou voltar a cair. Espera por uma confirmação.';
+    if (price <= low + width * 0.2) return 'Não operes agora. O preço está a aproximar-se de uma zona onde pode parar ou voltar a subir. Espera por uma confirmação.';
+  }
+  if (vision?.waitFor) return 'Não operes agora. ' + firstSentence(vision.waitFor) + ' Espera por uma oportunidade mais clara.';
+  return 'Não operes agora. O mercado ainda não mostrou uma direção clara. Espera; quando houver uma boa oportunidade de compra ou venda, a aplicação vai indicar qual delas.';
+}
+
 /**
  * Guidance for the photo analysis. Uses the live engine's plan when the
  * chart is a market we track; otherwise falls back to the vision model's
@@ -243,11 +260,11 @@ export function photoGuidance(verdict, vision, reading) {
     if (vision.plain) guidance.why.push('Sobre a imagem: ' + vision.plain);
     const result = withLivePlan(guidance, verdict, vision, reading, money);
     if (!verdict.direction) {
-      result.scenarios = buildConditionalScenarios(reading.snapshot, reading.context, verdict, money);
-      const s = result.scenarios;
-      result.now += `\n\nPRÓXIMA AÇÃO — COMPRAR: ${s.buy.condition} ${s.buy.invalidation}`;
-      result.now += `\nPRÓXIMA AÇÃO — VENDER: ${s.sell.condition} ${s.sell.invalidation}`;
-      result.now += `\n${s.wait}`;
+      // The Android bubble is for quick decisions: show one clear WAIT message,
+      // not two technical, hypothetical entry plans at the same time.
+      result.now = simpleWaitMessage(reading, verdict, vision);
+      result.scenarios = null;
+      result.steps = ['Não abras nenhuma operação agora.', 'Aguarda a próxima indicação da aplicação: COMPRA ou VENDA.'];
     }
     return result;
   }
