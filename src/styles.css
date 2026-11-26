@@ -1758,3 +1758,26 @@ body.stage-open .tabbar { display: none; }
 .chip input { accent-color: var(--up); margin: 0; }
 .alerts-card .segmented { margin-bottom: 12px; }
 .alerts-card .btn + .btn { margin-top: 8px; }
+
+
+/* Conversational assistant — independent overlay; existing LIVE/bubble UI remains intact. */
+.gt-assistant{position:fixed;inset:0;z-index:10050;background:rgba(5,9,15,.76);backdrop-filter:blur(12px);display:flex;align-items:flex-end;justify-content:center;padding:14px}
+.gt-assistant[hidden]{display:none}
+.gt-assistant-card{width:min(100%,560px);max-height:min(88dvh,820px);display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(255,255,255,.13);border-radius:24px;background:var(--panel,#111820);color:var(--text,#f4f6f8);box-shadow:0 24px 90px rgba(0,0,0,.45)}
+.gt-assistant-card>header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line,rgba(255,255,255,.1))}
+.gt-assistant-card>header small{font-size:10px;letter-spacing:.16em;opacity:.65}
+.gt-assistant-card>header h2{font-size:20px;margin:4px 0}
+.gt-assistant-card>header p{font-size:12px;margin:0;opacity:.7}
+#gtAssistantClose{width:38px;height:38px;border:0;border-radius:50%;background:rgba(255,255,255,.09);color:inherit;font-size:25px}
+.gt-assistant-messages{padding:18px;overflow:auto;min-height:190px;flex:1}
+.gt-assistant-intro{opacity:.7;font-size:14px;line-height:1.5}
+.gt-message{max-width:88%;width:fit-content;padding:11px 14px;border-radius:16px;margin:10px 0;font-size:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.gt-message.user{margin-left:auto;background:var(--accent,#247bff);color:white;border-bottom-right-radius:5px}
+.gt-message.assistant{background:rgba(128,145,165,.16);border-bottom-left-radius:5px}
+.gt-assistant-controls{display:flex;gap:10px;padding:12px 16px;border-top:1px solid var(--line,rgba(255,255,255,.1))}
+#gtAssistantMic{width:48px;min-width:48px;height:48px;border:0;border-radius:50%;background:rgba(48,130,255,.18);color:inherit;font-size:20px}
+#gtAssistantForm{display:flex;flex:1;gap:8px;min-width:0}
+#gtAssistantInput{width:100%;min-width:0;border:1px solid var(--line,rgba(255,255,255,.15));border-radius:14px;padding:0 12px;background:rgba(128,145,165,.1);color:inherit;font:inherit}
+#gtAssistantForm button{border:0;border-radius:13px;padding:0 15px;background:var(--accent,#247bff);color:white;font-weight:650}
+.gt-assistant-foot{padding:0 18px 14px;opacity:.55;font-size:10px}
+@media(min-width:600px){.gt-assistant{align-items:center}.gt-assistant-card{height:min(760px,88dvh)}}
