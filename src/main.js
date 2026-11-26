@@ -14,6 +14,7 @@ import { initProfile, activateProfile } from './views/profile.js';
 import { initDiario, activateDiario } from './views/diario.js';
 import { initSheets, closeSheet } from './views/sheet.js';
 import { initAnalytics, track } from './lib/analytics.js';
+import { Native } from './lib/native.js';
 
 const PUBLIC_ROUTES = ['home', 'login', 'register'];
 const PRIVATE_ROUTES = ['live', 'foto', 'intel', 'perfil', 'diario'];
@@ -305,6 +306,24 @@ async function boot() {
   document.body.classList.remove('booting');
   show(location.hash.slice(1) || 'home');
   checkTerms();
+  // Native bubble shortcuts survive task reordering: consume their one-shot intent after boot.
+  if (Native?.consumeLaunchMode) {
+    try {
+      const launch = await Native.consumeLaunchMode();
+      if (launch?.mode === 'live') {
+        navigate('live');
+        setLiveMode('broker');
+      } else if (launch?.mode === 'chat') {
+        // The existing written assistant chat is not yet present as a standalone view.
+        // Keep the user inside the current LIVE screen rather than replacing the bubble UI.
+        navigate('live');
+        setLiveMode('broker');
+        window.dispatchEvent(new CustomEvent('grafictrader:chat-shortcut'));
+      }
+    } catch (error) {
+      console.warn('Não foi possível abrir o atalho da bolha.', error);
+    }
+  }
 }
 
 boot();
