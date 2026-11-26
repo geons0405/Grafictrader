@@ -12,6 +12,7 @@ import com.getcapacitor.BridgeActivity;
 /**
  * Small translucent Capacitor window used only for the full-duplex voice assistant.
  * The broker remains visible behind it; this is not the GraficTrader home screen.
+ * The window is intentionally small so taps outside it still reach the broker.
  */
 public class LiveOverlayActivity extends BridgeActivity {
     private AudioManager audioManager;
