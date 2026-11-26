@@ -77,7 +77,7 @@ function setMicActive(active) {
 }
 
 function addMessage(text, role) {
-  if (!panel || !text) return null;
+  if (!panel) return null;
   const list = panel.querySelector('#gtAssistantMessages');
   const intro = list.querySelector('.gt-assistant-intro');
   if (intro) intro.remove();
@@ -439,12 +439,19 @@ async function startLiveSession() {
   setStatus('A pedir acesso ao microfone…');
   try {
     await startMicrophone();
-    if (!shouldRun) return;
-    setStatus('A ligar ao GraficTrader Live…');
+  } catch (error) {
+    shouldRun = false;
+    releaseAudio();
+    setMicActive(false);
+    setStatus(error.message || 'Não foi possível ativar o microfone. Verifica as permissões.');
+    return;
+  }
+  if (!shouldRun) return;
+  setStatus('A ligar ao GraficTrader Live…');
+  try {
     await connectLive();
   } catch (error) {
     if (!shouldRun) return;
-    releaseAudio();
     setStatus(error.message || 'Não foi possível iniciar o LIVE.');
     scheduleReconnect();
   }
