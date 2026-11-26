@@ -289,7 +289,6 @@ function wire() {
   onThemeChange(syncThemeControls);
   window.addEventListener('hashchange', () => show(location.hash.slice(1)));
   window.addEventListener('grafictrader:open-live-assistant', () => openAssistant('voice'));
-  window.addEventListener('grafictrader:chat-shortcut', () => openAssistant('text'));
 }
 
 async function boot() {
@@ -317,12 +316,6 @@ async function boot() {
         navigate('live');
         setLiveMode('broker');
         window.dispatchEvent(new CustomEvent('grafictrader:open-live-assistant'));
-      } else if (launch?.mode === 'chat') {
-        // The existing written assistant chat is not yet present as a standalone view.
-        // Keep the user inside the current LIVE screen rather than replacing the bubble UI.
-        navigate('live');
-        setLiveMode('broker');
-        window.dispatchEvent(new CustomEvent('grafictrader:chat-shortcut'));
       }
     } catch (error) {
       console.warn('Não foi possível abrir o atalho da bolha.', error);
