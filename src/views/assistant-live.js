@@ -542,4 +542,8 @@ export function closeAssistant() {
   stopLiveSession();
   if (panel) panel.hidden = true;
   document.body.classList.remove('gt-assistant-open');
+  if (document.body.classList.contains('gt-native-live-overlay')) {
+    const native = window.Capacitor?.Plugins?.GrafictraderNative;
+    native?.closeLiveOverlay?.().catch(() => {});
+  }
 }
