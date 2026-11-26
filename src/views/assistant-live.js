@@ -92,8 +92,25 @@ function addMessage(text, role) {
   return item;
 }
 
-function appendTranscript(role, chunk) {
-  if (!chunk) return;
+function commitTranscript(role) {
+  const isUser = role === 'user';
+  const value = isUser ? inputTranscript.trim() : outputTranscript.trim();
+  if (value) conversationHistory.push({ role: isUser ? 'user' : 'model', text: value });
+  conversationHistory = conversationHistory.slice(-24);
+  if (isUser) {
+    activeInputNode = null;
+    inputTranscript = '';
+  } else {
+    activeOutputNode = null;
+    outputTranscript = '';
+  }
+}
+
+function appendTranscript(role, chunk, finished = false) {
+  if (!chunk) {
+    if (finished) commitTranscript(role);
+    return;
+  }
   const isUser = role === 'user';
   let node = isUser ? activeInputNode : activeOutputNode;
   if (!node) {
@@ -115,16 +132,12 @@ function appendTranscript(role, chunk) {
   }
   const list = panel.querySelector('#gtAssistantMessages');
   list.scrollTop = list.scrollHeight;
+  if (finished) commitTranscript(role);
 }
 
 function finalizeTurn() {
-  if (inputTranscript.trim()) conversationHistory.push({ role: 'user', text: inputTranscript.trim() });
-  if (outputTranscript.trim()) conversationHistory.push({ role: 'model', text: outputTranscript.trim() });
-  conversationHistory = conversationHistory.slice(-24);
-  activeInputNode = null;
-  activeOutputNode = null;
-  inputTranscript = '';
-  outputTranscript = '';
+  commitTranscript('user');
+  commitTranscript('assistant');
 }
 
 function encodeBase64(bytes) {
@@ -323,13 +336,13 @@ function handleLiveMessage(raw) {
     stopAudioPlayback();
     setStatus('Interrompeste a resposta · continua a falar');
   }
-  const inputText = message.inputTranscription?.text || server.inputTranscription?.text;
-  if (inputText) {
-    appendTranscript('user', inputText);
+  const inputEvent = message.inputTranscription || server.inputTranscription;
+  if (inputEvent?.text) {
+    appendTranscript('user', inputEvent.text, Boolean(inputEvent.finished));
     setStatus('A ouvir a tua pergunta…');
   }
-  const outputText = message.outputTranscription?.text || server.outputTranscription?.text;
-  if (outputText) appendTranscript('assistant', outputText);
+  const outputEvent = message.outputTranscription || server.outputTranscription;
+  if (outputEvent?.text) appendTranscript('assistant', outputEvent.text, Boolean(outputEvent.finished));
 
   const parts = server.modelTurn?.parts || [];
   for (const part of parts) {
