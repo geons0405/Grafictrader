@@ -38,6 +38,7 @@ final class NativeLiveAssistant {
     private boolean speaking;
     private boolean ttsReady;
     private String lastTranscript = "";
+    private String conversationText = "";
     private String symbol = "";
 
     NativeLiveAssistant(Context context, String server, Listener listener) {
@@ -75,8 +76,8 @@ final class NativeLiveAssistant {
             if (recognizer != null) recognizer.destroy();
             recognizer = SpeechRecognizer.createSpeechRecognizer(context);
             recognizer.setRecognitionListener(new RecognitionListener() {
-                @Override public void onReadyForSpeech(Bundle params) { emit("LIVE · estou a ouvir", lastTranscript); }
-                @Override public void onBeginningOfSpeech() { emit("LIVE · a ouvir-te", lastTranscript); }
+                @Override public void onReadyForSpeech(Bundle params) { emit("LIVE · estou a ouvir", conversationText); }
+                @Override public void onBeginningOfSpeech() { emit("LIVE · a ouvir-te", conversationText); }
                 @Override public void onRmsChanged(float rmsdB) { }
                 @Override public void onBufferReceived(byte[] buffer) { }
                 @Override public void onEndOfSpeech() { emit("LIVE · a processar", lastTranscript); }
@@ -98,7 +99,7 @@ final class NativeLiveAssistant {
                 }
                 @Override public void onPartialResults(Bundle partial) {
                     java.util.ArrayList<String> values = partial.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                    if (values != null && !values.isEmpty()) emit("LIVE · a ouvir", values.get(0));
+                    if (values != null && !values.isEmpty()) emit("LIVE · a ouvir", conversationText + "\\nTu: " + values.get(0));
                 }
                 @Override public void onEvent(int eventType, Bundle params) { }
             });
@@ -123,7 +124,7 @@ final class NativeLiveAssistant {
 
     private void ask(String message) {
         lastTranscript = message;
-        emit("LIVE · a pensar", "Tu: " + message);
+        conversationText = trimConversation(conversationText + (conversationText.isEmpty() ? "" : "\\n") + "Tu: " + message);\n        emit("LIVE · a pensar", conversationText);
         network.execute(() -> {
             HttpURLConnection connection = null;
             try {
@@ -185,7 +186,7 @@ final class NativeLiveAssistant {
         });
     }
 
-    private void emit(String status, String transcript) {
+    private String trimConversation(String value) {\n        return value.length() > 1100 ? value.substring(value.length() - 1100) : value;\n    }\n\n    private void emit(String status, String transcript) {
         main.post(() -> listener.onState(status, transcript));
     }
 
