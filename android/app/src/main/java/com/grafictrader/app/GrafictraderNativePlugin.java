@@ -110,13 +110,6 @@ public class GrafictraderNativePlugin extends Plugin {
     }
 
     @PluginMethod
-    public void closeLiveOverlay(PluginCall call) {
-        Activity activity = getActivity();
-        if (activity instanceof LiveOverlayActivity) activity.finish();
-        call.resolve();
-    }
-
-    @PluginMethod
     public void consumeLaunchMode(PluginCall call) {
         android.content.SharedPreferences prefs = getContext().getSharedPreferences("grafictrader_launch", Context.MODE_PRIVATE);
         String mode = prefs.getString("mode", "");
