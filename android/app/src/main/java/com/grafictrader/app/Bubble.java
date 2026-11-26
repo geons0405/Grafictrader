@@ -26,7 +26,6 @@ final class Bubble {
     private final WindowManager windowManager;
     private final Runnable onOpenApp;
     private final Runnable onOpenLive;
-    private final Runnable onOpenChat;
     private final Runnable onStop;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
@@ -45,12 +44,11 @@ final class Bubble {
     private boolean expanded;
     private volatile Rect bounds;
 
-    Bubble(Context context, Runnable onOpenApp, Runnable onOpenLive, Runnable onOpenChat, Runnable onStop) {
+    Bubble(Context context, Runnable onOpenApp, Runnable onOpenLive, Runnable onStop) {
         this.context = context;
         this.windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         this.onOpenApp = onOpenApp;
         this.onOpenLive = onOpenLive;
-        this.onOpenChat = onOpenChat;
         this.onStop = onStop;
     }
 
@@ -123,7 +121,7 @@ final class Bubble {
         liveShortcut = shortcut("🎙  LIVE");
         chatShortcut = shortcut("✉  Mensagens");
         liveShortcut.setOnClickListener(v -> onOpenLive.run());
-        chatShortcut.setOnClickListener(v -> onOpenChat.run());
+        chatShortcut.setOnClickListener(v -> showResponse());
         LinearLayout.LayoutParams shortcutParams = new LinearLayout.LayoutParams(0, dp(36), 1f);
         shortcutParams.setMargins(0, 0, dp(6), 0);
         shortcuts.addView(liveShortcut, shortcutParams);
@@ -197,6 +195,14 @@ final class Bubble {
         }
         root = null;
         bounds = null;
+    }
+
+    private void showResponse() {
+        expanded = true;
+        detail.setVisibility(View.VISIBLE);
+        hint.setVisibility(View.VISIBLE);
+        shortcuts.setVisibility(View.GONE);
+        stop.setVisibility(View.VISIBLE);
     }
 
     private void toggle() {
