@@ -51,7 +51,7 @@ export async function handleLiveToken(req, res) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 12000);
   try {
-    const response = await fetch('https://generativelanguage.googleapis.com/v1alpha/auth_tokens', {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/auth_tokens', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify(tokenRequest),
@@ -102,7 +102,8 @@ export async function handleLiveMarket(req, res) {
   const quota = await aiQuota(owner);
   if (!quota.allowed) return sendRateLimited(res, quota);
 
-  const parsed = parseMarketQuery({ symbol: req.body?.symbol, interval: req.body?.interval || '5m' });
+  const rawSymbol = String(req.body?.symbol || '').toUpperCase().replace(/[\\/:_-]/g, '');
+  const parsed = parseMarketQuery({ symbol: rawSymbol, interval: req.body?.interval || '5m' });
   if (!parsed) return res.status(400).json({ ok: false, error: 'O ativo ou período pedido não é suportado pelo motor GraficTrader.' });
   try {
     const data = await runInstructor(parsed.symbol, parsed.interval);
