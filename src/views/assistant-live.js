@@ -21,6 +21,8 @@ let activeOutputNode = null;
 let inputTranscript = '';
 let outputTranscript = '';
 let conversationHistory = [];
+let restoreHistoryPending = false;
+let connectionResuming = false;
 let liveTokenCache = null;
 
 const LIVE_TOOLS = [{
@@ -278,6 +280,15 @@ function handleLiveMessage(raw) {
   let message;
   try { message = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return; }
   if (message.setupComplete) {
+    if (!connectionResuming && restoreHistoryPending && conversationHistory.length && liveSocket?.readyState === WebSocket.OPEN) {
+      liveSocket.send(JSON.stringify({
+        clientContent: {
+          turns: conversationHistory.slice(-12).map(turn => ({ role: turn.role, parts: [{ text: turn.text }] })),
+          turnComplete: true
+        }
+      }));
+    }
+    restoreHistoryPending = false;
     setupReady = true;
     reconnectAttempts = 0;
     setStatus('Ligado · estou a ouvir');
@@ -285,6 +296,11 @@ function handleLiveMessage(raw) {
   }
   if (message.error) {
     const detail = message.error.message || 'O serviço LIVE devolveu um erro.';
+    if (resumeHandle && /resume|handle|session/i.test(detail)) {
+      resumeHandle = null;
+      liveTokenCache = null;
+      restoreHistoryPending = conversationHistory.length > 0;
+    }
     setStatus(detail.slice(0, 180));
     if (liveSocket?.readyState === WebSocket.OPEN) liveSocket.close(1011, 'Gemini Live error');
     return;
@@ -326,6 +342,7 @@ function handleLiveMessage(raw) {
 
 async function connectLive() {
   const data = await fetchLiveToken();
+  connectionResuming = Boolean(resumeHandle);
   if (!shouldRun) return;
   const url = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained?access_token=' + encodeURIComponent(data.token);
   await new Promise((resolve, reject) => {
@@ -369,7 +386,10 @@ async function connectLive() {
       }
       if (liveSocket === socket) liveSocket = null;
       setupReady = false;
-      if (!resumeHandle) liveTokenCache = null;
+      if (!resumeHandle) {
+        liveTokenCache = null;
+        restoreHistoryPending = conversationHistory.length > 0;
+      }
       if (shouldRun) scheduleReconnect();
     };
   });
@@ -428,9 +448,9 @@ async function startLiveSession() {
   if (shouldRun) return;
   shouldRun = true;
   reconnectAttempts = 0;
+  restoreHistoryPending = conversationHistory.length > 0;
   resumeHandle = null;
   liveTokenCache = null;
-  conversationHistory = [];
   activeInputNode = null;
   activeOutputNode = null;
   inputTranscript = '';
