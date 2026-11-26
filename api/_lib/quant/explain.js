@@ -233,12 +233,18 @@ export function simpleWaitMessage(reading, verdict, vision) {
   if (snapshot.regime === 'chaotic') return 'Não operes agora. O preço está a oscilar demasiado e ainda não há uma oportunidade segura. Espera o mercado acalmar.';
   if (verdict?.agreement === 'diverge') return 'Não operes agora. A imagem e os dados do mercado não concordam. Espera por um sinal claro.';
   const high = Number(snapshot.rangeHigh), low = Number(snapshot.rangeLow), price = Number(reading?.price);
+  const pullback = pullbackAdvice(reading?.trendState, moneyFor(reading?.symbol || ''));
+  if (pullback) {
+    return pullback.side < 0
+      ? 'Não operes agora. O preço já caiu bastante; espera que volte a subir um pouco. A aplicação confirma quando houver uma boa oportunidade de venda.'
+      : 'Não operes agora. O preço já subiu bastante; espera que volte a descer um pouco. A aplicação confirma quando houver uma boa oportunidade de compra.';
+  }
   if (Number.isFinite(high) && Number.isFinite(low) && high > low && Number.isFinite(price)) {
     const width = high - low;
     if (price >= high - width * 0.2) return 'Não operes agora. O preço está a aproximar-se de uma zona onde pode parar ou voltar a cair. Espera por uma confirmação.';
     if (price <= low + width * 0.2) return 'Não operes agora. O preço está a aproximar-se de uma zona onde pode parar ou voltar a subir. Espera por uma confirmação.';
   }
-  if (vision?.waitFor) return 'Não operes agora. ' + firstSentence(vision.waitFor) + ' Espera por uma oportunidade mais clara.';
+  if (vision?.waitFor) return 'Não operes agora. Espera por uma oportunidade mais clara.';
   return 'Não operes agora. O mercado ainda não mostrou uma direção clara. Espera; quando houver uma boa oportunidade de compra ou venda, a aplicação vai indicar qual delas.';
 }
 
