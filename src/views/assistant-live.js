@@ -16,6 +16,7 @@ let reconnectAttempts = 0;
 let resumeHandle = null;
 let activeAudioSources = new Set();
 let nextAudioTime = 0;
+let receivedAudioThisTurn = false;
 let activeInputNode = null;
 let activeOutputNode = null;
 let inputTranscript = '';
@@ -192,11 +193,13 @@ function stopAudioPlayback() {
 
 function playAudioChunk(base64, mimeType = 'audio/pcm;rate=24000') {
   if (!audioContext || !base64) return;
+  if (audioContext.state !== 'running') audioContext.resume().catch(() => {});
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   const samples = pcm16ToFloat(bytes);
   if (!samples.length) return;
+  receivedAudioThisTurn = true;
   const rateMatch = String(mimeType).match(/rate=(\d+)/i);
   const sampleRate = rateMatch ? Number(rateMatch[1]) : 24000;
   const buffer = audioContext.createBuffer(1, samples.length, sampleRate);
@@ -355,7 +358,22 @@ function handleLiveMessage(raw) {
   }
   if (server.turnComplete) {
     finalizeTurn();
-    setStatus('Estou ligado · podes continuar');
+    if (!receivedAudioThisTurn) {
+      const assistantMessages = panel?.querySelectorAll('.gt-message.assistant');
+      const spokenText = activeOutputNode?.textContent
+        || assistantMessages?.[assistantMessages.length - 1]?.textContent
+        || '';
+      const native = window.Capacitor?.Plugins?.GrafictraderNative;
+      if (spokenText.trim() && native?.speakText) {
+        native.speakText({ text: spokenText.trim() }).catch(() => {});
+        setStatus('A responder por voz…');
+      } else {
+        setStatus('Estou ligado · podes continuar');
+      }
+    } else {
+      setStatus('Estou ligado · podes continuar');
+    }
+    receivedAudioThisTurn = false;
   }
   if (message.toolCall) handleToolCalls(message.toolCall);
   if (message.toolCallCancellation?.ids) {
@@ -487,6 +505,7 @@ async function startLiveSession() {
   activeOutputNode = null;
   inputTranscript = '';
   outputTranscript = '';
+  receivedAudioThisTurn = false;
   setMicActive(true);
   setStatus('A pedir acesso ao microfone…');
   try {
