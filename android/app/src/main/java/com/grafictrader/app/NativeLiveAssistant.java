@@ -124,7 +124,8 @@ final class NativeLiveAssistant {
 
     private void ask(String message) {
         lastTranscript = message;
-        conversationText = trimConversation(conversationText + (conversationText.isEmpty() ? "" : "\\n") + "Tu: " + message);\n        emit("LIVE · a pensar", conversationText);
+        conversationText = trimConversation(conversationText + (conversationText.isEmpty() ? "" : "\\n") + "Tu: " + message);
+        emit("LIVE · a pensar", conversationText);
         network.execute(() -> {
             HttpURLConnection connection = null;
             try {
@@ -164,7 +165,8 @@ final class NativeLiveAssistant {
     }
 
     private void speak(String answer, String userMessage) {
-        emit("LIVE · a responder", "Tu: " + userMessage + "\nGraficTrader: " + answer);
+        conversationText = trimConversation(conversationText + "\nGraficTrader: " + answer);
+        emit("LIVE · a responder", conversationText);
         if (tts == null || !ttsReady) { if (active) listen(); return; }
         speaking = true;
         tts.setSpeechRate(1.0f);
@@ -186,7 +188,10 @@ final class NativeLiveAssistant {
         });
     }
 
-    private String trimConversation(String value) {\n        return value.length() > 1100 ? value.substring(value.length() - 1100) : value;\n    }\n\n    private void emit(String status, String transcript) {
+    private String trimConversation(String value) {\n        return value.length() > 1100 ? value.substring(value.length() - 1100) : value;
+    }
+
+    private void emit(String status, String transcript) {
         main.post(() -> listener.onState(status, transcript));
     }
 
