@@ -67,7 +67,7 @@ test('without live candles the model\'s own advice for the open trade is shown',
   const vision = normalizeVision({ decisao: 'AGUARDAR', posicaoAberta: { lado: 'call' }, gestaoPosicao: 'Fecha se a vela fechar abaixo de 1.0850.', esperarPor: 'rompimento de 1.0870' });
   const g = photoGuidance({ direction: 0, reasons: [], headline: 'x' }, vision, null);
   assert.match(g.manage.text, /Tens uma COMPRA\. Fecha se a vela fechar abaixo de 1\.0850\./);
-  assert.match(g.now, /Espera: rompimento de 1\.0870/);
+  assert.match(g.now, /Não operes agora/);
   assert.equal(normalizeVision({ posicaoAberta: null, esperarPor: 'null' }).position, null);
 });
 
