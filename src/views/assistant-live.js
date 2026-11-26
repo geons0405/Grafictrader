@@ -1,5 +1,5 @@
 import { market } from '../lib/store.js';
-import { Native } from '../lib/native.js';
+import { downsampleTo16k, floatToPcm16, pcm16ToFloat } from '../lib/live-audio.js';
 
 let panel = null;
 let sessionId = '';
@@ -117,33 +117,8 @@ function encodeBase64(bytes) {
   return btoa(binary);
 }
 
-function downsampleTo16k(input, inputRate) {
-  if (inputRate === 16000) return input;
-  const ratio = inputRate / 16000;
-  const length = Math.floor(input.length / ratio);
-  const output = new Float32Array(length);
-  for (let i = 0; i < length; i++) {
-    const start = Math.floor(i * ratio);
-    const end = Math.min(Math.floor((i + 1) * ratio), input.length);
-    let sum = 0;
-    for (let j = start; j < end; j++) sum += input[j];
-    output[i] = end > start ? sum / (end - start) : input[start] || 0;
-  }
-  return output;
-}
-
-function floatToPcm16(samples) {
-  const bytes = new Uint8Array(samples.length * 2);
-  const view = new DataView(bytes.buffer);
-  for (let i = 0; i < samples.length; i++) {
-    const sample = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-  }
-  return bytes;
-}
 
 async function startMicrophone() {
-  if (Native?.requestMicrophonePermission) await Native.requestMicrophonePermission();
   if (!navigator.mediaDevices?.getUserMedia) throw new Error('Este dispositivo não disponibiliza captura de áudio segura.');
   microphoneStream = await navigator.mediaDevices.getUserMedia({
     audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -151,7 +126,8 @@ async function startMicrophone() {
   });
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) throw new Error('O áudio em tempo real não é suportado neste dispositivo.');
-  audioContext = new AudioContextClass({ sampleRate: 16000 });
+  try { audioContext = new AudioContextClass({ sampleRate: 16000 }); }
+  catch { audioContext = new AudioContextClass(); }
   await audioContext.resume();
   microphoneSource = audioContext.createMediaStreamSource(microphoneStream);
   const bufferSize = audioContext.sampleRate > 24000 ? 4096 : 2048;
@@ -187,11 +163,8 @@ function playAudioChunk(base64, mimeType = 'audio/pcm;rate=24000') {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  const view = new DataView(bytes.buffer);
-  const sampleCount = Math.floor(bytes.length / 2);
-  if (!sampleCount) return;
-  const samples = new Float32Array(sampleCount);
-  for (let i = 0; i < sampleCount; i++) samples[i] = view.getInt16(i * 2, true) / 32768;
+  const samples = pcm16ToFloat(bytes);
+  if (!samples.length) return;
   const rateMatch = String(mimeType).match(/rate=(\d+)/i);
   const sampleRate = rateMatch ? Number(rateMatch[1]) : 24000;
   const buffer = audioContext.createBuffer(1, samples.length, sampleRate);
@@ -418,6 +391,7 @@ async function startLiveSession() {
     await connectLive();
   } catch (error) {
     if (!shouldRun) return;
+    releaseAudio();
     setStatus(error.message || 'Não foi possível iniciar o LIVE.');
     scheduleReconnect();
   }
