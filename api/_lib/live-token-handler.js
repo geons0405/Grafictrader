@@ -88,3 +88,42 @@ export async function handleLiveToken(req, res) {
     clearTimeout(timeout);
   }
 }
+
+
+export async function handleLiveMarket(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
+  if (!redisConfigured()) return res.status(503).json({ ok: false, error: 'O serviço de sessões seguras ainda não está disponível.' });
+
+  const access = await requireUserIfConfigured(req, res);
+  if (!access.ok) return;
+  const owner = access.user?.email || clientIp(req);
+  const limit = await rateLimit('live-market', owner, { limit: 24, windowSeconds: 600, failClosed: true });
+  if (!limit.allowed) return sendRateLimited(res, limit);
+  const quota = await aiQuota(owner);
+  if (!quota.allowed) return sendRateLimited(res, quota);
+
+  const parsed = parseMarketQuery({ symbol: req.body?.symbol, interval: req.body?.interval || '5m' });
+  if (!parsed) return res.status(400).json({ ok: false, error: 'O ativo ou período pedido não é suportado pelo motor GraficTrader.' });
+  try {
+    const data = await runInstructor(parsed.symbol, parsed.interval);
+    const result = {
+      symbol: data.symbol || parsed.symbol,
+      interval: data.interval || parsed.interval,
+      updatedAt: data.updatedAt || new Date().toISOString(),
+      price: data.price ?? null,
+      signal: data.signal ? {
+        action: data.signal.action,
+        confidence: data.signal.confidence,
+        regimeLabel: data.signal.regimeLabel
+      } : null,
+      summary: typeof data.summary === 'string' ? data.summary.slice(0, 1400) : null,
+      guidance: data.guidance || null,
+      plan: data.plan || null
+    };
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({ ok: true, analysis: result });
+  } catch (error) {
+    console.error('[live-market]', error?.message || error);
+    return res.status(error?.status || 502).json({ ok: false, error: 'Não foi possível atualizar a análise desse ativo neste momento.' });
+  }
+}
