@@ -237,6 +237,11 @@ final class Bubble {
     void updateLive(String status, String transcript) {
         if (root == null) return;
         if (liveStatus != null && status != null) liveStatus.setText(status);
+        if (status != null && liveShortcut != null) {
+            if (status.contains("a responder")) liveShortcut.setText("↪  Interromper");
+            else if (status.contains("a ouvir") || status.contains("a pensar")) liveShortcut.setText("■  Parar LIVE");
+            else if (status.contains("pausado")) liveShortcut.setText("🎙  Retomar LIVE");
+        }
         if (liveTranscript != null && transcript != null) liveTranscript.setText(transcript);
         root.requestLayout();
     }
