@@ -735,6 +735,11 @@ public class WatchService extends Service {
         }
         JSONObject snapshot = current;
         if (snapshot != null) liveAssistant.setSymbol(snapshot.optString("symbol", ""));
+        if (liveAssistant.isActive() && liveAssistant.isSpeaking()) {
+            liveAssistant.interruptSpeech();
+            bubble.showLiveMode(true);
+            return;
+        }
         if (liveAssistant.isActive()) {
             liveAssistant.stop();
             bubble.showLiveMode(false);
