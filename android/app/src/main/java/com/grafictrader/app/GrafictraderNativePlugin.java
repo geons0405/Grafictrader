@@ -38,10 +38,12 @@ public class GrafictraderNativePlugin extends Plugin {
     private static final String DEFAULT_SERVER = "https://grafictrader.vercel.app";
     private SpeechRecognizer liveRecognizer;
     private TextToSpeech liveTts;
+    private volatile boolean liveTtsReady;
+    private volatile String pendingSpeech;
 
     @Override
     public void load() {
-        liveTts = new TextToSpeech(getContext(), status -> { if (status == TextToSpeech.SUCCESS && liveTts != null) liveTts.setLanguage(new Locale("pt", "PT")); });
+        initializeLiveTts();
         WatchService.setListener(new WatchService.Listener() {
             @Override
             public void onResult(String json) {
@@ -61,11 +63,26 @@ public class GrafictraderNativePlugin extends Plugin {
         });
     }
 
+    private void initializeLiveTts() {
+        liveTtsReady = false;
+        liveTts = new TextToSpeech(getContext(), status -> {
+            if (status == TextToSpeech.SUCCESS && liveTts != null) {
+                liveTts.setLanguage(new Locale("pt", "PT"));
+                liveTtsReady = true;
+                String queued = pendingSpeech;
+                pendingSpeech = null;
+                if (queued != null) liveTts.speak(queued, TextToSpeech.QUEUE_FLUSH, null, "grafictrader-live");
+            }
+        });
+    }
+
     @Override
     protected void handleOnDestroy() {
         WatchService.setListener(null);
         if (liveRecognizer != null) { liveRecognizer.destroy(); liveRecognizer = null; }
         if (liveTts != null) { liveTts.stop(); liveTts.shutdown(); liveTts = null; }
+        liveTtsReady = false;
+        pendingSpeech = null;
     }
 
     /**
@@ -164,12 +181,10 @@ public class GrafictraderNativePlugin extends Plugin {
     public void speakText(PluginCall call) {
         String spoken = call.getString("text", "");
         if (spoken == null || spoken.trim().isEmpty()) { call.reject("Texto vazio."); return; }
-        if (liveTts == null) {
-            liveTts = new TextToSpeech(getContext(), status -> {
-                if (status == TextToSpeech.SUCCESS) { liveTts.setLanguage(new Locale("pt", "PT")); liveTts.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "grafictrader-live"); }
-            });
-        } else {
-            liveTts.setLanguage(new Locale("pt", "PT"));
+        pendingSpeech = spoken;
+        if (liveTts == null) initializeLiveTts();
+        else if (liveTtsReady) {
+            pendingSpeech = null;
             liveTts.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "grafictrader-live");
         }
         call.resolve();
