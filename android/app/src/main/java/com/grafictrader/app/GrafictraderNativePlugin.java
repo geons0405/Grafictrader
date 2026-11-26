@@ -215,6 +215,24 @@ public class GrafictraderNativePlugin extends Plugin {
 
     @PluginMethod
     public void startWatch(PluginCall call) {
+        if (!hasPermission("microphone")) {
+            requestPermissionForAlias("microphone", call, "watchMicrophonePermissionCallback");
+            return;
+        }
+        startWatchAfterMicrophonePermission(call);
+    }
+
+    @PermissionCallback
+    private void watchMicrophonePermissionCallback(PluginCall call) {
+        if (call == null) return;
+        if (!hasPermission("microphone")) {
+            call.reject("Permite o acesso ao microfone para poderes usar o LIVE por cima da corretora.", "MICROPHONE_PERMISSION");
+            return;
+        }
+        startWatchAfterMicrophonePermission(call);
+    }
+
+    private void startWatchAfterMicrophonePermission(PluginCall call) {
         if (WatchService.isRunning()) {
             call.resolve();
             return;
@@ -234,8 +252,6 @@ public class GrafictraderNativePlugin extends Plugin {
             return;
         }
         MediaProjectionManager manager = (MediaProjectionManager) getContext().getSystemService(Context.MEDIA_PROJECTION_SERVICE);
-        // The bubble reads whatever app is in front, so ask for the whole screen:
-        // sharing a single app sends empty frames once the user switches to the broker.
         Intent capture = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
                 ? manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
                 : manager.createScreenCaptureIntent();
