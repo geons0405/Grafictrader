@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DEFAULT_LIVE_MODEL, resolveLiveModel, buildLiveTokenRequest, buildLiveSystemInstruction
+  DEFAULT_LIVE_MODEL, LIVE_TOOL_CONFIG, resolveLiveModel, buildLiveTokenRequest, buildLiveSystemInstruction
 } from '../api/_lib/live-token.js';
 
 test('uses a supported default Live model and safely normalizes model ids', () => {
@@ -16,6 +16,8 @@ test('ephemeral token is restricted to one Live model and audio with session res
   assert.equal(payload.liveConnectConstraints.model, 'models/gemini-3.1-flash-live-preview');
   assert.deepEqual(payload.liveConnectConstraints.config.responseModalities, ['AUDIO']);
   assert.deepEqual(payload.liveConnectConstraints.config.sessionResumption, {});
+  assert.equal(payload.liveConnectConstraints.config.tools[0].functionDeclarations[0].name, 'refresh_market_analysis');
+  assert.equal(LIVE_TOOL_CONFIG[0].functionDeclarations[0].name, 'refresh_market_analysis');
   assert.equal(Date.parse(payload.expireTime), 30 * 60 * 1000);
   assert.equal(Date.parse(payload.newSessionExpireTime), 60 * 1000);
 });
