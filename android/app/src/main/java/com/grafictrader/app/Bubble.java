@@ -255,9 +255,17 @@ final class Bubble {
     }
 
     private void toggle() {
-        if (liveMode) { liveMode = false; liveStatus.setVisibility(View.GONE); liveTranscript.setVisibility(View.GONE); }
         expanded = !expanded;
         int visibility = expanded ? View.VISIBLE : View.GONE;
+        if (liveMode) {
+            liveStatus.setVisibility(visibility);
+            liveTranscript.setVisibility(visibility);
+            shortcuts.setVisibility(visibility);
+            detail.setVisibility(View.GONE);
+            hint.setVisibility(View.GONE);
+            stop.setVisibility(View.GONE);
+            return;
+        }
         detail.setVisibility(visibility);
         hint.setVisibility(visibility);
         shortcuts.setVisibility(visibility);
