@@ -134,7 +134,11 @@ final class Bubble {
         root.addView(asset);
         root.addView(detail);
         root.addView(hint);
-        root.addView(shortcuts);
+        // Give the weighted shortcut buttons a real width. With WRAP_CONTENT,
+        // the horizontal row can measure to zero and remain invisible on Android.
+        root.addView(shortcuts, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
         root.addView(stop);
 
         int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
