@@ -36,6 +36,7 @@ final class NativeLiveAssistant {
     private TextToSpeech tts;
     private boolean active;
     private boolean speaking;
+    private boolean ttsReady;
     private String lastTranscript = "";
     private String symbol = "";
 
@@ -44,13 +45,23 @@ final class NativeLiveAssistant {
         this.server = server == null ? "https://grafictrader.vercel.app" : server.replaceAll("/+$", "");
         this.listener = listener;
         tts = new TextToSpeech(this.context, status -> {
-            if (status == TextToSpeech.SUCCESS && tts != null) tts.setLanguage(new Locale("pt", "PT"));
+            if (status == TextToSpeech.SUCCESS && tts != null) { tts.setLanguage(new Locale("pt", "PT")); ttsReady = true; }
         });
     }
 
     void setSymbol(String value) { symbol = value == null ? "" : value; }
 
     boolean isActive() { return active; }
+    boolean isSpeaking() { return speaking; }
+
+    void interruptSpeech() {
+        main.post(() -> {
+            if (tts != null) tts.stop();
+            speaking = false;
+            emit("LIVE · interrompido", "Podes continuar a falar.");
+            if (active) listen();
+        });
+    }
 
     void start() {
         main.post(() -> {
@@ -153,7 +164,7 @@ final class NativeLiveAssistant {
 
     private void speak(String answer, String userMessage) {
         emit("LIVE · a responder", "Tu: " + userMessage + "\nGraficTrader: " + answer);
-        if (tts == null) { if (active) listen(); return; }
+        if (tts == null || !ttsReady) { if (active) listen(); return; }
         speaking = true;
         tts.setSpeechRate(1.0f);
         tts.speak(answer, TextToSpeech.QUEUE_FLUSH, null, "gt-bubble-live");
