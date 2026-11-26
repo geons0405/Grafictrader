@@ -369,6 +369,7 @@ async function connectLive() {
       }
       if (liveSocket === socket) liveSocket = null;
       setupReady = false;
+      if (!resumeHandle) liveTokenCache = null;
       if (shouldRun) scheduleReconnect();
     };
   });
