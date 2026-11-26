@@ -6,7 +6,7 @@ import {
 } from '../api/_lib/live-chat.js';
 
 test('normalizes and bounds user messages', () => {
-  assert.equal(normalizeLiveChatMessage('  Olá\\u0000 mundo  '), 'Olá mundo');
+  assert.equal(normalizeLiveChatMessage('  Olá' + String.fromCharCode(0) + ' mundo  '), 'Olá mundo');
   assert.equal(normalizeLiveChatMessage('x'.repeat(LIVE_CHAT_MAX_MESSAGE + 10)).length, LIVE_CHAT_MAX_MESSAGE);
   assert.equal(normalizeLiveChatMessage('   '), '');
 });

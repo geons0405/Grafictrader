@@ -1,14 +1,13 @@
-import { createHash } from 'node:crypto';
-import { redis, redisConfigured } from './_lib/redis.js';
-import { requireUserIfConfigured } from './_lib/auth.js';
-import { rateLimit, sendRateLimited, aiQuota } from './_lib/rate-limit.js';
-import { apiKey } from './_lib/env.js';
-import { parseMarketQuery, clientIp } from './_lib/validate.js';
-import { runInstructor } from './_lib/quant/service.js';
+import { redis, redisConfigured } from './redis.js';
+import { requireUserIfConfigured } from './auth.js';
+import { rateLimit, sendRateLimited, aiQuota } from './rate-limit.js';
+import { apiKey } from './env.js';
+import { parseMarketQuery, clientIp } from './validate.js';
+import { runInstructor } from './quant/service.js';
 import {
   LIVE_CHAT_TTL_SECONDS, LIVE_CHAT_MAX_TURNS, normalizeLiveChatMessage,
   validLiveChatSession, liveChatKey, trimLiveChatHistory
-} from './_lib/live-chat.js';
+} from './live-chat.js';
 
 const SYSTEM_INSTRUCTION = `És o GraficTrader Live, um assistente conversacional em português claro.
 Fala de forma natural, breve e acessível. Responde diretamente à pergunta e mantém o contexto da conversa.
@@ -27,9 +26,12 @@ async function askGemini(history, message, market) {
     throw error;
   }
   const model = String(process.env.GEMINI_MODEL || 'gemini-2.5-flash').trim();
+  const extra = market
+    ? '\\n\\nDADOS ATUAIS DO MOTOR GRAFICTRADER (não alteres nem inventes estes dados):\\n' + JSON.stringify(market).slice(0, 9000)
+    : '\\n\\nNão foram fornecidos dados de mercado nesta pergunta.';
   const contents = [
     ...history,
-    { role: 'user', parts: [{ text: message + (market ? '\\n\\nDADOS ATUAIS DO MOTOR GRAFICTRADER (não alteres nem inventes estes dados):\\n' + JSON.stringify(market).slice(0, 9000) : '\\n\\nNão foram fornecidos dados de mercado nesta pergunta.') }] }
+    { role: 'user', parts: [{ text: message + extra }] }
   ];
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 18000);
@@ -62,7 +64,7 @@ async function askGemini(history, message, market) {
   }
 }
 
-export default async function handler(req, res) {
+export async function handleLiveChat(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Método não permitido.' });
   if (!redisConfigured()) return res.status(503).json({ ok: false, error: 'A memória de conversação ainda não está disponível.' });
 
@@ -88,12 +90,9 @@ export default async function handler(req, res) {
       const data = await runInstructor(parsed.symbol, parsed.interval);
       market = {
         symbol: data.symbol, interval: data.interval, updatedAt: data.updatedAt,
-        price: data.price,
-        decision: data.signal?.action,
-        confidence: data.signal?.confidence,
-        regime: data.signal?.regimeLabel,
-        guidance: data.guidance,
-        plan: data.plan
+        price: data.price, decision: data.signal?.action,
+        confidence: data.signal?.confidence, regime: data.signal?.regimeLabel,
+        guidance: data.guidance, plan: data.plan
       };
     } catch {
       market = { symbol: parsed.symbol, interval: parsed.interval, unavailable: true, note: 'O motor não conseguiu obter dados de mercado recentes.' };
