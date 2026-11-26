@@ -13,6 +13,7 @@ import android.speech.tts.TextToSpeech;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
 import androidx.activity.result.ActivityResult;
@@ -125,16 +126,16 @@ public class GrafictraderNativePlugin extends Plugin {
             if (liveRecognizer != null) liveRecognizer.destroy();
             liveRecognizer = SpeechRecognizer.createSpeechRecognizer(getContext());
             liveRecognizer.setRecognitionListener(new RecognitionListener() {
-                @Override public void onReadyForSpeech(Bundle params) { notifyListeners("voiceStatus", new JSObject().put("status", "listening")); }
+                @Override public void onReadyForSpeech(Bundle params) { JSObject state = new JSObject(); state.put("status", "listening"); notifyListeners("voiceStatus", state); }
                 @Override public void onBeginningOfSpeech() { }
                 @Override public void onRmsChanged(float rmsdB) { }
                 @Override public void onBufferReceived(byte[] buffer) { }
-                @Override public void onEndOfSpeech() { notifyListeners("voiceStatus", new JSObject().put("status", "processing")); }
+                @Override public void onEndOfSpeech() { JSObject state = new JSObject(); state.put("status", "processing"); notifyListeners("voiceStatus", state); }
                 @Override public void onError(int error) { JSObject data = new JSObject(); data.put("code", error); data.put("message", "Não consegui reconhecer a voz. Tenta novamente."); notifyListeners("voiceError", data); }
                 @Override public void onResults(Bundle results) {
                     ArrayList<String> matches = results == null ? null : results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                     if (matches != null && !matches.isEmpty()) { JSObject data = new JSObject(); data.put("text", matches.get(0)); notifyListeners("voiceResult", data); }
-                    notifyListeners("voiceStatus", new JSObject().put("status", "idle"));
+                    JSObject state = new JSObject(); state.put("status", "idle"); notifyListeners("voiceStatus", state);
                 }
                 @Override public void onPartialResults(Bundle partialResults) { }
                 @Override public void onEvent(int eventType, Bundle params) { }
@@ -147,7 +148,7 @@ public class GrafictraderNativePlugin extends Plugin {
             liveRecognizer.startListening(intent);
             call.resolve();
         } catch (Exception error) {
-            call.reject("Não foi possível iniciar o microfone.", "VOICE_START_FAILED", error);
+            call.reject("Não foi possível iniciar o microfone.", "VOICE_START_FAILED");
         }
     }
 
