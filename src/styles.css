@@ -1781,3 +1781,36 @@ body.stage-open .tabbar { display: none; }
 #gtAssistantForm button{border:0;border-radius:13px;padding:0 15px;background:var(--accent,#247bff);color:white;font-weight:650}
 .gt-assistant-foot{padding:0 18px 14px;opacity:.55;font-size:10px}
 @media(min-width:600px){.gt-assistant{align-items:center}.gt-assistant-card{height:min(760px,88dvh)}}
+
+
+/* Full-duplex LIVE voice controls and streaming transcript states. */
+.gt-assistant-controls { align-items: center; min-height: 76px; }
+.gt-assistant-controls #gtAssistantMic {
+  width: 56px;
+  min-width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  font-weight: 700;
+  border: 1px solid rgba(90, 160, 255, .28);
+  box-shadow: 0 8px 24px rgba(30, 100, 220, .18);
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.gt-assistant-controls #gtAssistantMic:active { transform: scale(.95); }
+.gt-assistant-controls #gtAssistantMic.is-active {
+  color: #fff;
+  background: #d64c55;
+  border-color: rgba(255,255,255,.16);
+  box-shadow: 0 0 0 5px rgba(214,76,85,.12), 0 8px 24px rgba(214,76,85,.2);
+}
+#gtAssistantHint { color: var(--muted, #9ca8b7); font-size: 12px; line-height: 1.4; }
+.gt-assistant .gt-message { contain: content; }
+.gt-assistant .gt-message.assistant { white-space: pre-wrap; }
+@media (prefers-reduced-motion: no-preference) {
+  .gt-assistant-controls #gtAssistantMic.is-active { animation: gt-live-pulse 2s ease-in-out infinite; }
+  @keyframes gt-live-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(214,76,85,.10), 0 8px 24px rgba(214,76,85,.18); }
+    50% { box-shadow: 0 0 0 8px rgba(214,76,85,.03), 0 8px 30px rgba(214,76,85,.24); }
+  }
+}
