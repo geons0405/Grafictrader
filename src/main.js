@@ -312,10 +312,7 @@ async function boot() {
   if (Native?.consumeLaunchMode) {
     try {
       const launch = await Native.consumeLaunchMode();
-      if (launch?.mode === 'live-overlay') {
-        document.body.classList.add('gt-native-live-overlay');
-        window.dispatchEvent(new CustomEvent('grafictrader:open-live-assistant'));
-      } else if (launch?.mode === 'live') {
+      if (launch?.mode === 'live') {
         navigate('live');
         setLiveMode('broker');
         window.dispatchEvent(new CustomEvent('grafictrader:open-live-assistant'));
