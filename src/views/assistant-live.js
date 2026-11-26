@@ -379,8 +379,11 @@ async function connectLive() {
       }
       socket.send(JSON.stringify(setupMessage(data)));
     };
-    socket.onmessage = event => {
-      handleLiveMessage(event.data);
+    socket.onmessage = async event => {
+      let payload = event.data;
+      if (payload instanceof Blob) payload = await payload.text();
+      else if (payload instanceof ArrayBuffer) payload = new TextDecoder().decode(payload);
+      handleLiveMessage(payload);
       if (!settled && setupReady) {
         settled = true;
         clearTimeout(setupTimeout);
