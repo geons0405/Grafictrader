@@ -6,6 +6,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.projection.MediaProjectionConfig;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
@@ -21,15 +25,20 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONObject;
+import java.util.ArrayList;
+import java.util.Locale;
 
 /** Bridge between the web app and the native broker watcher. */
-@CapacitorPlugin(name = "GrafictraderNative")
+@CapacitorPlugin(name = "GrafictraderNative", permissions = {@Permission(alias = "microphone", strings = {Manifest.permission.RECORD_AUDIO})})
 public class GrafictraderNativePlugin extends Plugin {
 
     private static final String DEFAULT_SERVER = "https://grafictrader.vercel.app";
+    private SpeechRecognizer liveRecognizer;
+    private TextToSpeech liveTts;
 
     @Override
     public void load() {
+        liveTts = new TextToSpeech(getContext(), status -> { if (status == TextToSpeech.SUCCESS && liveTts != null) liveTts.setLanguage(new Locale("pt", "PT")); });
         WatchService.setListener(new WatchService.Listener() {
             @Override
             public void onResult(String json) {
@@ -52,6 +61,8 @@ public class GrafictraderNativePlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         WatchService.setListener(null);
+        if (liveRecognizer != null) { liveRecognizer.destroy(); liveRecognizer = null; }
+        if (liveTts != null) { liveTts.stop(); liveTts.shutdown(); liveTts = null; }
     }
 
     /**
@@ -86,6 +97,85 @@ public class GrafictraderNativePlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("mode", mode);
         call.resolve(result);
+    }
+
+
+    @PluginMethod
+    public void startVoiceRecognition(PluginCall call) {
+        if (!hasPermission("microphone")) {
+            requestPermissionForAlias("microphone", call, "microphonePermissionCallback");
+            return;
+        }
+        beginVoiceRecognition(call);
+    }
+
+    @PermissionCallback
+    private void microphonePermissionCallback(PluginCall call) {
+        if (call == null) return;
+        if (hasPermission("microphone")) beginVoiceRecognition(call);
+        else call.reject("Permite o acesso ao microfone para iniciar o LIVE.", "MICROPHONE_PERMISSION");
+    }
+
+    private void beginVoiceRecognition(PluginCall call) {
+        if (!SpeechRecognizer.isRecognitionAvailable(getContext())) {
+            call.reject("O reconhecimento de voz não está disponível neste telemóvel.", "VOICE_UNAVAILABLE");
+            return;
+        }
+        try {
+            if (liveRecognizer != null) liveRecognizer.destroy();
+            liveRecognizer = SpeechRecognizer.createSpeechRecognizer(getContext());
+            liveRecognizer.setRecognitionListener(new RecognitionListener() {
+                @Override public void onReadyForSpeech(Bundle params) { notifyListeners("voiceStatus", new JSObject().put("status", "listening")); }
+                @Override public void onBeginningOfSpeech() { }
+                @Override public void onRmsChanged(float rmsdB) { }
+                @Override public void onBufferReceived(byte[] buffer) { }
+                @Override public void onEndOfSpeech() { notifyListeners("voiceStatus", new JSObject().put("status", "processing")); }
+                @Override public void onError(int error) { JSObject data = new JSObject(); data.put("code", error); data.put("message", "Não consegui reconhecer a voz. Tenta novamente."); notifyListeners("voiceError", data); }
+                @Override public void onResults(Bundle results) {
+                    ArrayList<String> matches = results == null ? null : results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                    if (matches != null && !matches.isEmpty()) { JSObject data = new JSObject(); data.put("text", matches.get(0)); notifyListeners("voiceResult", data); }
+                    notifyListeners("voiceStatus", new JSObject().put("status", "idle"));
+                }
+                @Override public void onPartialResults(Bundle partialResults) { }
+                @Override public void onEvent(int eventType, Bundle params) { }
+            });
+            Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "pt-PT");
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "pt-PT");
+            intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
+            liveRecognizer.startListening(intent);
+            call.resolve();
+        } catch (Exception error) {
+            call.reject("Não foi possível iniciar o microfone.", "VOICE_START_FAILED", error);
+        }
+    }
+
+    @PluginMethod
+    public void stopVoiceRecognition(PluginCall call) {
+        if (liveRecognizer != null) { try { liveRecognizer.stopListening(); liveRecognizer.cancel(); } catch (Exception ignored) { } }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void speakText(PluginCall call) {
+        String spoken = call.getString("text", "");
+        if (spoken == null || spoken.trim().isEmpty()) { call.reject("Texto vazio."); return; }
+        if (liveTts == null) {
+            liveTts = new TextToSpeech(getContext(), status -> {
+                if (status == TextToSpeech.SUCCESS) { liveTts.setLanguage(new Locale("pt", "PT")); liveTts.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "grafictrader-live"); }
+            });
+        } else {
+            liveTts.setLanguage(new Locale("pt", "PT"));
+            liveTts.speak(spoken, TextToSpeech.QUEUE_FLUSH, null, "grafictrader-live");
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void stopSpeaking(PluginCall call) {
+        if (liveTts != null) liveTts.stop();
+        call.resolve();
     }
 
     @PluginMethod
