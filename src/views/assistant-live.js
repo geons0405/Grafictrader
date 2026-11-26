@@ -20,8 +20,8 @@ function ensurePanel() {
   panel.innerHTML = `
     <div class="gt-assistant-card" role="dialog" aria-modal="true" aria-label="GraficTrader Live">
       <header><div><small>GRAFICTRADER</small><h2>Assistente LIVE</h2><p id="gtAssistantStatus">Pronto para conversar</p></div><button type="button" id="gtAssistantClose" aria-label="Fechar">×</button></header>
-      <div class="gt-assistant-messages" id="gtAssistantMessages" aria-live="polite"><p class="gt-assistant-intro">Podes falar comigo ou escrever. Posso explicar o mercado, analisar o ativo selecionado e responder às tuas perguntas.</p></div>
-      <div class="gt-assistant-controls"><button type="button" id="gtAssistantMic" aria-label="Começar conversa por voz">🎙</button><form id="gtAssistantForm"><input id="gtAssistantInput" maxlength="1500" placeholder="Escreve a tua pergunta…" autocomplete="off"><button type="submit">Enviar</button></form></div>
+      <div class="gt-assistant-messages" id="gtAssistantMessages" aria-live="polite"><p class="gt-assistant-intro">Fala naturalmente comigo. Posso explicar o mercado, analisar o ativo selecionado e responder às tuas perguntas por voz.</p></div>
+      <div class="gt-assistant-controls"><button type="button" id="gtAssistantMic" aria-label="Começar ou parar a conversa por voz">🎙</button></div>
       <small class="gt-assistant-foot">A análise é informativa. Não executa ordens nem garante resultados.</small>
     </div>`;
   document.body.append(panel);
@@ -42,14 +42,6 @@ function ensurePanel() {
       if (event?.status === 'idle') listening = false;
     });
   }
-  panel.querySelector('#gtAssistantForm').onsubmit = event => {
-    event.preventDefault();
-    const input = panel.querySelector('#gtAssistantInput');
-    const message = input.value.trim();
-    if (!message) return;
-    input.value = '';
-    sendMessage(message);
-  };
   panel.querySelector('#gtAssistantMic').onclick = () => listening ? stopListening() : startListening();
   panel.addEventListener('click', event => { if (event.target === panel) closeAssistant(); });
   return panel;
@@ -121,10 +113,6 @@ function stopListening() {
 
 function startListening() {
   const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!Speech) {
-    setStatus('O reconhecimento de voz não está disponível neste dispositivo. Usa o campo de texto.');
-    return;
-  }
   if (Native?.startVoiceRecognition) {
     nativeVoice = true;
     listening = true;
@@ -136,6 +124,10 @@ function startListening() {
       panel.querySelector('#gtAssistantMic').textContent = '🎙';
       setStatus(error?.message || 'Não foi possível ativar o microfone.');
     });
+    return;
+  }
+  if (!Speech) {
+    setStatus('O reconhecimento de voz não está disponível neste dispositivo.');
     return;
   }
   try {
@@ -170,7 +162,7 @@ function startListening() {
   }
 }
 
-export function openAssistant(mode = 'text') {
+export function openAssistant(mode = 'voice') {
   ensurePanel();
   sessionId ||= makeSessionId();
   panel.hidden = false;
@@ -178,9 +170,6 @@ export function openAssistant(mode = 'text') {
   if (mode === 'voice') {
     window.__grafictraderVoiceReply = true;
     startListening();
-  } else {
-    window.__grafictraderVoiceReply = false;
-    panel.querySelector('#gtAssistantInput').focus();
   }
 }
 
