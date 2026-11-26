@@ -40,6 +40,9 @@ final class Bubble {
     private LinearLayout shortcuts;
     private TextView liveShortcut;
     private TextView chatShortcut;
+    private TextView liveStatus;
+    private TextView liveTranscript;
+    private boolean liveMode;
     private WindowManager.LayoutParams params;
     private boolean expanded;
     private volatile Rect bounds;
@@ -139,6 +142,16 @@ final class Bubble {
         root.addView(shortcuts, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
+        liveStatus = text(12, true);
+        liveStatus.setText("LIVE · pronto para ouvir");
+        liveStatus.setVisibility(View.GONE);
+        liveTranscript = text(13, false);
+        liveTranscript.setText("Toca em LIVE para começar a conversar.");
+        liveTranscript.setMaxWidth(dp(270));
+        liveTranscript.setMaxLines(5);
+        liveTranscript.setVisibility(View.GONE);
+        root.addView(liveStatus);
+        root.addView(liveTranscript);
         root.addView(stop);
 
         int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
@@ -201,7 +214,32 @@ final class Bubble {
         bounds = null;
     }
 
+    void showLiveMode(boolean active) {
+        liveMode = true;
+        expanded = true;
+        detail.setVisibility(View.GONE);
+        hint.setVisibility(View.GONE);
+        stop.setVisibility(View.GONE);
+        liveStatus.setVisibility(View.VISIBLE);
+        liveTranscript.setVisibility(View.VISIBLE);
+        shortcuts.setVisibility(View.VISIBLE);
+        liveShortcut.setText(active ? "■  Parar LIVE" : "🎙  Retomar LIVE");
+        chatShortcut.setText("✉  Mensagens");
+        liveStatus.setText(active ? "LIVE · a ouvir" : "LIVE pausado");
+        root.requestLayout();
+    }
+
+    void updateLive(String status, String transcript) {
+        if (root == null) return;
+        if (liveStatus != null && status != null) liveStatus.setText(status);
+        if (liveTranscript != null && transcript != null) liveTranscript.setText(transcript);
+        root.requestLayout();
+    }
+
     private void showResponse() {
+        liveMode = false;
+        liveStatus.setVisibility(View.GONE);
+        liveTranscript.setVisibility(View.GONE);
         expanded = true;
         detail.setVisibility(View.VISIBLE);
         hint.setVisibility(View.VISIBLE);
@@ -210,6 +248,7 @@ final class Bubble {
     }
 
     private void toggle() {
+        if (liveMode) { liveMode = false; liveStatus.setVisibility(View.GONE); liveTranscript.setVisibility(View.GONE); }
         expanded = !expanded;
         int visibility = expanded ? View.VISIBLE : View.GONE;
         detail.setVisibility(visibility);
