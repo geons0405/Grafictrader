@@ -131,6 +131,7 @@ public class WatchService extends Service {
     private ImageReader reader;
     private Image latest;
     private volatile Bubble bubble;
+    private NativeLiveAssistant liveAssistant;
     private TextToSpeech tts;
     private ComponentCallbacks configCallbacks;
 
@@ -214,7 +215,7 @@ public class WatchService extends Service {
         };
         registerComponentCallbacks(configCallbacks);
 
-        bubble = new Bubble(this, this::openApp, this::openLiveOverlay, () -> finish(endingMessage));
+        bubble = new Bubble(this, this::openApp, this::toggleLiveAssistant, this::showBubbleMessages, () -> finish(endingMessage));
         try {
             bubble.show();
         } catch (Exception error) {
@@ -724,18 +725,29 @@ public class WatchService extends Service {
         }
     }
 
-    private void openLiveOverlay() {
-        try {
-            getSharedPreferences("grafictrader_launch", MODE_PRIVATE)
-                    .edit().putString("mode", "live-overlay").apply();
-            Intent intent = new Intent(this, LiveOverlayActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
-            startActivity(intent);
-        } catch (Exception error) {
-            main.post(() -> Toast.makeText(this,
-                    "Não foi possível abrir a janela LIVE. Verifica as permissões do GraficTrader.",
-                    Toast.LENGTH_LONG).show());
+    private void toggleLiveAssistant() {
+        if (bubble == null) return;
+        if (liveAssistant == null) {
+            liveAssistant = new NativeLiveAssistant(this, server, (status, transcript) -> {
+                Bubble shown = bubble;
+                if (shown != null) shown.updateLive(status, transcript);
+            });
         }
+        JSONObject snapshot = current;
+        if (snapshot != null) liveAssistant.setSymbol(snapshot.optString("symbol", ""));
+        if (liveAssistant.isActive()) {
+            liveAssistant.stop();
+            bubble.showLiveMode(false);
+            bubble.updateLive("LIVE pausado", null);
+        } else {
+            bubble.showLiveMode(true);
+            bubble.updateLive("LIVE · a iniciar microfone", "Fala naturalmente. A resposta será falada.");
+            liveAssistant.start();
+        }
+    }
+
+    private void showBubbleMessages() {
+        if (liveAssistant != null) liveAssistant.stop();
     }
 
     private void openApp() {
@@ -834,6 +846,8 @@ public class WatchService extends Service {
         boolean wasRunning = running;
         running = false;
         if (wasRunning) remember(false, message);
+        if (liveAssistant != null) liveAssistant.destroy();
+        liveAssistant = null;
         if (bubble != null) bubble.remove();
         bubble = null;
         if (tts != null) tts.shutdown();
