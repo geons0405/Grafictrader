@@ -1,10 +1,13 @@
 import { market } from '../lib/store.js';
+import { Native } from '../lib/native.js';
 
 let panel = null;
 let recognition = null;
 let sessionId = '';
 let listening = false;
 let speaking = false;
+let nativeVoice = false;
+let nativeListenersReady = false;
 
 const makeSessionId = () => 'gt_' + Array.from(crypto.getRandomValues(new Uint8Array(18)), n => n.toString(16).padStart(2, '0')).join('');
 const currentSymbol = () => market.source === 'mt5' ? market.mt5Symbol : market.source === 'tradingview' ? market.tvSymbol.replace(/^[A-Z0-9_]+:/, '') : market.symbol;
@@ -23,6 +26,22 @@ function ensurePanel() {
     </div>`;
   document.body.append(panel);
   panel.querySelector('#gtAssistantClose').onclick = closeAssistant;
+  if (Native && !nativeListenersReady) {
+    nativeListenersReady = true;
+    Native.addListener('voiceResult', event => {
+      if (event?.text) sendMessage(event.text);
+    });
+    Native.addListener('voiceError', event => {
+      listening = false;
+      panel.querySelector('#gtAssistantMic').textContent = '🎙';
+      setStatus(event?.message || 'Falha no reconhecimento de voz.');
+    });
+    Native.addListener('voiceStatus', event => {
+      if (event?.status === 'listening') setStatus('Estou a ouvir…');
+      if (event?.status === 'processing') setStatus('A processar a tua pergunta…');
+      if (event?.status === 'idle') listening = false;
+    });
+  }
   panel.querySelector('#gtAssistantForm').onsubmit = event => {
     event.preventDefault();
     const input = panel.querySelector('#gtAssistantInput');
@@ -50,6 +69,11 @@ function setStatus(text) {
 }
 
 function speak(text) {
+  if (Native?.speakText) {
+    Native.speakText({ text }).catch(() => {});
+    setStatus('A responder por voz…');
+    return;
+  }
   if (!('speechSynthesis' in window)) return;
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
@@ -85,6 +109,10 @@ async function sendMessage(message) {
 }
 
 function stopListening() {
+  if (nativeVoice && Native?.stopVoiceRecognition) {
+    Native.stopVoiceRecognition().catch(() => {});
+    nativeVoice = false;
+  }
   try { recognition?.stop(); } catch { /* already stopped */ }
   listening = false;
   panel.querySelector('#gtAssistantMic').textContent = '🎙';
@@ -95,6 +123,19 @@ function startListening() {
   const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Speech) {
     setStatus('O reconhecimento de voz não está disponível neste dispositivo. Usa o campo de texto.');
+    return;
+  }
+  if (Native?.startVoiceRecognition) {
+    nativeVoice = true;
+    listening = true;
+    window.__grafictraderVoiceReply = true;
+    panel.querySelector('#gtAssistantMic').textContent = '■';
+    setStatus('A preparar o microfone…');
+    Native.startVoiceRecognition().catch(error => {
+      listening = false;
+      panel.querySelector('#gtAssistantMic').textContent = '🎙';
+      setStatus(error?.message || 'Não foi possível ativar o microfone.');
+    });
     return;
   }
   try {
@@ -146,6 +187,7 @@ export function openAssistant(mode = 'text') {
 export function closeAssistant() {
   stopListening();
   window.__grafictraderVoiceReply = false;
+  if (Native?.stopSpeaking) Native.stopSpeaking().catch(() => {});
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   speaking = false;
   if (panel) panel.hidden = true;
