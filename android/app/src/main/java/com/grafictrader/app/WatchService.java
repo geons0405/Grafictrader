@@ -214,7 +214,7 @@ public class WatchService extends Service {
         };
         registerComponentCallbacks(configCallbacks);
 
-        bubble = new Bubble(this, this::openApp, () -> openApp("live"), () -> openApp("chat"), () -> finish(endingMessage));
+        bubble = new Bubble(this, this::openApp, () -> openApp("live"), () -> finish(endingMessage));
         try {
             bubble.show();
         } catch (Exception error) {
