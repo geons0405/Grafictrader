@@ -217,6 +217,12 @@ final class Bubble {
     }
 
     void showLiveMode(boolean active) {
+        // Leaving LIVE must restore the existing normal bubble, not leave it
+        // stuck in the voice layout with a paused microphone.
+        if (!active) {
+            showResponse();
+            return;
+        }
         liveMode = true;
         expanded = true;
         detail.setVisibility(View.GONE);
